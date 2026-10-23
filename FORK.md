@@ -17,7 +17,9 @@ Oct 2026); instead the change lives in source, as a normal git commit.
 | --- | --- | --- |
 | `[fork]` | `packages/ui/src/plugin-ui/adapters/useUiPluginRecommendations.ts` | Prepends local UI-plugin recommendations (Diff Ask) to the list served by Z.ai's client-config service, so Diff Ask shows in the side-pane **New tab → App plugins** grid (and the store's recommended chips). |
 | `[fork]` | `packages/ui/src/v4/ConversationStatusPanel.tsx` | The **Changes** row in the status panel (git tools) opens the Diff Ask plugin panel directly (ported from the retired asar patch). Resolves the surface via the plugin UI bridge and opens the side-pane tab; falls back to the stock git review when the plugin is missing. |
-| `[fork]` | `packages/ui/test/useUiPluginRecommendations.test.ts`, `packages/ui/test/v4ConversationStatusPanelGitReview.test.ts` | Expectations updated for the fork behavior. |
+| `[fork]` | `packages/shared/src/command-types.ts`, `packages/services/src/commands/commandFileParser.ts`, `packages/ui/src/v4/forkCommandModel.ts` (+ tests), `packages/ui/src/v4/SessionPane.tsx` | **`model:` frontmatter honored per command turn**: `model: <providerId>/<modelId>[$<level>]` (or bare modelId) in a custom command's frontmatter runs that turn on that model (validated against the live selection view; unknown model/level never sent). |
+| `[fork]` | `packages/ui/src/v4/SessionPane.tsx`, `packages/ui/src/SlashCommandPlugin.tsx` | **Client-side `/diff`**: an app-layer slash command that opens the Diff Ask panel instantly with NO model turn. App commands now take precedence over same-name CLI catalog entries (so the client-side /diff eclipses the CLI one). Requires a live session. |
+| `[fork]` | `packages/ui/test/useUiPluginRecommendations.test.ts`, `packages/ui/test/v4ConversationStatusPanelGitReview.test.ts`, `packages/ui/test/forkCommandModel.test.ts` | Expectations/new tests for the fork behavior. |
 | `[fork]` | `scripts/sync-upstream.sh`, `scripts/build-install.sh`, `FORK.md` | This runbook. |
 
 Every modified upstream file carries a `FORK CHANGE` notice at the top (Apache-2.0 §4).
@@ -87,3 +89,20 @@ mise exec -- git push --no-verify origin damian
 ```
 
 Re-check after each sync — if upstream cleans up their lint, drop the flag.
+
+## Ola 2 (23/10 noche, tag `damian-v3.16.2-20261023c`): model: + /diff client-side
+
+- **A** — los user commands con `model:` en el frontmatter corren SU turno en
+  ese modelo: `model: account:plan/GLM-5.3-Flash$low` (o modelId pelado).
+  Parseado por `commandFileParser`, aplicado por turno en SessionPane vía
+  `forkCommandModel.ts` (validado contra la vista viva — nunca se envía un
+  modelo/nivel desconocido). /diff y cualquier comando futuro: segundos
+  en vez de 25-30s.
+- **C** — `/diff` es ahora un app-command 100% client-side: abre el panel de
+  Diff Ask al instante, SIN turno del modelo (0 tokens). Los app-commands
+  ganan a los homónimos del catálogo CLI (precedencia invertida en
+  SlashCommandPlugin). Requiere sesión viva.
+- **B** (lado bot, commit `5e7545f` del repo bot — el runtime `zcode.cjs` no
+  se buildea desde este repo): cada runtime del protocolo sostiene la Mac
+  despierta con `caffeinate -i -w <pid>` mientras vive (también en batería).
+  Complementa el `caffeinate -s` del LaunchAgent del poller (AC-only).

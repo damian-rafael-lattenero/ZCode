@@ -16,7 +16,8 @@ Oct 2026); instead the change lives in source, as a normal git commit.
 | Commit prefix | File | Change |
 | --- | --- | --- |
 | `[fork]` | `packages/ui/src/plugin-ui/adapters/useUiPluginRecommendations.ts` | Prepends local UI-plugin recommendations (Diff Ask) to the list served by Z.ai's client-config service, so Diff Ask shows in the side-pane **New tab → App plugins** grid (and the store's recommended chips). |
-| `[fork]` | `packages/ui/test/useUiPluginRecommendations.test.ts` | Expectations updated for the merged list. |
+| `[fork]` | `packages/ui/src/v4/ConversationStatusPanel.tsx` | The **Changes** row in the status panel (git tools) opens the Diff Ask plugin panel directly (ported from the retired asar patch). Resolves the surface via the plugin UI bridge and opens the side-pane tab; falls back to the stock git review when the plugin is missing. |
+| `[fork]` | `packages/ui/test/useUiPluginRecommendations.test.ts`, `packages/ui/test/v4ConversationStatusPanelGitReview.test.ts` | Expectations updated for the fork behavior. |
 | `[fork]` | `scripts/sync-upstream.sh`, `scripts/build-install.sh`, `FORK.md` | This runbook. |
 
 Every modified upstream file carries a `FORK CHANGE` notice at the top (Apache-2.0 §4).
@@ -72,7 +73,8 @@ so LaunchServices does not see two `dev.zcode.app` bundles).
 
 | Tag | Upstream version | Installed | Notes |
 | --- | --- | --- | --- |
-| `damian-v3.16.2-20261023` | 3.16.2 (`upstream/main` 2026-10-20) | 2026-10-23 | First fork build. Replaced official 3.16.3. |
+| `damian-v3.16.2-20261023b` | 3.16.2 (`upstream/main` 2026-10-20) | 2026-10-23 | Grid card + Changes button → Diff Ask. Replaced `damian-v3.16.2-20261023`. |
+| `damian-v3.16.2-20261023` | 3.16.2 (`upstream/main` 2026-10-20) | 2026-10-23 | First fork build (grid card only). Replaced official 3.16.3. |
 
 ## Gotcha: pushing needs `--no-verify`
 

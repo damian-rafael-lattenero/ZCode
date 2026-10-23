@@ -12,8 +12,12 @@ import { logger } from "@/logger.js";
  * useRecommendedUiPlugins, so removing the marketplace degrades gracefully.
  * pluginId format: "<name>@<marketplace>".
  */
+const FORK_DIFF_ASK_PLUGIN_ID = "diff-ask@dev-zcode-diff-ask-5098ef5a";
+const FORK_DIFF_ASK_SURFACE_ID = "diff-ask";
+export { FORK_DIFF_ASK_PLUGIN_ID, FORK_DIFF_ASK_SURFACE_ID };
+
 const FORK_UI_PLUGIN_RECOMMENDATIONS: ClientConfigSnapshot["uiPluginRecommendations"] = [
-  { pluginId: "diff-ask@dev-zcode-diff-ask-5098ef5a", surfaceId: "diff-ask" },
+  { pluginId: FORK_DIFF_ASK_PLUGIN_ID, surfaceId: FORK_DIFF_ASK_SURFACE_ID },
 ];
 
 function withForkRecommendations(list: ClientConfigSnapshot["uiPluginRecommendations"]) {

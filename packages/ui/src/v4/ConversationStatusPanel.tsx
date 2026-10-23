@@ -101,6 +101,18 @@ import {
   buildConversationGoalIterationSummaries,
   getConversationGoalElapsedSeconds,
 } from "@/v4/conversationGoalSummaryModel.js";
+// FORK CHANGE (damian-rafael-lattenero): the Changes row opens the Diff Ask
+// plugin panel (ported from the retired asar patch). Resolves the plugin UI
+// surface via the bridge and opens it as a side-pane tab; falls back to the
+// stock git review when the plugin is not installed/enabled.
+import {
+  FORK_DIFF_ASK_PLUGIN_ID,
+  FORK_DIFF_ASK_SURFACE_ID,
+} from "@/plugin-ui/adapters/useUiPluginRecommendations.js";
+import { useOpenPluginUi } from "@/plugin-ui/index.js";
+import { documentViewerInstance } from "@/plugin-ui/contract.js";
+import { resolvePluginUiSurfaceTitle } from "@/plugin-ui/adapters/usePluginUiSurfaces.js";
+import { useOptionalServices } from "@/hooks/useServices.js";
 
 export interface ConversationStatusPanelProps {
   workspacePath: string;
@@ -367,6 +379,7 @@ function GitStatusSection({
   model,
   onOpenGitReview,
   onRefreshGit,
+  parentSessionId,
   separated,
   workspaceIdentity,
   workspacePath,
@@ -378,12 +391,47 @@ function GitStatusSection({
   model: ConversationStatusPanelModel;
   onOpenGitReview?: (sourceId?: GitChangeSourceId) => void;
   onRefreshGit?: () => void;
+  parentSessionId?: string;
   separated: boolean;
   workspaceIdentity?: string;
   workspacePath: string;
   useVerticalFloatingPanels: boolean;
 }) {
-  const { intl } = useZCodeIntl();
+  const { intl, locale } = useZCodeIntl();
+  // FORK CHANGE (damian-rafael-lattenero): hooks must stay above the early return.
+  const openPluginUi = useOpenPluginUi();
+  const services = useOptionalServices();
+  const openDiffAsk = async (): Promise<boolean> => {
+    const bridge = services?.pluginUiBridgeService;
+    if (!openPluginUi || !bridge || !parentSessionId) return false;
+    try {
+      const surfaces = await bridge.listSurfaces({
+        workspacePath,
+        workspaceIdentity,
+      });
+      const resolved = surfaces.find(
+        (surface) =>
+          surface.pluginId === FORK_DIFF_ASK_PLUGIN_ID &&
+          surface.id === FORK_DIFF_ASK_SURFACE_ID,
+      );
+      if (!resolved) return false;
+      openPluginUi({
+        parentSessionId,
+        surfaceId: resolved.id,
+        serverName: resolved.server,
+        pluginId: resolved.pluginId,
+        resourceUri: resolved.resourceUri,
+        ...documentViewerInstance(resolved.resourceUri),
+        title: resolvePluginUiSurfaceTitle(resolved.title, locale),
+        workspacePath,
+        ...(workspaceIdentity ? { workspaceIdentity } : {}),
+        remoteSessionId: null,
+      });
+      return true;
+    } catch {
+      return false;
+    }
+  };
   const git = model.git;
   if (!git || !gitSummary || !onRefreshGit) {
     return null;
@@ -422,7 +470,10 @@ function GitStatusSection({
               : "cursor-default opacity-50",
           )}
           onClick={() => {
-            onOpenGitReview?.(gitWorktreeReviewSourceId ?? undefined);
+            // FORK CHANGE (damian-rafael-lattenero): Diff Ask first, git review as fallback.
+            void openDiffAsk().then((opened) => {
+              if (!opened) onOpenGitReview?.(gitWorktreeReviewSourceId ?? undefined);
+            });
           }}
         >
           <FileDiffIcon className="size-4 shrink-0 text-[var(--color-foreground)]" />
@@ -2113,6 +2164,7 @@ function ConversationStatusPanelImpl({
                 gitWorktreeReviewSourceId={gitWorktreeReviewSourceId}
                 workspacePath={workspacePath}
                 workspaceIdentity={workspaceIdentity}
+                parentSessionId={parentSessionId}
                 activeTaskChangeSummary={activeTaskChangeSummary}
                 onRefreshGit={onRefreshGit}
                 onOpenGitReview={onOpenGitReview}

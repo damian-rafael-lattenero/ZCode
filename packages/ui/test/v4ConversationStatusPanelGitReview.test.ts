@@ -1,7 +1,7 @@
 /** @vitest-environment jsdom */
 
 import { createElement, type ReactNode } from "react";
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, act } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { GitRepositorySummary } from "@zcode/shared";
 
@@ -82,11 +82,16 @@ describe("ConversationStatusPanel Git review entry", () => {
       }),
     );
 
+    // FORK CHANGE (damian-rafael-lattenero): the Changes click now resolves the
+    // fork's Diff Ask surface first; with no plugin bridge in this test
+    // environment it falls back to the stock git review asynchronously.
     fireEvent.click(
       screen.getByRole("button", {
         name: /chat\.statusPanel\.changes/u,
       }),
     );
+
+    await act(async () => {});
 
     expect(onOpenGitReview).toHaveBeenCalledOnce();
     expect(onOpenGitReview).toHaveBeenCalledWith("staged");

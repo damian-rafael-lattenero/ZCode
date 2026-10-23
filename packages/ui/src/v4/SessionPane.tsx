@@ -1,4 +1,5 @@
 import { remoteHostIdFromWorkspaceIdentity } from "@zcode/shared";
+import { setToolCallDefaultOpen } from "@/ToolCallBlocks/toolCallDefaultOpenStore.js";
 import { useRemoteConversationAvailable } from "@/v4/RemoteConversationAvailability.js";
 import {
   createRemoteWorkspaceDisconnectedError,
@@ -56,7 +57,18 @@ import type {
   V4ConversationFileChangesResult,
 } from "@zcode/shared/zcode-protocol-v4";
 import { logger } from "@/logger.js";
-import { PluginUiSessionProvider } from "@/plugin-ui/index.js";
+import { PluginUiSessionProvider, useOpenPluginUi } from "@/plugin-ui/index.js";
+// FORK CHANGE (damian-rafael-lattenero): /diff client-side app command (opens
+// the Diff Ask plugin panel with no model turn) and per-command `model:`
+// frontmatter override for command turns.
+import { documentViewerInstance } from "@/plugin-ui/contract.js";
+import { resolvePluginUiSurfaceTitle } from "@/plugin-ui/adapters/usePluginUiSurfaces.js";
+import {
+  FORK_DIFF_ASK_PLUGIN_ID,
+  FORK_DIFF_ASK_SURFACE_ID,
+} from "@/plugin-ui/adapters/useUiPluginRecommendations.js";
+import { resolveCommandModelSelection } from "@/v4/forkCommandModel.js";
+import { useCommands } from "@/hooks/useCommands.js";
 import {
   getConversationShareErrorDetails,
   resolveConversationShareFallbackIssueCode,
@@ -679,9 +691,64 @@ export function SessionPane({
     usageStatsService,
     zcodeSessionService,
     zcodeTaskService,
+    // FORK CHANGE (damian): plugin bridge (client-side /diff) + commands
+    // service (`model:` frontmatter of custom commands).
+    commandsService,
+    pluginUiBridgeService,
   } = useServices();
   const { intl, locale } = useZCodeIntl();
   const slashCommands = useSlashCommands(workspacePath, workspaceIdentity);
+  // FORK CHANGE (damian): map of custom command name → `model:` frontmatter,
+  // applied per-turn in dispatchSendTextAfterConfig (forkCommandModel.ts).
+  const openPluginUi = useOpenPluginUi();
+  const { userCommands } = useCommands({ commandsService, workspacePath, workspaceIdentity });
+  const forkCommandModelMap = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const command of userCommands) {
+      if (!command.model) continue;
+      map.set(command.name.trim().replace(/^\//, "").toLowerCase(), command.model);
+    }
+    return map;
+  }, [userCommands]);
+  const openDiffAskPanel = useCallback(async () => {
+    if (!openPluginUi || !pluginUiBridgeService || !sessionId) return;
+    try {
+      const surfaces = await pluginUiBridgeService.listSurfaces({
+        workspacePath,
+        ...(workspaceIdentity ? { workspaceIdentity } : {}),
+      });
+      const resolved = surfaces.find(
+        (surface) =>
+          surface.pluginId === FORK_DIFF_ASK_PLUGIN_ID && surface.id === FORK_DIFF_ASK_SURFACE_ID,
+      );
+      if (!resolved) {
+        toast(intl.formatMessage({ id: "settings.plugins.store.ui.unavailable" }));
+        return;
+      }
+      openPluginUi({
+        parentSessionId: sessionId,
+        surfaceId: resolved.id,
+        serverName: resolved.server,
+        pluginId: resolved.pluginId,
+        resourceUri: resolved.resourceUri,
+        ...documentViewerInstance(resolved.resourceUri),
+        title: resolvePluginUiSurfaceTitle(resolved.title, locale),
+        workspacePath,
+        ...(workspaceIdentity ? { workspaceIdentity } : {}),
+        remoteSessionId: null,
+      });
+    } catch {
+      toast(intl.formatMessage({ id: "settings.plugins.store.ui.unavailable" }));
+    }
+  }, [
+    intl,
+    locale,
+    openPluginUi,
+    pluginUiBridgeService,
+    sessionId,
+    workspaceIdentity,
+    workspacePath,
+  ]);
   const baseWorkspaceServices = useBaseWorkspaceServices();
   const composerClientNamespace = useComposerClientNamespace();
   const composerProjectId = useZCodeSessionStore(
@@ -2030,9 +2097,19 @@ export function SessionPane({
   const appFollowupMode = resolveAppFollowupMode(sharedSettings);
   const messageStreamShowReasoning = sharedSettings?.messageStreamShowReasoning ?? true;
   const messageStreamShowTodos = sharedSettings?.messageStreamShowTodos ?? false;
+  const messageStreamVerbosity = sharedSettings?.messageStreamVerbosity ?? "normal";
+  const messageStreamToolCallsExpandedByDefault =
+    sharedSettings?.messageStreamToolCallsExpandedByDefault ?? false;
   const toolGroupingExploreEnabled = sharedSettings?.toolGroupingExploreEnabled ?? true;
   const toolGroupingTerminalEnabled = sharedSettings?.toolGroupingTerminalEnabled ?? true;
   const toolGroupingChangesEnabled = sharedSettings?.toolGroupingChangesEnabled ?? false;
+  // 工具卡默认展开的生效值（spec：docs/specs/conversation-verbosity-views.md §2）：
+  // 独立开关与 verbose 档位取或。SessionPane 是该偏好镜像 store 的唯一写入方。
+  const messageStreamToolCallsDefaultOpen =
+    messageStreamToolCallsExpandedByDefault || messageStreamVerbosity === "verbose";
+  useEffect(() => {
+    setToolCallDefaultOpen(messageStreamToolCallsDefaultOpen);
+  }, [messageStreamToolCallsDefaultOpen]);
   const snapshotSessionId = snapshot?.sessionId ?? null;
   const snapshotFollowupMode = snapshot?.config.followupMode ?? null;
   const snapshotRevision = snapshot?.revision ?? null;
@@ -2863,6 +2940,21 @@ export function SessionPane({
       keywords: ["plan", "计划", "计划模式"],
       run: () => handleDraftSwitchMode("plan"),
     };
+    // FORK CHANGE (damian): /diff abre el panel Diff Ask SIN turno del modelo
+    // (acción pura de UI). Requiere sesión viva: la surface del plugin es
+    // session-scoped; el comando CLI homónimo queda eclipsado (precedencia
+    // invertida en SlashCommandPlugin).
+    const diffAction: AppSlashCommand | null =
+      sessionId && !compactForRemoteControl
+        ? {
+            value: "diff",
+            label: "/diff",
+            description: "Abrir el panel Diff Ask (instantáneo, sin turno del modelo)",
+            keywords: ["diff", "diffask", "diff ask", "cambios", "git"],
+            run: () => void openDiffAskPanel(),
+          }
+        : null;
+    const baseActions = diffAction ? [planAction, diffAction] : [planAction];
     if (
       !sessionId ||
       !onOpenSelectionSideChat ||
@@ -2873,7 +2965,7 @@ export function SessionPane({
         isMobileViewport: isMobileTextInputViewport,
       })
     ) {
-      return [planAction];
+      return baseActions;
     }
     const openNewSelectionSideChat = () => {
       void handleOpenSelectionSideConversation(undefined, true);
@@ -2883,7 +2975,7 @@ export function SessionPane({
     const sharedKeywords = ["side", "btw", "side chat", "auxiliary", "辅助对话", "辅助", "侧边"];
     const description = intl.formatMessage({ id: "chat.slash.app.side.description" });
     return [
-      planAction,
+      ...baseActions,
       ...[
         { value: "side", description, keywords: sharedKeywords, run: openNewSelectionSideChat },
         { value: "btw", description, keywords: sharedKeywords, run: openNewSelectionSideChat },
@@ -2896,6 +2988,8 @@ export function SessionPane({
     intl,
     isMobileTextInputViewport,
     onOpenSelectionSideChat,
+    openDiffAskPanel,
+    compactForRemoteControl,
     readOnly,
     selectionSideChat,
     sessionId,
@@ -2991,6 +3085,8 @@ export function SessionPane({
       chatLoadingBlockedByInteraction,
       messageStreamShowReasoning,
       messageStreamShowTodos,
+      messageStreamVerbosity,
+      messageStreamToolCallsExpandedByDefault,
       toolGroupingExploreEnabled,
       toolGroupingTerminalEnabled,
       toolGroupingChangesEnabled,
@@ -3069,6 +3165,8 @@ export function SessionPane({
       chatLoadingBlockedByInteraction,
       messageStreamShowReasoning,
       messageStreamShowTodos,
+      messageStreamVerbosity,
+      messageStreamToolCallsExpandedByDefault,
       toolGroupingExploreEnabled,
       toolGroupingTerminalEnabled,
       toolGroupingChangesEnabled,
@@ -3600,6 +3698,20 @@ export function SessionPane({
         contextAttachmentCount,
       });
 
+      // FORK CHANGE (damian-rafael-lattenero): a custom command whose `model:`
+      // frontmatter is set runs THIS turn on that model instead of the frozen
+      // session selection (validated against the live view; never sends an
+      // unknown model/level — see forkCommandModel.ts).
+      const forkModelSelection = resolveCommandModelSelection({
+        text,
+        commandModelMap: forkCommandModelMap,
+        view: modelSelectionView,
+        currentReasoningLevel: submission?.modelSelection.options?.reasoningLevel,
+      });
+      if (submission && forkModelSelection) {
+        submission = { ...submission, modelSelection: forkModelSelection };
+      }
+
       if (!(await ensureDraftModelReadyForSend())) {
         return "blocked" as const;
       }
@@ -3822,7 +3934,9 @@ export function SessionPane({
       ensureDraftModelReadyForSend,
       availableSelectionSideSlashCommandNames,
       appSlashCommands,
+      forkCommandModelMap,
       handleDraftSessionCreated,
+      modelSelectionView,
       reportDraftCreated,
       handleOpenSelectionSideConversationWithPrompt,
       invalidateActiveHighspeedCard,

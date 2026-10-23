@@ -95,15 +95,18 @@ export function SlashCommandPlugin({
   const activeTokenRef = useRef<ActivePromptInputTokenSnapshot | null>(null);
   const commandSuggestions = useMemo(() => {
     const excluded = new Set((excludedCommandNames ?? []).map(normalizeSlashCommandValue));
+    // FORK CHANGE (damian-rafael-lattenero): app-layer commands now take
+    // precedence over same-name CLI catalog entries (upstream hid the app one
+    // behind the CLI entry). This lets the fork's client-side /diff eclipse
+    // the model-turn CLI command. /side and /btw keep their upstream behavior
+    // because SessionPane already removes them when the CLI provides them.
+    const appSuggestions = buildAppSlashCommandSuggestions(appCommands ?? []);
+    const appValues = new Set(appSuggestions.map((item) => item.value));
     const cliSuggestions = buildSlashSuggestions(commands).filter(
-      (item) => !excluded.has(item.value),
+      (item) => !excluded.has(item.value) && !appValues.has(item.value),
     );
-    // App 层命令追加在 CLI catalog 之后展示；CLI 已提供同名命令时以 CLI 为准，避免遮蔽。
-    const cliValues = new Set(cliSuggestions.map((item) => item.value));
-    const appSuggestions = buildAppSlashCommandSuggestions(appCommands ?? []).filter(
-      (item) => !cliValues.has(item.value) && !excluded.has(item.value),
-    );
-    return [...cliSuggestions, ...appSuggestions];
+    const visibleAppSuggestions = appSuggestions.filter((item) => !excluded.has(item.value));
+    return [...cliSuggestions, ...visibleAppSuggestions];
   }, [appCommands, commands, excludedCommandNames]);
   const subagentSuggestions = useMemo(() => buildSubagentSuggestions(agents), [agents]);
   const skillSuggestions = useMemo(

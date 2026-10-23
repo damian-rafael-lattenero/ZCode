@@ -11,6 +11,13 @@ export interface CommandInfo {
   filePath: string;
   description?: string;
   argumentHint?: string;
+  /**
+   * FORK CHANGE (damian-rafael-lattenero): `model:` frontmatter —
+   * "<providerId>/<modelId>[$<thoughtLevel>]" or a bare modelId. When set,
+   * the turn triggered by this command runs on that model instead of the
+   * session model (see forkCommandModel.ts in the ui package).
+   */
+  model?: string;
 }
 
 export interface UserCommand extends CommandInfo {

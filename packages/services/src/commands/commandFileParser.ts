@@ -9,6 +9,7 @@ interface ParsedCommandFile {
   filePath: string;
   description?: string;
   argumentHint?: string;
+  model?: string;
 }
 
 interface MarkdownCommandParts {
@@ -114,6 +115,9 @@ function parseMarkdownCommandFile(content: string, filePath: string): ParsedComm
     filePath,
     description: readFrontmatterMultilineValue(frontmatterLines, "description"),
     argumentHint: readFrontmatterMultilineValue(frontmatterLines, "argument-hint"),
+    // FORK CHANGE (damian-rafael-lattenero): `model:` frontmatter honored per
+    // command turn (see ui forkCommandModel.ts). Other unknown keys stay ignored.
+    model: readFrontmatterMultilineValue(frontmatterLines, "model"),
   };
 }
 

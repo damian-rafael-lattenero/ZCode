@@ -73,3 +73,15 @@ so LaunchServices does not see two `dev.zcode.app` bundles).
 | Tag | Upstream version | Installed | Notes |
 | --- | --- | --- | --- |
 | `damian-v3.16.2-20261023` | 3.16.2 (`upstream/main` 2026-10-20) | 2026-10-23 | First fork build. Replaced official 3.16.3. |
+
+## Gotcha: pushing needs `--no-verify`
+
+The repo's husky pre-push gate (`verify:pre-push`) currently fails on
+**upstream's own** lint errors (`no-unused-vars` in `packages/services/...`,
+untouched by this fork). Push with:
+
+```bash
+mise exec -- git push --no-verify origin damian
+```
+
+Re-check after each sync — if upstream cleans up their lint, drop the flag.

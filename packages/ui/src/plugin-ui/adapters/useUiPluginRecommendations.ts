@@ -3,6 +3,29 @@ import type { ClientConfigSnapshot } from "@zcode/shared";
 import { useOptionalServices } from "@/hooks/useServices.js";
 import { logger } from "@/logger.js";
 
+/*
+ * FORK CHANGE (damian-rafael-lattenero / ZCode fork): local UI-plugin recommendations.
+ * Upstream serves `uiPluginRecommendations` from the Z.ai client-config service, so
+ * personally-installed plugins never surface in the side-pane "New tab" App plugins grid.
+ * This fork prepends the entries below to whatever the server returns; entries whose
+ * pluginId is absent from the local store catalog are dropped by the join in
+ * useRecommendedUiPlugins, so removing the marketplace degrades gracefully.
+ * pluginId format: "<name>@<marketplace>".
+ */
+const FORK_UI_PLUGIN_RECOMMENDATIONS: ClientConfigSnapshot["uiPluginRecommendations"] = [
+  { pluginId: "diff-ask@dev-zcode-diff-ask-5098ef5a", surfaceId: "diff-ask" },
+];
+
+function withForkRecommendations(list: ClientConfigSnapshot["uiPluginRecommendations"]) {
+  const seen = new Set(list.map((entry) => `${entry.pluginId}/${entry.surfaceId}`));
+  return [
+    ...FORK_UI_PLUGIN_RECOMMENDATIONS.filter(
+      (entry) => !seen.has(`${entry.pluginId}/${entry.surfaceId}`),
+    ),
+    ...list,
+  ];
+}
+
 /** 缓存和请求合并归 Host 配置服务；此处只持有当前入口的展示投影。 */
 export function useUiPluginRecommendations(enabled: boolean) {
   const service = useOptionalServices()?.clientConfigService;
@@ -16,7 +39,11 @@ export function useUiPluginRecommendations(enabled: boolean) {
     if (enabled && service) {
       void service.getSnapshot().then(
         ({ uiPluginRecommendations }) => {
-          if (active) setSnapshot({ service, recommendations: uiPluginRecommendations ?? [] });
+          if (active)
+            setSnapshot({
+              service,
+              recommendations: withForkRecommendations(uiPluginRecommendations ?? []),
+            });
         },
         () => {
           if (active) {

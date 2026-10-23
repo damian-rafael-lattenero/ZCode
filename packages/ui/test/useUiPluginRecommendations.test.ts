@@ -10,6 +10,10 @@ vi.mock("@/hooks/useServices.js", () => ({
 vi.mock("@/logger.js", () => ({ logger: { warn: vi.fn() } }));
 afterEach(cleanup);
 const recommendations = [{ pluginId: "panel@example", surfaceId: "main" }];
+// FORK CHANGE (damian-rafael-lattenero): the hook prepends the fork's local
+// recommendations to every successful server snapshot.
+const forkRecommendations = [{ pluginId: "diff-ask@dev-zcode-diff-ask-5098ef5a", surfaceId: "diff-ask" }];
+const mergedRecommendations = [...forkRecommendations, ...recommendations];
 
 it("禁用不请求，启用读取，关闭后忽略迟到结果", async () => {
   const pending = Promise.withResolvers<{ uiPluginRecommendations: typeof recommendations }>();
@@ -37,10 +41,10 @@ it("切换服务立即清空投影，丢弃旧服务迟到结果，失败为空"
   };
   rerender();
   await act(async () => {});
-  expect(result.current.recommendations).toEqual(recommendations);
+  expect(result.current.recommendations).toEqual(mergedRecommendations);
   expect(result.current.loading).toBe(false);
   await act(async () => pending.resolve({ uiPluginRecommendations: [] }));
-  expect(result.current.recommendations).toEqual(recommendations);
+  expect(result.current.recommendations).toEqual(mergedRecommendations);
   expect(result.current.loading).toBe(false);
   context.service = { getSnapshot: vi.fn().mockRejectedValue(new Error("offline")) };
   rerender();

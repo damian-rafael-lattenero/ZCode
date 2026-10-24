@@ -81,15 +81,25 @@ so LaunchServices does not see two `dev.zcode.app` bundles).
 
 ## Gotcha: pushing needs `--no-verify`
 
-The repo's husky pre-push gate (`verify:pre-push`) currently fails on
-**upstream's own** lint errors (`no-unused-vars` in `packages/services/...`,
-untouched by this fork). Push with:
+The husky pre-push gate (`verify:pre-push` = lint + db:schema + architecture
++ affected unit tests) is impractical for this fork (verified 2026-10-24):
+
+1. The hook needs `pnpm` on PATH — push from a mise-shims shell or via
+   `mise exec --`, otherwise it dies with code 127 before running anything.
+2. Upstream's old lint errors are gone (lint now passes with 0 errors), but
+   `test:unit:affected` refuses a dirty tree (local untracked dirs count —
+   `.zcode/` is now gitignored for this) and, for feature-sized changes
+   touching `packages/ui` + `packages/shared`, selects a very large UT set
+   that runs for many minutes and looks stuck.
+
+So the ritual is: run `pnpm typecheck`, `pnpm lint`,
+`pnpm architecture:check --changed` and the targeted tests yourself, then:
 
 ```bash
 mise exec -- git push --no-verify origin damian
 ```
 
-Re-check after each sync — if upstream cleans up their lint, drop the flag.
+Re-check after each sync — if the gate gets fast/reliable again, drop the flag.
 
 ## Ola 2 (23/10 noche, tag `damian-v3.16.2-20261023c`): model: + /diff client-side
 

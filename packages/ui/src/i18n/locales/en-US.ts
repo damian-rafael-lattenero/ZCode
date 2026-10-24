@@ -3246,6 +3246,15 @@ const enUS: Record<string, string> = {
     "Show full reasoning inside the message stream. When off, the first reasoning item in each turn remains visible.",
   "settings.messageStreamShowTodos": "Show todos",
   "settings.messageStreamShowTodosDescription": "Show Todo tool cards inside the message stream. ",
+  "settings.messageStreamVerbosity": "Conversation detail level",
+  "settings.messageStreamVerbosityDescription":
+    "How much detail the message stream shows. Applies to past turns immediately.",
+  "settings.messageStreamVerbosity.summary": "Summary",
+  "settings.messageStreamVerbosity.normal": "Normal",
+  "settings.messageStreamVerbosity.verbose": "Verbose",
+  "settings.messageStreamExpandedByDefault": "Expand everything by default",
+  "settings.messageStreamExpandedByDefaultDescription":
+    "Start tool calls, thinking, file change summaries and completed-turn work sections expanded. Applies to past turns immediately.",
   "settings.toolGroupingExplore": "Group exploration tools",
   "settings.toolGroupingExploreDescription":
     "Group consecutive reads and searches into an Explore section.",
@@ -5695,6 +5704,17 @@ const enUS: Record<string, string> = {
   "chat.history.workingFor": "Working for {duration}",
   "chat.history.workedFor": "Worked for {duration}",
   "chat.history.worked": "Worked",
+  "chat.verbosity.title": "Conversation detail level",
+  "chat.verbosity.summary": "Summary",
+  "chat.verbosity.summaryDescription":
+    "Only your messages and final answers; intermediate work stays collapsed.",
+  "chat.verbosity.normal": "Normal",
+  "chat.verbosity.normalDescription": "Tool calls shown as collapsed summary rows.",
+  "chat.verbosity.verbose": "Verbose",
+  "chat.verbosity.verboseDescription": "Everything: reasoning, tool calls and details expanded.",
+  "chat.verbosity.expandByDefault": "Expand everything",
+  "chat.verbosity.expandByDefaultDescription":
+    "Tool calls, thinking, diffs and file summaries start expanded (applies to past turns).",
   "chat.topicPreparation.preparing": "Preparing materials",
   "chat.topicPreparation.waitingStop": "Waiting for the current run to stop",
   "chat.topicPreparation.failed": "Material preparation failed",

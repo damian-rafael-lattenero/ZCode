@@ -886,3 +886,10 @@ exceptions:
       - packages/ui/src/settings/DynamicWorkflowModeSetting.tsx
       - packages/ui/src/store/dynamicWorkflowAvailabilityStore.ts
     reason: Admitted upstream files edited only to let the user's dynamic workflow mode choice always win and keep the settings row visible; adopting packages/shared/src and packages/ui/src needs a separate module boundary refactor.
+  - id: conversation-verbosity-views-unmanaged-new
+    rule: unmanaged-new-file
+    paths:
+      - packages/ui/src/ToolCallBlocks/conversationExpandDefaultStore.ts
+      - packages/ui/src/v4/ConversationVerbosityControl.tsx
+      - packages/ui/src/v4/conversationTurnRenderUnitTypes.ts
+    reason: 消息流详略档位（spec：docs/specs/conversation-verbosity-views.md）：新增「默认展开全部」镜像 store 与 composer 档位入口两个 renderer 视图文件；conversationTurnRenderUnitTypes.ts 为已准入的存量拆分文件，本次只追加 verbosity/expandAllByDefault 两个派生选项字段。三者均只读写 user-scope shared settings、不引入跨域实现依赖；接管 packages/ui/src 的 ToolCallBlocks / v4 目录需要单独的模块边界重构，不在本次范围内。

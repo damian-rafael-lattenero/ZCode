@@ -98,6 +98,7 @@ import type {
 } from "@/v4/ConversationRowView.js";
 import {
   isConversationReasoningRowVisible,
+  type ConversationReasoningVisibility,
   type ConversationRowRenderContext,
 } from "@/v4/conversationRowContext.js";
 import type {
@@ -403,37 +404,39 @@ function ConversationAssistantWorkItems({
     open: boolean;
   };
 }) {
-  const showReasoning = context.messageStreamShowReasoning === true;
-  const firstReasoningRowId = context.messageStreamFirstReasoningRowId;
+  // 档位在 isConversationReasoningRowVisible 内解析（verbose 全显 / summary 全隐），
+  // 这里只负责把 context 的三份事实打包成稳定引用，供 work items 与 CUA 过滤共用。
+  const reasoningVisibility = useMemo<ConversationReasoningVisibility>(
+    () => ({
+      messageStreamShowReasoning: context.messageStreamShowReasoning,
+      ...(context.messageStreamFirstReasoningRowId !== undefined
+        ? { messageStreamFirstReasoningRowId: context.messageStreamFirstReasoningRowId }
+        : {}),
+      ...(context.messageStreamVerbosity !== undefined
+        ? { messageStreamVerbosity: context.messageStreamVerbosity }
+        : {}),
+    }),
+    [context],
+  );
   const items = useMemo(
     () =>
-      buildAssistantWorkRenderItems(
-        rows,
-        {
-          messageStreamShowReasoning: showReasoning,
-          ...(firstReasoningRowId !== undefined
-            ? { messageStreamFirstReasoningRowId: firstReasoningRowId }
-            : {}),
-        },
-        {
-          stageTailIsRunning,
-          enableCuaGrouping: ENABLE_CUA_TOOL_CALL_GROUPING,
-          enableExploreGrouping:
-            context.toolGroupingExploreEnabled ?? ENABLE_EXPLORE_TOOL_CALL_GROUPING,
-          enableTerminalGrouping:
-            context.toolGroupingTerminalEnabled ?? ENABLE_TERMINAL_TOOL_CALL_GROUPING,
-          enableChangesGrouping:
-            context.toolGroupingChangesEnabled ?? ENABLE_CHANGES_TOOL_CALL_GROUPING,
-        },
-      ),
+      buildAssistantWorkRenderItems(rows, reasoningVisibility, {
+        stageTailIsRunning,
+        enableCuaGrouping: ENABLE_CUA_TOOL_CALL_GROUPING,
+        enableExploreGrouping:
+          context.toolGroupingExploreEnabled ?? ENABLE_EXPLORE_TOOL_CALL_GROUPING,
+        enableTerminalGrouping:
+          context.toolGroupingTerminalEnabled ?? ENABLE_TERMINAL_TOOL_CALL_GROUPING,
+        enableChangesGrouping:
+          context.toolGroupingChangesEnabled ?? ENABLE_CHANGES_TOOL_CALL_GROUPING,
+      }),
     [
       context.toolGroupingChangesEnabled,
       context.toolGroupingExploreEnabled,
       context.toolGroupingTerminalEnabled,
       stageTailIsRunning,
-      firstReasoningRowId,
+      reasoningVisibility,
       rows,
-      showReasoning,
     ],
   );
 
@@ -688,7 +691,7 @@ function AssistantHistoryStatus({
           >
             {label}
           </span>
-          {!segment.assistantHistoryDefaultOpen ? (
+          {!(segment.assistantHistoryLockedOpen ?? segment.assistantHistoryDefaultOpen) ? (
             <ChevronRightIcon
               aria-hidden
               className={cn(
@@ -766,12 +769,16 @@ function ConversationWorkSegmentFlow({
     (item) => item.kind !== "userInput",
   );
   let historyChunkIndex = 0;
-  const open = segment.assistantHistoryDefaultOpen ? true : historyOpen;
+  // 锁定展开（运行末轮/异常终态/无正文单段）是诊断事实，不可手动收起；
+  // 偏好驱动的默认展开只决定初始态，允许用户点回（spec §2）。旧数据缺省回退 defaultOpen。
+  const historyLockedOpen =
+    segment.assistantHistoryLockedOpen ?? segment.assistantHistoryDefaultOpen;
+  const open = historyLockedOpen || historyOpen;
 
   return (
     <Collapsible
       open={open}
-      onOpenChange={segment.assistantHistoryDefaultOpen ? undefined : setHistoryOpen}
+      onOpenChange={historyLockedOpen ? undefined : setHistoryOpen}
       // 外层 flex gap 不属于 Radix 测量的 content 高度，收起到 0 后会在
       // display:none 的最后一帧再少 20px。普通兄弟用外边距保持原盒模型，history
       // 的间距则放进动画层。
@@ -961,6 +968,9 @@ function ConversationTurnFlow({
               ...projectedWorkSegments[0]!,
               // 兼容仍直接构造/覆写旧 render unit 的调用方；真实 guide 多段不走这个分支。
               assistantHistoryDefaultOpen: unit.assistantHistoryDefaultOpen,
+              ...(unit.assistantHistoryLockedOpen !== undefined
+                ? { assistantHistoryLockedOpen: unit.assistantHistoryLockedOpen }
+                : {}),
             },
           ]
         : projectedWorkSegments
@@ -972,6 +982,9 @@ function ConversationTurnFlow({
             assistantHistoryRows: unit.assistantHistoryRows,
             assistantFollowingRows: unit.assistantFollowingRows,
             assistantHistoryDefaultOpen: unit.assistantHistoryDefaultOpen,
+            ...(unit.assistantHistoryLockedOpen !== undefined
+              ? { assistantHistoryLockedOpen: unit.assistantHistoryLockedOpen }
+              : {}),
             ...(unit.workStatus ? { workStatus: unit.workStatus } : {}),
           },
         ];

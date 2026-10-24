@@ -12,6 +12,7 @@ import {
   useMemo,
   useRef,
   useState,
+  useSyncExternalStore,
 } from "react";
 import {
   ArchiveIcon,
@@ -81,6 +82,10 @@ import {
   ReasoningContent,
   ReasoningTrigger,
 } from "@/components/ai-elements/reasoning.js";
+import {
+  getConversationExpandDefaultSnapshot,
+  subscribeConversationExpandDefault,
+} from "@/ToolCallBlocks/conversationExpandDefaultStore.js";
 import { cn } from "@/components/lib/utils.js";
 import { Button } from "@/components/ui/button.js";
 import { ControlHintTooltip } from "@/ControlHintTooltip.js";
@@ -1771,7 +1776,7 @@ const AssistantTextRowView = memo(function AssistantTextRowView({
   );
 });
 
-const ReasoningRowView = memo(function ReasoningRowView({
+export const ReasoningRowView = memo(function ReasoningRowView({
   row,
   contentVariant,
 }: {
@@ -1779,10 +1784,19 @@ const ReasoningRowView = memo(function ReasoningRowView({
   contentVariant?: "default" | "nested";
 }) {
   const streaming = row.state === "streaming";
+  // 「默认展开全部」偏好（spec：docs/specs/conversation-verbosity-views.md §2）：
+  // 思考块和工具卡一样是可折叠内容，开关打开时以展开为初始态，且完成自动收起
+  // 被禁用——用户明确要求展开，autoCollapse 会与偏好对抗。
+  const { defaultOpen: expandAllDefaultOpen, epoch: expandAllDefaultEpoch } = useSyncExternalStore(
+    subscribeConversationExpandDefault,
+    getConversationExpandDefaultSnapshot,
+    getConversationExpandDefaultSnapshot,
+  );
   // 外观对齐旧 ThoughtBlock（旧版 chatMessageParts）：ai-elements Reasoning
   // 折叠组件。交互调整原因：流式 reasoning 默认展开会持续挤压工具和正文空间；
-  // 现在 streaming/complete 都默认收起，只保留运行态文案，用户可手动展开。
-  // autoCollapseKey 仍保证状态边界不会覆盖已经发生过的用户交互。
+  // 默认收起只保留运行态文案，用户可手动展开；autoCollapseKey 仍保证状态边界
+  // 不会覆盖已经发生过的用户交互。epoch 作 key：偏好翻转 ⇒ 重挂载 ⇒ 手动开合
+  // （组件内局部态）随代际作废，全部思考块回溯回到新默认值。
   const durationSeconds =
     row.durationMs !== undefined ? Math.max(1, Math.ceil(row.durationMs / 1000)) : undefined;
   if (streaming && row.text.length === 0) {
@@ -1791,9 +1805,11 @@ const ReasoningRowView = memo(function ReasoningRowView({
   return (
     <RowShell rowId={row.rowId}>
       <Reasoning
+        key={`reasoning-expand-epoch:${expandAllDefaultEpoch}`}
         className="w-full"
+        defaultOpen={expandAllDefaultOpen}
         isStreaming={streaming}
-        autoCollapseKey={streaming ? null : row.state}
+        autoCollapseKey={streaming || expandAllDefaultOpen ? null : row.state}
         {...(durationSeconds !== undefined ? { duration: durationSeconds } : {})}
       >
         {/* Bug 原因：附件重构合并时误丢了 streamingText 接线，导致摘要组件仍在但永远收到空文本。 */}

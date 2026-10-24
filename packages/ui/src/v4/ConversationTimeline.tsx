@@ -463,6 +463,10 @@ function ConversationTimelineImpl({
     });
   }, [pluginUiDerivation, sessionKey, pluginUiDisclosureVersion]);
   const topicPreparations = useBotTopicPreparations();
+  // 详略偏好（spec：docs/specs/conversation-verbosity-views.md）从 rowContext 进入纯推导：
+  // 切换档位 ⇒ options 变 ⇒ 全部 turn units 重推导，历史轮随之回溯生效。
+  const messageStreamVerbosity = rowContext.messageStreamVerbosity;
+  const messageStreamExpandedByDefault = rowContext.messageStreamExpandedByDefault;
   const renderUnits = useMemo(
     () =>
       withTopicPreparationMessages(
@@ -470,11 +474,21 @@ function ConversationTimelineImpl({
           nowMs: liveNowMs,
           sessionPhase,
           pluginUiPinResolver,
+          ...(messageStreamVerbosity ? { verbosity: messageStreamVerbosity } : {}),
+          ...(messageStreamExpandedByDefault ? { expandAllByDefault: true } : {}),
         }),
         rows,
         topicPreparations,
       ),
-    [liveNowMs, pluginUiPinResolver, rows, sessionPhase, topicPreparations],
+    [
+      liveNowMs,
+      messageStreamExpandedByDefault,
+      messageStreamVerbosity,
+      pluginUiPinResolver,
+      rows,
+      sessionPhase,
+      topicPreparations,
+    ],
   );
   const { virtualizedUnits, liveUnit, liveUnitIndex } = useMemo(
     () => splitConversationTimelineLiveTail(renderUnits),

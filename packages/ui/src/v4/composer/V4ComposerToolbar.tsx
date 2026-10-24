@@ -53,6 +53,7 @@ import {
   type ChatStartPlanBalanceConfig,
 } from "@/chat-input-toolbar/StartPlanContextBalance.js";
 import { ThoughtLevelCycleControl } from "@/chat-input-toolbar/ThoughtLevelCycleControl.js";
+import { ConversationVerbosityControl } from "@/v4/ConversationVerbosityControl.js";
 import {
   getNextThoughtLevelValue,
   getThoughtLevelLabel,
@@ -1377,6 +1378,9 @@ function V4ComposerModelControlsImpl({
           restoreFocusSelector={V4_COMPOSER_INPUT_SELECTOR}
         />
       ) : null}
+      {/* 详略档位是视图偏好（读 shared settings），不进 submission 配置状态机；
+          与模型/思考深度并排常驻，窄屏由自身 compact 收起文字。 */}
+      <ConversationVerbosityControl compact={isMobileViewport} />
     </>
   );
 }

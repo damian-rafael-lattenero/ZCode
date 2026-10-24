@@ -47,6 +47,30 @@ describe("app settings", () => {
     }
   });
 
+  it("消息流详略档位默认 normal，默认展开开关默认 false（spec：docs/specs/conversation-verbosity-views.md）", () => {
+    expect(appSettingsSchema.parse({})).toMatchObject({
+      messageStreamVerbosity: "normal",
+      messageStreamExpandedByDefault: false,
+    });
+    for (const verbosity of ["summary", "normal", "verbose"]) {
+      expect(
+        appSettingsSchema.parse({ messageStreamVerbosity: verbosity }).messageStreamVerbosity,
+      ).toBe(verbosity);
+      expect(
+        appSettingsPatchSchema.parse({ messageStreamVerbosity: verbosity }).messageStreamVerbosity,
+      ).toBe(verbosity);
+    }
+    expect(
+      appSettingsPatchSchema.parse({ messageStreamExpandedByDefault: true })
+        .messageStreamExpandedByDefault,
+    ).toBe(true);
+    for (const invalid of ["thinking", "all", true, null]) {
+      expect(appSettingsPatchSchema.safeParse({ messageStreamVerbosity: invalid }).success).toBe(
+        false,
+      );
+    }
+  });
+
   it("preserves an explicit startup reconnect preference while keeping old settings optional", () => {
     // 合同 §8.2：旧设置缺字段不触发迁移，Host/UI 继续按 true 解释；显式 false 必须通过完整 schema。
     const parsed = appSettingsSchema.parse({});

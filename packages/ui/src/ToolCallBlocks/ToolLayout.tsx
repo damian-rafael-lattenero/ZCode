@@ -1,4 +1,4 @@
-import { memo, type ReactNode, useEffect, useRef, useState } from "react";
+import { memo, type ReactNode, useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { Collapsible, CollapsibleContent } from "@/components/ui/collapsible.js";
 import { Button } from "@/components/ui/button.js";
 import { cn } from "@/components/lib/utils.js";
@@ -11,6 +11,10 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip.js";
 import { ToolSummaryRow, type ToolSummaryAction } from "@/ToolCallBlocks/ToolSummaryRow.js";
+import {
+  getConversationExpandDefaultSnapshot,
+  subscribeConversationExpandDefault,
+} from "@/ToolCallBlocks/conversationExpandDefaultStore.js";
 import { uiMemoryDiagnosticsRegistry } from "@/lib/memoryDiagnostics.js";
 
 const toolLayoutOpenState = new Map<string, boolean>();
@@ -104,10 +108,18 @@ function ToolLayoutComponent({
   summaryAction,
 }: ToolLayoutProps) {
   const { intl } = useZCodeIntl();
+  const { defaultOpen: expandAllDefaultOpen, epoch: expandAllDefaultEpoch } = useSyncExternalStore(
+    subscribeConversationExpandDefault,
+    getConversationExpandDefaultSnapshot,
+    getConversationExpandDefaultSnapshot,
+  );
   const resolvedPersistOpenKey = persistOpenKey ?? toolId;
   const [isOpen, setIsOpen] = useState(
-    () => toolLayoutOpenState.get(resolvedPersistOpenKey) ?? false,
+    () => toolLayoutOpenState.get(resolvedPersistOpenKey) ?? expandAllDefaultOpen,
   );
+  // 偏好代际（spec：docs/specs/conversation-verbosity-views.md §3）：epoch 递增表示
+  // 「默认展开全部」偏好刚翻转，本代际前的手动覆盖全部作废。
+  const previousDefaultOpenEpochRef = useRef(expandAllDefaultEpoch);
   const hasSummaryAction = summaryAction !== undefined;
   const isExpanded = !hasSummaryAction && (forceOpen || (canToggle && isOpen));
   const [shouldRenderContent, setShouldRenderContent] = useState(isExpanded);
@@ -147,9 +159,18 @@ function ToolLayoutComponent({
   );
 
   useEffect(() => {
+    // 回溯重置：偏好翻转时清空手动覆盖，已挂载卡片统一回到新默认值。
+    // 与 persistOpenKey 变更合并在同一 effect：两条路径都只做「重读初始态」，
+    // 分开声明会在同一次提交里按声明顺序互相覆盖，产生一帧闪烁。
+    if (previousDefaultOpenEpochRef.current !== expandAllDefaultEpoch) {
+      previousDefaultOpenEpochRef.current = expandAllDefaultEpoch;
+      toolLayoutOpenState.clear();
+      setIsOpen(expandAllDefaultOpen);
+      return;
+    }
     const persistedOpen = toolLayoutOpenState.get(resolvedPersistOpenKey);
-    setIsOpen(persistedOpen ?? false);
-  }, [resolvedPersistOpenKey]);
+    setIsOpen(persistedOpen ?? expandAllDefaultOpen);
+  }, [resolvedPersistOpenKey, expandAllDefaultOpen, expandAllDefaultEpoch]);
 
   useEffect(() => {
     // edit/read 这类工具有“完成后默认自动展开”的需求，

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { ChevronRightIcon, Loader2Icon, Undo2Icon } from "lucide-react";
 import type {
   CommandAck,
@@ -22,6 +22,10 @@ import { OpenSplitButton } from "@/OpenSplitButton.js";
 import { logger } from "@/logger.js";
 import { collectGenUiSourcePaths, matchesGenUiSourcePath } from "@/gen-ui/contract.js";
 import { ConversationFileRewindDialog } from "@/v4/ConversationFileRewindDialog.js";
+import {
+  getConversationExpandDefaultSnapshot,
+  subscribeConversationExpandDefault,
+} from "@/ToolCallBlocks/conversationExpandDefaultStore.js";
 import type {
   ConversationFileChangesRequestOptions,
   ConversationRowRenderContext,
@@ -77,7 +81,21 @@ export function ConversationFileSummaryPanel({
   const { intl } = useZCodeIntl();
   const genUiSources = useMemo(() => collectGenUiSourcePaths(assistantText), [assistantText]);
   const filtersSources = genUiSources.length > 0;
-  const [open, setOpen] = useState(false);
+  // 「默认展开全部」偏好（spec：docs/specs/conversation-verbosity-views.md §2）：
+  // 轮尾文件摘要也是消息流折叠内容，初始态跟随偏好；偏好翻转（epoch 递增）时
+  // 重置回新默认值——手动开合是本代际内的局部选择，回溯重置优先。
+  const { defaultOpen: expandAllDefaultOpen, epoch: expandAllDefaultEpoch } = useSyncExternalStore(
+    subscribeConversationExpandDefault,
+    getConversationExpandDefaultSnapshot,
+    getConversationExpandDefaultSnapshot,
+  );
+  const [open, setOpen] = useState(() => expandAllDefaultOpen);
+  const previousExpandEpochRef = useRef(expandAllDefaultEpoch);
+  useEffect(() => {
+    if (previousExpandEpochRef.current === expandAllDefaultEpoch) return;
+    previousExpandEpochRef.current = expandAllDefaultEpoch;
+    setOpen(expandAllDefaultOpen);
+  }, [expandAllDefaultEpoch, expandAllDefaultOpen]);
   const [loadedDetails, setLoadedDetails] = useState<{
     key: string;
     result: V4ConversationFileChangesResult | null;

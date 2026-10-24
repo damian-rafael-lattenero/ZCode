@@ -1058,3 +1058,95 @@ describe("buildConversationTurnRenderUnits", () => {
     expect(unit?.workSegments?.[0]?.assistantHistoryDefaultOpen).toBe(false);
   });
 });
+
+describe("buildConversationTurnRenderUnits 详略档位（spec：docs/specs/conversation-verbosity-views.md）", () => {
+  /** 两个已完成轮：各有 reasoning/tool 工作行与最终正文——档位切换的回溯对象。 */
+  function completedTurnRows(): ConversationRow[] {
+    return [
+      turnHeader(1, { turnId: "turn-1", state: "completedSuccess" }),
+      userInput(2, "执行任务", { turnId: "turn-1" }),
+      reasoning(3, "思考", { turnId: "turn-1" }),
+      toolCall(4, "Bash", { turnId: "turn-1" }),
+      assistantText(5, "最终结果", { turnId: "turn-1" }),
+      turnHeader(6, { turnId: "turn-2", state: "completedSuccess" }),
+      userInput(7, "再来一次", { turnId: "turn-2" }),
+      toolCall(8, "Read", { turnId: "turn-2" }),
+      assistantText(9, "第二个结果", { turnId: "turn-2" }),
+    ];
+  }
+
+  it("缺省（normal）：全部已完成轮历史区收起，行为与现状一致", () => {
+    const units = buildConversationTurnRenderUnits(completedTurnRows());
+    expect(units.map((unit) => unit.assistantHistoryDefaultOpen)).toEqual([false, false]);
+    expect(units.map((unit) => unit.assistantHistoryLockedOpen)).toEqual([false, false]);
+  });
+
+  it("expandAllByDefault：全部历史轮默认展开且不锁定（可手动收起）", () => {
+    const units = buildConversationTurnRenderUnits(completedTurnRows(), {
+      expandAllByDefault: true,
+    });
+    expect(units.map((unit) => unit.assistantHistoryDefaultOpen)).toEqual([true, true]);
+    expect(units.map((unit) => unit.assistantHistoryLockedOpen)).toEqual([false, false]);
+    expect(units.map((unit) => unit.workSegments?.[0]?.assistantHistoryDefaultOpen)).toEqual([
+      true,
+      true,
+    ]);
+    expect(units.map((unit) => unit.workSegments?.[0]?.assistantHistoryLockedOpen)).toEqual([
+      false,
+      false,
+    ]);
+  });
+
+  it("verbose 档等价偏好展开：回溯作用于全部历史轮", () => {
+    const units = buildConversationTurnRenderUnits(completedTurnRows(), {
+      verbosity: "verbose",
+    });
+    expect(units.map((unit) => unit.assistantHistoryDefaultOpen)).toEqual([true, true]);
+    expect(units.map((unit) => unit.assistantHistoryLockedOpen)).toEqual([false, false]);
+  });
+
+  it("summary 档压过偏好开关：已完成轮一律收起", () => {
+    const units = buildConversationTurnRenderUnits(completedTurnRows(), {
+      verbosity: "summary",
+      expandAllByDefault: true,
+    });
+    expect(units.map((unit) => unit.assistantHistoryDefaultOpen)).toEqual([false, false]);
+    expect(units.map((unit) => unit.assistantHistoryLockedOpen)).toEqual([false, false]);
+  });
+
+  it("summary 档不隐藏无正文单段轮的锁定展开（诊断事实优先于档位）", () => {
+    const units = buildConversationTurnRenderUnits(
+      [turnHeader(1, { state: "completedSuccess" }), userInput(2, "跑一下"), toolCall(3, "Bash")],
+      { verbosity: "summary" },
+    );
+    expect(units[0]?.assistantHistoryDefaultOpen).toBe(true);
+    expect(units[0]?.assistantHistoryLockedOpen).toBe(true);
+  });
+
+  it("异常终态轮在任何档位保持锁定展开", () => {
+    const rows: ConversationRow[] = [
+      turnHeader(1, { state: "failed" }),
+      userInput(2, "执行"),
+      reasoning(3, "处理中"),
+      assistantText(4, "部分结果", { state: "failed" }),
+    ];
+    for (const verbosity of ["summary", "normal", "verbose"] as const) {
+      const units = buildConversationTurnRenderUnits(rows, { verbosity });
+      expect(units[0]?.assistantHistoryDefaultOpen, verbosity).toBe(true);
+      expect(units[0]?.assistantHistoryLockedOpen, verbosity).toBe(true);
+    }
+  });
+
+  it("运行中末轮在任何档位保持锁定展开", () => {
+    const units = buildConversationTurnRenderUnits(
+      [
+        turnHeader(1, { state: "running", activeMs: 1_000 }),
+        userInput(2, "跑测试"),
+        toolCall(3, "Bash", { status: "running" }),
+      ],
+      { verbosity: "summary" },
+    );
+    expect(units[0]?.assistantHistoryDefaultOpen).toBe(true);
+    expect(units[0]?.assistantHistoryLockedOpen).toBe(true);
+  });
+});

@@ -22,6 +22,7 @@ export type {
   Locale,
   LocalePreference,
   ZCodeInteractionBehavior,
+  MessageStreamVerbosity,
   TabId,
   TabState,
   ResourceUsageCategory,

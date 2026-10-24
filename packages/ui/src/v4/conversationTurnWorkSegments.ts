@@ -31,7 +31,31 @@ export interface ConversationTurnWorkSegment {
   assistantHistoryRows: AssistantWorkRow[];
   assistantFollowingRows: AssistantWorkRow[];
   assistantHistoryDefaultOpen: boolean;
+  /** 锁定展开（运行末轮/异常终态/无正文单段）与偏好默认展开分离；缺省回退 defaultOpen（旧行为）。 */
+  assistantHistoryLockedOpen?: boolean;
   workStatus?: ConversationTurnWorkStatus;
+}
+
+/**
+ * 历史区开合的唯一解析点（spec：docs/specs/conversation-verbosity-views.md §2）。
+ * lockedOpen 来自运行/异常等诊断事实，不可手动收起、不被 summary 档位隐藏；
+ * preferenceOpen 来自用户偏好，只决定初始态、允许手动点回。
+ */
+export function resolveAssistantHistoryOpenState(input: {
+  timelineOnly: boolean;
+  forceOpenHistory: boolean;
+  lastSegmentRunning: boolean;
+  singleSegmentWithoutFinalText: boolean;
+  summaryMode: boolean;
+  preferenceOpen: boolean;
+}): { lockedOpen: boolean; defaultOpen: boolean } {
+  const lockedOpen =
+    !input.timelineOnly &&
+    (input.forceOpenHistory || input.lastSegmentRunning || input.singleSegmentWithoutFinalText);
+  return {
+    lockedOpen,
+    defaultOpen: input.summaryMode ? lockedOpen : lockedOpen || input.preferenceOpen,
+  };
 }
 
 export function resolveConversationTurnWorkStatus(
@@ -150,6 +174,10 @@ export function buildConversationTurnWorkSegments(options: {
   forceOpenHistory: boolean;
   timelineOnly: boolean;
   nowMs?: number;
+  /** 详略偏好驱动的默认展开（verbosity==="verbose" || expandAllByDefault）。 */
+  historyDefaultOpenByPreference?: boolean;
+  /** summary 档位：历史区一律收起（锁定展开的例外见 resolveAssistantHistoryOpenState）。 */
+  summaryMode?: boolean;
   /** 插件卡片进不进折叠区的裁决；缺省沿用"全部常驻"。 */
   pluginUiPinResolver?: PluginUiRowPinResolver;
 }): ConversationTurnWorkSegment[] {
@@ -215,6 +243,18 @@ export function buildConversationTurnWorkSegments(options: {
         : {}),
       timelineOnly: options.timelineOnly,
     });
+    const { lockedOpen: segmentHistoryLockedOpen, defaultOpen: segmentHistoryDefaultOpen } =
+      resolveAssistantHistoryOpenState({
+        timelineOnly: options.timelineOnly,
+        forceOpenHistory: options.forceOpenHistory,
+        lastSegmentRunning: options.isLastTurn && segmentWorkStatus?.state === "running",
+        singleSegmentWithoutFinalText:
+          visualDrafts.length === 1 &&
+          visibleAssistantTextRow === undefined &&
+          segmentFlowRows.length > 0,
+        summaryMode: options.summaryMode === true,
+        preferenceOpen: options.historyDefaultOpenByPreference === true,
+      });
     return {
       key: segmentKey,
       ...(segment.triggerRow ? { triggerRow: segment.triggerRow } : {}),
@@ -225,13 +265,8 @@ export function buildConversationTurnWorkSegments(options: {
       assistantWorkRows: segmentAssistantRows,
       assistantHistoryRows: segmentHistoryRows,
       assistantFollowingRows: segmentFollowingRows,
-      assistantHistoryDefaultOpen:
-        !options.timelineOnly &&
-        (options.forceOpenHistory ||
-          (options.isLastTurn && segmentWorkStatus?.state === "running") ||
-          (visualDrafts.length === 1 &&
-            visibleAssistantTextRow === undefined &&
-            segmentFlowRows.length > 0)),
+      assistantHistoryDefaultOpen: segmentHistoryDefaultOpen,
+      assistantHistoryLockedOpen: segmentHistoryLockedOpen,
       ...(segmentWorkStatus ? { workStatus: segmentWorkStatus } : {}),
     };
   });

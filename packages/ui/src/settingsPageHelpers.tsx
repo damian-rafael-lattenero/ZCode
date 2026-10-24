@@ -4,6 +4,7 @@ import type {
   IntegratedTerminalShellOption,
   IntegratedTerminalShellSelection,
   LocalePreference,
+  MessageStreamVerbosity,
   ZCodeInteractionBehavior,
 } from "@zcode/shared";
 import { appToolSearchModeSchema } from "@zcode/shared";
@@ -160,12 +161,16 @@ export function GeneralSectionContent({
   setNotificationSoundEnabled,
   messageStreamShowReasoning,
   messageStreamShowTodos,
+  messageStreamVerbosity = "normal",
+  messageStreamExpandedByDefault = false,
   toolGroupingExploreEnabled,
   toolGroupingTerminalEnabled,
   toolGroupingChangesEnabled,
   zcodeInteractionBehavior,
   askUserQuestionAutoResolutionEnabled = true,
   modelIoFullRetentionEnabled = false,
+  onMessageStreamVerbosityChange,
+  onMessageStreamExpandedByDefaultChange,
   onDataBaseDirChange,
   onSelectDataBaseDir,
   onTerminalInheritSystemProfileChange = async () => {},
@@ -232,12 +237,16 @@ export function GeneralSectionContent({
   setNotificationSoundEnabled: (enabled: boolean) => void;
   messageStreamShowReasoning: boolean;
   messageStreamShowTodos: boolean;
+  messageStreamVerbosity?: MessageStreamVerbosity;
+  messageStreamExpandedByDefault?: boolean;
   toolGroupingExploreEnabled: boolean;
   toolGroupingTerminalEnabled: boolean;
   toolGroupingChangesEnabled: boolean;
   zcodeInteractionBehavior: ZCodeInteractionBehavior;
   askUserQuestionAutoResolutionEnabled?: boolean;
   modelIoFullRetentionEnabled?: boolean;
+  onMessageStreamVerbosityChange: (mode: MessageStreamVerbosity) => Promise<void>;
+  onMessageStreamExpandedByDefaultChange: (enabled: boolean) => Promise<void>;
   onDataBaseDirChange: (dir: string) => Promise<void>;
   onSelectDataBaseDir: () => Promise<string | null>;
   onTerminalInheritSystemProfileChange: (enabled: boolean) => Promise<void>;
@@ -869,6 +878,53 @@ export function GeneralSectionContent({
               checked={modelIoFullRetentionEnabled}
               onCheckedChange={(checked) => {
                 void onModelIoFullRetentionEnabledChange(checked);
+              }}
+            />
+          }
+        />
+        {/* 详略档位与「默认展开全部」：档位决定可见内容，开关决定全部可折叠内容的
+            初始展开态（工具卡/思考块/文件摘要/已完成轮历史区），二者正交
+            （spec：docs/specs/conversation-verbosity-views.md）；切换均回溯作用于历史轮。 */}
+        <SettingsRow
+          label={intl.formatMessage({ id: "settings.messageStreamVerbosity" })}
+          description={intl.formatMessage({
+            id: "settings.messageStreamVerbosityDescription",
+          })}
+          control={
+            <Select
+              value={messageStreamVerbosity}
+              onValueChange={(value) => {
+                void onMessageStreamVerbosityChange(value as MessageStreamVerbosity);
+              }}
+            >
+              <SelectTrigger size="lg" className="w-[260px] min-w-0 justify-between">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {(["summary", "normal", "verbose"] as const).map((mode) => (
+                  <SelectItem key={mode} value={mode}>
+                    {intl.formatMessage({ id: `settings.messageStreamVerbosity.${mode}` })}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          }
+        />
+        <SettingsRow
+          label={intl.formatMessage({
+            id: "settings.messageStreamExpandedByDefault",
+          })}
+          description={intl.formatMessage({
+            id: "settings.messageStreamExpandedByDefaultDescription",
+          })}
+          control={
+            <Switch
+              aria-label={intl.formatMessage({
+                id: "settings.messageStreamExpandedByDefault",
+              })}
+              checked={messageStreamExpandedByDefault}
+              onCheckedChange={(checked) => {
+                void onMessageStreamExpandedByDefaultChange(checked);
               }}
             />
           }

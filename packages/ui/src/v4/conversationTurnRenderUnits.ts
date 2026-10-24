@@ -22,6 +22,7 @@ import {
 } from "@/v4/workflowLaunchTurn.js";
 import {
   buildConversationTurnWorkSegments,
+  resolveAssistantHistoryOpenState,
   resolveConversationTurnWorkDurationMs,
   resolveConversationTurnWorkStatus,
 } from "@/v4/conversationTurnWorkSegments.js";
@@ -281,6 +282,9 @@ function materializeDraftUnit(
     forceOpenHistory,
     timelineOnly,
     nowMs: options.nowMs,
+    historyDefaultOpenByPreference:
+      options.expandAllByDefault === true || options.verbosity === "verbose",
+    summaryMode: options.verbosity === "summary",
     ...(options.pluginUiPinResolver ? { pluginUiPinResolver: options.pluginUiPinResolver } : {}),
   });
   const orderedAssistantHistoryRows = workSegments.flatMap(
@@ -289,6 +293,7 @@ function materializeDraftUnit(
   const assistantFollowingRows = workSegments.flatMap((segment) => segment.assistantFollowingRows);
   const flowItems = workSegments.flatMap((segment) => segment.flowItems);
   const mustOpenHistory = workSegments.at(-1)?.assistantHistoryDefaultOpen ?? false;
+  const mustLockHistory = workSegments.at(-1)?.assistantHistoryLockedOpen ?? false;
   return {
     key: draft.key,
     turnId: draft.turnId,
@@ -311,6 +316,8 @@ function materializeDraftUnit(
     isLastTurn,
     isRunning,
     assistantHistoryDefaultOpen: mustOpenHistory,
+    // 显式 boolean：normalize 的对象身份比较依赖 undefined/false 不混用，省略字段会让每次重建都判定为变化。
+    assistantHistoryLockedOpen: mustLockHistory,
     timelineOnly,
     ...(workStatus ? { workStatus } : {}),
     ...(draft.header ? { startedAt: draft.header.startedAt } : {}),
@@ -354,37 +361,57 @@ function normalizeRenderUnitPosition(
 ): ConversationTurnRenderUnit {
   const isLastTurn = index === total - 1;
   const forceOpenHistory = shouldForceOpenAbnormalHistory(unit.header, options.sessionPhase);
-  const assistantHistoryDefaultOpen =
-    unit.workSegments && unit.workSegments.length > 0
-      ? !unit.timelineOnly &&
-        (forceOpenHistory ||
-          (isLastTurn && unit.workSegments.at(-1)?.workStatus?.state === "running") ||
-          (unit.workSegments.length === 1 &&
-            unit.latestAssistantTextRow === undefined &&
-            unit.assistantWorkRows.length > 0))
-      : !unit.timelineOnly &&
-        (forceOpenHistory ||
-          (isLastTurn && unit.workStatus?.state === "running") ||
-          (unit.latestAssistantTextRow === undefined && unit.assistantWorkRows.length > 0));
+  // 偏好解析与 materializeDraftUnit 同源，保证首建与 normalize（过滤后 isLastTurn 变化）一致。
+  const preferenceOpen = options.expandAllByDefault === true || options.verbosity === "verbose";
+  const summaryMode = options.verbosity === "summary";
+  const unitOpenState = resolveAssistantHistoryOpenState({
+    timelineOnly: unit.timelineOnly,
+    forceOpenHistory,
+    lastSegmentRunning:
+      isLastTurn &&
+      ((unit.workSegments && unit.workSegments.length > 0
+        ? unit.workSegments.at(-1)?.workStatus?.state === "running"
+        : unit.workStatus?.state === "running") ||
+        false),
+    singleSegmentWithoutFinalText:
+      unit.latestAssistantTextRow === undefined &&
+      unit.assistantWorkRows.length > 0 &&
+      (!unit.workSegments || unit.workSegments.length <= 1),
+    summaryMode,
+    preferenceOpen,
+  });
+  const assistantHistoryDefaultOpen = unitOpenState.defaultOpen;
+  const assistantHistoryLockedOpen = unitOpenState.lockedOpen;
   const workSegments = unit.workSegments?.map((segment, segmentIndex, segments) =>
     segmentIndex === segments.length - 1
-      ? {
-          ...segment,
-          assistantHistoryDefaultOpen:
-            !unit.timelineOnly &&
-            (forceOpenHistory ||
-              (isLastTurn && segment.workStatus?.state === "running") ||
-              (segments.length === 1 &&
-                unit.latestAssistantTextRow === undefined &&
-                segment.assistantWorkRows.length > 0)),
-        }
+      ? (() => {
+          const segmentOpenState = resolveAssistantHistoryOpenState({
+            timelineOnly: unit.timelineOnly,
+            forceOpenHistory,
+            lastSegmentRunning: isLastTurn && segment.workStatus?.state === "running",
+            singleSegmentWithoutFinalText:
+              segments.length === 1 &&
+              unit.latestAssistantTextRow === undefined &&
+              segment.assistantWorkRows.length > 0,
+            summaryMode,
+            preferenceOpen,
+          });
+          return {
+            ...segment,
+            assistantHistoryDefaultOpen: segmentOpenState.defaultOpen,
+            assistantHistoryLockedOpen: segmentOpenState.lockedOpen,
+          };
+        })()
       : segment,
   );
   if (
     unit.isLastTurn === isLastTurn &&
     unit.assistantHistoryDefaultOpen === assistantHistoryDefaultOpen &&
+    unit.assistantHistoryLockedOpen === assistantHistoryLockedOpen &&
     workSegments?.at(-1)?.assistantHistoryDefaultOpen ===
-      unit.workSegments?.at(-1)?.assistantHistoryDefaultOpen
+      unit.workSegments?.at(-1)?.assistantHistoryDefaultOpen &&
+    workSegments?.at(-1)?.assistantHistoryLockedOpen ===
+      unit.workSegments?.at(-1)?.assistantHistoryLockedOpen
   ) {
     return unit;
   }
@@ -392,6 +419,7 @@ function normalizeRenderUnitPosition(
     ...unit,
     isLastTurn,
     assistantHistoryDefaultOpen,
+    assistantHistoryLockedOpen,
     ...(workSegments ? { workSegments } : {}),
   };
 }

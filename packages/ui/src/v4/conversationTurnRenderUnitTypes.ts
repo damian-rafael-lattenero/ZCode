@@ -1,5 +1,5 @@
 import type { PluginUiRowPinResolver } from "@/plugin-ui/index.js";
-import type { BotTopicPreparation } from "@zcode/shared";
+import type { BotTopicPreparation, MessageStreamVerbosity } from "@zcode/shared";
 import type {
   AssistantTextRow,
   ConversationRow,
@@ -51,6 +51,13 @@ export interface ConversationTurnRenderUnit extends HighspeedOutputFooterMark {
   isLastTurn: boolean;
   isRunning: boolean;
   assistantHistoryDefaultOpen: boolean;
+  /**
+   * 历史区「锁定展开」（运行中末轮 / 异常终态 / 无正文单段）与偏好驱动的
+   * 默认展开（verbosity/expandAllByDefault）分离：前者不可手动收起，
+   * 后者允许用户点回。旧调用方未携带时回退 assistantHistoryDefaultOpen（保持旧行为）。
+   * spec：docs/specs/conversation-verbosity-views.md §2。
+   */
+  assistantHistoryLockedOpen?: boolean;
   timelineOnly: boolean;
   /** turn 级聚合工作状态，仅供旧调用兼容；新组件消费 workSegments[].workStatus。 */
   workStatus?: ConversationTurnWorkStatus;
@@ -64,4 +71,16 @@ export interface BuildConversationTurnRenderUnitsOptions {
   sessionPhase?: SessionPhase;
   /** 插件卡片折叠裁决（时间线由推导结果 + 手动状态组装）。 */
   pluginUiPinResolver?: PluginUiRowPinResolver;
+  /**
+   * 消息流详略档位（spec：docs/specs/conversation-verbosity-views.md）：
+   * summary=历史区强制收起、reasoning 隐藏；verbose=已完成轮历史区默认展开。
+   * 缺省 normal（现状）。分享只读时间线不传，行为不变。
+   */
+  verbosity?: MessageStreamVerbosity;
+  /**
+   * 「默认展开全部」生效值（与 verbose 档位取或，SessionPane 单点解析）：
+   * 已完成轮历史区以此为默认展开；工具卡/思考块/文件摘要面板经
+   * conversationExpandDefaultStore 订阅同一生效值，不在此重复传递。
+   */
+  expandAllByDefault?: boolean;
 }

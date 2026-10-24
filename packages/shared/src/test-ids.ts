@@ -587,6 +587,12 @@ export const TID_V4_COMPOSER_INPUT = "v4-composer-input";
 export const TID_V4_COMPOSER_BACKGROUND_WORK_TRIGGER = "v4-composer-background-work-trigger";
 /** v4 composer 电脑操作（CUA）常驻入口按钮 */
 export const TID_V4_COMPOSER_CUA_ENTRY = "v4-composer-cua-entry";
+/** v4 composer 消息流详略档位入口按钮（spec：docs/specs/conversation-verbosity-views.md） */
+export const TID_V4_VERBOSITY_CONTROL = "v4-verbosity-control";
+/** v4 消息流详略档位选项（动态后缀为 summary/normal/verbose） */
+export const TID_V4_VERBOSITY_OPTION = "v4-verbosity-option";
+/** v4 消息流「默认展开」开关菜单项 */
+export const TID_V4_VERBOSITY_EXPAND_TOGGLE = "v4-verbosity-expand-toggle";
 /** v4 composer 发送按钮 */
 export const TID_V4_COMPOSER_SEND = "v4-composer-send";
 /** v4 暂停队列发送确认：清空队列并发送 */

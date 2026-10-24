@@ -27,6 +27,7 @@ import type {
   UsageEntitlementSnapshot,
   UserInfo,
   ZCodeInteractionBehavior,
+  MessageStreamVerbosity,
 } from "@zcode/shared";
 import { BUILTIN_MODEL_PROVIDER_IDS } from "@zcode/shared";
 import {
@@ -812,6 +813,9 @@ export function SettingsPage({
   const [autoDownloadAndInstallUpdates, setAutoDownloadAndInstallUpdates] = useState(false);
   const [messageStreamShowReasoning, setMessageStreamShowReasoning] = useState(true);
   const [messageStreamShowTodos, setMessageStreamShowTodos] = useState(false);
+  const [messageStreamVerbosity, setMessageStreamVerbosity] =
+    useState<MessageStreamVerbosity>("normal");
+  const [messageStreamExpandedByDefault, setMessageStreamExpandedByDefault] = useState(false);
   const [toolGroupingExploreEnabled, setToolGroupingExploreEnabled] = useState(true);
   const [toolGroupingTerminalEnabled, setToolGroupingTerminalEnabled] = useState(true);
   const [toolGroupingChangesEnabled, setToolGroupingChangesEnabled] = useState(false);
@@ -947,6 +951,8 @@ export function SettingsPage({
     }
     setMessageStreamShowReasoning(sharedSettings.messageStreamShowReasoning ?? true);
     setMessageStreamShowTodos(sharedSettings.messageStreamShowTodos ?? false);
+    setMessageStreamVerbosity(sharedSettings.messageStreamVerbosity ?? "normal");
+    setMessageStreamExpandedByDefault(sharedSettings.messageStreamExpandedByDefault ?? false);
     setToolGroupingExploreEnabled(sharedSettings.toolGroupingExploreEnabled ?? true);
     setToolGroupingTerminalEnabled(sharedSettings.toolGroupingTerminalEnabled ?? true);
     setToolGroupingChangesEnabled(sharedSettings.toolGroupingChangesEnabled ?? false);
@@ -1340,6 +1346,35 @@ export function SettingsPage({
         },
       });
       setMessageStreamShowTodos(enabled);
+    },
+    [updateSharedSettings],
+  );
+  const handleMessageStreamVerbosityChange = useCallback(
+    async (mode: MessageStreamVerbosity) => {
+      await runSettingsActionAsync({
+        featureId: "settings.conversation",
+        action: "change_verbosity",
+        trigger: "select",
+        operation: () => updateSharedSettings({ messageStreamVerbosity: mode }),
+        completed: { resultSource: "shared_settings", valueAfter: mode },
+      });
+      setMessageStreamVerbosity(mode);
+    },
+    [updateSharedSettings],
+  );
+  const handleMessageStreamExpandedByDefaultChange = useCallback(
+    async (enabled: boolean) => {
+      await runSettingsActionAsync({
+        featureId: "settings.conversation",
+        action: "toggle_expand_by_default",
+        trigger: "switch",
+        operation: () => updateSharedSettings({ messageStreamExpandedByDefault: enabled }),
+        completed: {
+          resultSource: "shared_settings",
+          stateAfter: enabled ? "enabled" : "disabled",
+        },
+      });
+      setMessageStreamExpandedByDefault(enabled);
     },
     [updateSharedSettings],
   );
@@ -1876,6 +1911,12 @@ export function SettingsPage({
                               }
                               messageStreamShowReasoning={messageStreamShowReasoning}
                               messageStreamShowTodos={messageStreamShowTodos}
+                              messageStreamVerbosity={messageStreamVerbosity}
+                              messageStreamExpandedByDefault={messageStreamExpandedByDefault}
+                              onMessageStreamVerbosityChange={handleMessageStreamVerbosityChange}
+                              onMessageStreamExpandedByDefaultChange={
+                                handleMessageStreamExpandedByDefaultChange
+                              }
                               toolGroupingExploreEnabled={toolGroupingExploreEnabled}
                               toolGroupingTerminalEnabled={toolGroupingTerminalEnabled}
                               toolGroupingChangesEnabled={toolGroupingChangesEnabled}

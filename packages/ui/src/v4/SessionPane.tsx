@@ -1,5 +1,5 @@
 import { remoteHostIdFromWorkspaceIdentity } from "@zcode/shared";
-import { setToolCallDefaultOpen } from "@/ToolCallBlocks/toolCallDefaultOpenStore.js";
+import { setConversationExpandDefault } from "@/ToolCallBlocks/conversationExpandDefaultStore.js";
 import { useRemoteConversationAvailable } from "@/v4/RemoteConversationAvailability.js";
 import {
   createRemoteWorkspaceDisconnectedError,
@@ -2098,18 +2098,18 @@ export function SessionPane({
   const messageStreamShowReasoning = sharedSettings?.messageStreamShowReasoning ?? true;
   const messageStreamShowTodos = sharedSettings?.messageStreamShowTodos ?? false;
   const messageStreamVerbosity = sharedSettings?.messageStreamVerbosity ?? "normal";
-  const messageStreamToolCallsExpandedByDefault =
-    sharedSettings?.messageStreamToolCallsExpandedByDefault ?? false;
+  const messageStreamExpandedByDefault = sharedSettings?.messageStreamExpandedByDefault ?? false;
   const toolGroupingExploreEnabled = sharedSettings?.toolGroupingExploreEnabled ?? true;
   const toolGroupingTerminalEnabled = sharedSettings?.toolGroupingTerminalEnabled ?? true;
   const toolGroupingChangesEnabled = sharedSettings?.toolGroupingChangesEnabled ?? false;
-  // 工具卡默认展开的生效值（spec：docs/specs/conversation-verbosity-views.md §2）：
-  // 独立开关与 verbose 档位取或。SessionPane 是该偏好镜像 store 的唯一写入方。
-  const messageStreamToolCallsDefaultOpen =
-    messageStreamToolCallsExpandedByDefault || messageStreamVerbosity === "verbose";
+  // 「默认展开全部」的生效值（spec：docs/specs/conversation-verbosity-views.md §2）：
+  // 独立开关与 verbose 档位取或。SessionPane 是该偏好镜像 store 的唯一写入方，
+  // 工具卡/思考块/文件摘要面板共同订阅。
+  const messageStreamExpandAll =
+    messageStreamExpandedByDefault || messageStreamVerbosity === "verbose";
   useEffect(() => {
-    setToolCallDefaultOpen(messageStreamToolCallsDefaultOpen);
-  }, [messageStreamToolCallsDefaultOpen]);
+    setConversationExpandDefault(messageStreamExpandAll);
+  }, [messageStreamExpandAll]);
   const snapshotSessionId = snapshot?.sessionId ?? null;
   const snapshotFollowupMode = snapshot?.config.followupMode ?? null;
   const snapshotRevision = snapshot?.revision ?? null;
@@ -3086,7 +3086,7 @@ export function SessionPane({
       messageStreamShowReasoning,
       messageStreamShowTodos,
       messageStreamVerbosity,
-      messageStreamToolCallsExpandedByDefault,
+      messageStreamExpandedByDefault,
       toolGroupingExploreEnabled,
       toolGroupingTerminalEnabled,
       toolGroupingChangesEnabled,
@@ -3166,7 +3166,7 @@ export function SessionPane({
       messageStreamShowReasoning,
       messageStreamShowTodos,
       messageStreamVerbosity,
-      messageStreamToolCallsExpandedByDefault,
+      messageStreamExpandedByDefault,
       toolGroupingExploreEnabled,
       toolGroupingTerminalEnabled,
       toolGroupingChangesEnabled,

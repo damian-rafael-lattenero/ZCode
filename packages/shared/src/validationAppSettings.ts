@@ -43,6 +43,11 @@ const nonEmptyStringSchema = z.string().trim().min(1);
 export const localeSchema = z.enum(["zh-CN", "en-US"]);
 export const localePreferenceSchema = z.enum(["system", "zh-CN", "en-US"]);
 const zcodeInteractionBehaviorSchema = z.enum(["queue", "guide"]);
+
+// 消息流详略档位（见 docs/specs/conversation-verbosity-views.md）：
+// summary=每轮只留输入+最终正文；normal=现状；verbose=reasoning 视为显示且默认展开。
+// 与 Claude Code Desktop 的 Transcript view 对齐，但三档均为受支持的正档（无弃用档）。
+const messageStreamVerbositySchema = z.enum(["summary", "normal", "verbose"]);
 // launch.md「The user's choice」：读文件时未知取值（降级后读到新版本写的值）按「跟随」处理，
 // 不能让一个偏好字段把整份设置读坏。
 const dynamicWorkflowModeSettingSchema = z.enum(DYNAMIC_WORKFLOW_MODES).optional().catch(undefined);
@@ -534,6 +539,8 @@ const appSettingsObjectSchema = z.object({
   messageStreamShowReasoning: z.boolean().default(true),
   messageStreamShowReasoningMigrationInitialized: z.boolean().default(true),
   messageStreamShowTodos: z.boolean().default(false),
+  messageStreamVerbosity: messageStreamVerbositySchema.default("normal"),
+  messageStreamExpandedByDefault: z.boolean().default(false),
   toolGroupingExploreEnabled: z.boolean().default(true),
   toolGroupingTerminalEnabled: z.boolean().default(true),
   toolGroupingChangesEnabled: z.boolean().default(false),
@@ -630,6 +637,8 @@ export const appSettingsPatchSchema = z.object({
   messageStreamShowReasoning: z.boolean().optional(),
   messageStreamShowReasoningMigrationInitialized: z.boolean().optional(),
   messageStreamShowTodos: z.boolean().optional(),
+  messageStreamVerbosity: messageStreamVerbositySchema.optional(),
+  messageStreamExpandedByDefault: z.boolean().optional(),
   toolGroupingExploreEnabled: z.boolean().optional(),
   toolGroupingTerminalEnabled: z.boolean().optional(),
   toolGroupingChangesEnabled: z.boolean().optional(),

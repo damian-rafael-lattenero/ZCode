@@ -82,6 +82,9 @@ export type LocalePreference = "system" | Locale;
 /** ZCode 运行中继续输入时的交互行为 */
 export type ZCodeInteractionBehavior = "queue" | "guide";
 
+/** 消息流详略档位；与 validationAppSettings 的 messageStreamVerbositySchema 保持同一集合。 */
+export type MessageStreamVerbosity = "summary" | "normal" | "verbose";
+
 /** 桌面端 Electron 自动更新发布通道。 */
 export type ElectronReleaseChannel = "stable" | "preview";
 
@@ -325,6 +328,10 @@ export interface AppSettings {
   messageStreamShowReasoningMigrationInitialized?: boolean;
   /** 是否在消息流中展示 todo 工具渲染；不影响摘要面板的 todo */
   messageStreamShowTodos?: boolean;
+  /** 消息流详略档位（spec：docs/specs/conversation-verbosity-views.md）；summary=只留每轮输入+最终正文，verbose=reasoning 视为显示且默认展开，缺省 normal。 */
+  messageStreamVerbosity?: MessageStreamVerbosity;
+  /** 消息流全部可折叠内容（工具卡/思考块/文件摘要/已完成轮工作区）默认展开；与 verbose 档位取或；不改变可见性；缺省 false（收起，现状）。 */
+  messageStreamExpandedByDefault?: boolean;
   /** 是否把连续的只读工具调用聚合成 Explore。 */
   toolGroupingExploreEnabled?: boolean;
   /** 是否把连续的非只读 Shell 工具调用聚合成 Terminal。 */

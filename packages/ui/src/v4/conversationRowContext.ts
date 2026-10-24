@@ -12,7 +12,7 @@ import type { WorkflowDraftPosition, WorkflowRunCardSummary } from "@/ToolCallBl
 import type { WorkflowFillGraph } from "@/v4/workflowRunCardJoin.js";
 import type { Theme } from "@/useTheme.js";
 import type { ModelSelectionView } from "@zcode/services";
-import type { ZCodeWorkflowsForRunCandidate } from "@zcode/shared";
+import type { MessageStreamVerbosity, ZCodeWorkflowsForRunCandidate } from "@zcode/shared";
 import type { ConversationAttachmentReadParams, ConversationTransport } from "@/v4/transport.js";
 import type {
   OpenPlanDetailSideTabRequest,
@@ -63,6 +63,10 @@ export interface ConversationRowRenderContext {
   messageStreamShowReasoning?: boolean;
   /** 当前 assistant 轮次的第一条 reasoning row；关闭完整思考时仍需展示。 */
   messageStreamFirstReasoningRowId?: number;
+  /** 常规设置：消息流详略档位（spec：docs/specs/conversation-verbosity-views.md）；缺省 normal。 */
+  messageStreamVerbosity?: MessageStreamVerbosity;
+  /** 常规设置：消息流全部可折叠内容（工具卡/思考块/文件摘要/已完成轮历史区）默认展开（与 verbose 档位取或）；不改变可见性；缺省 false。 */
+  messageStreamExpandedByDefault?: boolean;
   /** 常规设置：是否在对话消息流中渲染 Todo 工具卡片。 */
   messageStreamShowTodos?: boolean;
   /** 常规设置：是否聚合连续的 Explore-compatible 工具。 */
@@ -220,13 +224,21 @@ export interface ConversationFileChangesRequestOptions {
 
 export type ConversationReasoningVisibility = Pick<
   ConversationRowRenderContext,
-  "messageStreamShowReasoning" | "messageStreamFirstReasoningRowId"
+  "messageStreamShowReasoning" | "messageStreamFirstReasoningRowId" | "messageStreamVerbosity"
 >;
 
 export function isConversationReasoningRowVisible(
   rowId: number,
   visibility: ConversationReasoningVisibility,
 ): boolean {
+  // 档位语义优先于逐项开关（spec §5）：verbose 一律显示 reasoning，
+  // summary 连首条豁免也关闭，normal 落回 messageStreamShowReasoning + 首条豁免。
+  if (visibility.messageStreamVerbosity === "verbose") {
+    return true;
+  }
+  if (visibility.messageStreamVerbosity === "summary") {
+    return false;
+  }
   return (
     visibility.messageStreamShowReasoning === true ||
     visibility.messageStreamFirstReasoningRowId === rowId

@@ -56,5 +56,11 @@ ditto "$APP_PATH" /Applications/ZCode.app
 codesign --force --deep --sign - /Applications/ZCode.app >/dev/null 2>&1 || true
 
 echo "[fork] installed: $(defaults read /Applications/ZCode.app/Contents/Info.plist CFBundleShortVersionString) at /Applications/ZCode.app"
+
+# FORK CHANGE (damian): ship with Diff Ask — ensure its marketplace + install
+# (runtime-resolved, optional: the fork degrades to stock git review without it).
+echo "[fork] ensuring the Diff Ask plugin..."
+bash scripts/bootstrap-diff-ask.sh || echo "[fork] WARN: Diff Ask bootstrap failed — install it manually (Plugins → Personal)"
+
 open -a ZCode
 echo "[fork] done — verify: New tab → App plugins grid shows Diff Ask; bot turn works; /diff works."

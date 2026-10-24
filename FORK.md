@@ -20,7 +20,7 @@ Oct 2026); instead the change lives in source, as a normal git commit.
 | `[fork]` | `packages/shared/src/command-types.ts`, `packages/services/src/commands/commandFileParser.ts`, `packages/ui/src/v4/forkCommandModel.ts` (+ tests), `packages/ui/src/v4/SessionPane.tsx` | **`model:` frontmatter honored per command turn**: `model: <providerId>/<modelId>[$<level>]` (or bare modelId) in a custom command's frontmatter runs that turn on that model (validated against the live selection view; unknown model/level never sent). |
 | `[fork]` | `packages/ui/src/v4/SessionPane.tsx`, `packages/ui/src/SlashCommandPlugin.tsx` | **Client-side `/diff`**: an app-layer slash command that opens the Diff Ask panel instantly with NO model turn. App commands now take precedence over same-name CLI catalog entries (so the client-side /diff eclipses the CLI one). Requires a live session. |
 | `[fork]` | `packages/ui/test/useUiPluginRecommendations.test.ts`, `packages/ui/test/v4ConversationStatusPanelGitReview.test.ts`, `packages/ui/test/forkCommandModel.test.ts` | Expectations/new tests for the fork behavior. |
-| `[fork]` | `scripts/sync-upstream.sh`, `scripts/build-install.sh`, `FORK.md` | This runbook. |
+| `[fork]` | `scripts/sync-upstream.sh`, `scripts/build-install.sh`, `scripts/bootstrap-diff-ask.sh`, `FORK.md` | This runbook. `build-install.sh` also ensures the Diff Ask plugin is installed (see "Diff Ask plugin" below). |
 
 Every modified upstream file carries a `FORK CHANGE` notice at the top (Apache-2.0 §4).
 `LICENSE` and `NOTICE.md` are kept intact.
@@ -49,6 +49,30 @@ git tag damian-v<version>-<yyyymmdd> && git push origin --tags
 Merge conflicts, if any, will be in the `[fork]` files above — resolve by
 re-applying the small change. If upstream reworks the recommendations pipeline,
 `git log -p -- packages/ui/src/plugin-ui/adapters/` shows where it moved.
+
+## Diff Ask plugin (separate repo)
+
+The three fork touch points (Changes button, `/diff`, plugin-grid card) resolve
+the plugin at **runtime** by id `diff-ask@dev-zcode-diff-ask-5098ef5a` and
+degrade to stock behavior when it is missing — the fork never bundles plugin
+files, so plugin releases don't need an app rebuild.
+
+- Source repo: `~/Projects/zcode-diff-ask` (local) / GitHub
+  `damian-rafael-lattenero/zcode-diff-ask`. Both produce the **same marketplace
+  id** (`dev-zcode-diff-ask-5098ef5a`, from that repo's `marketplace.json`
+  `name`), which is why the id hardcoded in the fork stays valid across
+  sources — don't rename it there.
+- `scripts/bootstrap-diff-ask.sh` — ensure marketplace + install, idempotent:
+  local checkout when `~/Projects/zcode-diff-ask` exists (or
+  `$ZCODE_DIFF_ASK_REPO`), GitHub shorthand otherwise. `marketplace add`
+  re-binds an existing marketplace to the given source. Run by
+  `build-install.sh`; standalone for plugin-only updates (restart ZCode after).
+- Plugin-only iteration (no app rebuild): `npm run build` + version bump in the
+  plugin repo + commit + push, then `bash scripts/bootstrap-diff-ask.sh`.
+- Gotcha (2026-10-24): the marketplace scan validates EVERYTHING inside the
+  source directory (`.gitignore` is ignored) — keep heavy files (e.g. the old
+  341 MB asar backup, now at `~/zcode-official-backup/zcode-diff-ask-tools-backup/`)
+  out of the plugin repo root, or updates die with `plugin_marketplace_invalid`.
 
 ## Build notes
 

@@ -75,3 +75,6 @@ packages/desktop/resources/macos-window-bounds/
 __pycache__/
 *.pyc
 .zcode-runtime
+
+# 本地 Agent 会话状态目录（CLI/桌面端写入，纯本地数据不入库；也让 pre-push 的 affected UT 检查保持工作区干净）
+.zcode/

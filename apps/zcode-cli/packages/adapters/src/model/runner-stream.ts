@@ -859,7 +859,12 @@ export async function* runStreamText(input: {
       const delayMs =
         offPeak?.kind === "queued"
           ? offPeak.delayMs
-          : calculateRetryDelay(input.retry, retryBudgetAttempt, failure.retryAfterMs);
+          : calculateRetryDelay(
+              input.retry,
+              retryBudgetAttempt,
+              failure.retryAfterMs,
+              failure.usageLimitResetWaitMs,
+            );
       logRetryDelayDecision({
         attempt,
         canRetry: failureDecision.canRetry,
@@ -1375,7 +1380,12 @@ async function handleStreamErrorEvent(
   const delayMs =
     offPeak?.kind === "queued"
       ? offPeak.delayMs
-      : calculateRetryDelay(input.input.retry, input.retryBudgetAttempt, failure.retryAfterMs);
+      : calculateRetryDelay(
+          input.input.retry,
+          input.retryBudgetAttempt,
+          failure.retryAfterMs,
+          failure.usageLimitResetWaitMs,
+        );
   logRetryDelayDecision({
     attempt: input.attempt,
     canRetry: failureDecision.canRetry,

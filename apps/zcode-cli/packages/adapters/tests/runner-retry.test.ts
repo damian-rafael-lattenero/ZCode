@@ -43,6 +43,21 @@ describe("calculateRetryDelay", () => {
   it("falls back to local backoff when retry-after is above five minutes", () => {
     expect(calculateRetryDelay(retry, 1, 300_001)).toBe(2_000);
   });
+
+  // (FORK) next_flush_time 的等待绕过 5min 合理性闸门：用量重置可以是小时级。
+  it("returns the usage-limit reset wait verbatim, bypassing the five-minute gate", () => {
+    expect(calculateRetryDelay(retry, 1, undefined, 3 * 3_600_000)).toBe(3 * 3_600_000);
+  });
+
+  it("prefers the usage-limit reset wait over a header retry-after", () => {
+    expect(calculateRetryDelay(retry, 1, 300_000, 3 * 3_600_000)).toBe(3 * 3_600_000);
+  });
+
+  it("ignores an invalid usage-limit reset wait and keeps the normal curve", () => {
+    expect(calculateRetryDelay(retry, 1, undefined, -1)).toBe(2_000);
+    expect(calculateRetryDelay(retry, 1, undefined, Number.NaN)).toBe(2_000);
+    expect(calculateRetryDelay(retry, 1, undefined, 0)).toBe(2_000);
+  });
 });
 
 describe("toAdapterError attribution context", () => {

@@ -76,6 +76,7 @@ export async function scheduleEmptyCompletionRetry(input: {
     },
   );
 
+  // 空补全不是 provider 失败（没有 flush/重置信息），保持纯指数退避。
   const delayMs = calculateRetryDelay(input.retry, input.retryBudgetAttempt);
   logRetryDelayDecision({
     attempt: input.attempt,

@@ -508,7 +508,12 @@ export async function runGenerateText(input: {
       const delayMs =
         offPeak?.kind === "queued"
           ? offPeak.delayMs
-          : calculateRetryDelay(input.retry, retryBudgetAttempt, failure.retryAfterMs);
+          : calculateRetryDelay(
+              input.retry,
+              retryBudgetAttempt,
+              failure.retryAfterMs,
+              failure.usageLimitResetWaitMs,
+            );
       logRetryDelayDecision({
         attempt,
         canRetry,

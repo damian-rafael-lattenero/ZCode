@@ -39,7 +39,17 @@ export function calculateRetryDelay(
   retry: ResolvedAiSdkModelRetryOptions,
   attempt: number,
   retryAfterMs?: number,
+  usageLimitResetWaitMs?: number,
 ): number {
+  // (FORK) 用量窗口重置的等待是确定性的（provider 明确给出 next_flush_time 并在分类器
+  // 里钳制过），不属于“看似合理的 header 值”，绕过 5min 合理性闸门按原值调度。
+  if (
+    usageLimitResetWaitMs !== undefined &&
+    Number.isFinite(usageLimitResetWaitMs) &&
+    usageLimitResetWaitMs > 0
+  ) {
+    return usageLimitResetWaitMs;
+  }
   const uncapped = retry.baseDelayMs * retry.backoffFactor ** Math.max(0, attempt - 1);
   const capped = Math.min(uncapped, retry.maxDelayMs);
   // provider 会返回几十秒到数分钟的 retry-after；
@@ -100,6 +110,10 @@ export function logRetryDelayDecision(input: {
     retryAfterMs: input.failure.retryAfterMs,
     retryAfterMsHeader: readHeader(input.responseHeaders, "retry-after-ms"),
     retryAfterSource: retryAfterSource(input.failure.retryAfterMs, input.responseHeaders),
+    // (FORK) 区分“等到用量重置”与普通 header 退避，排查时长异常时一眼定位。
+    ...(input.failure.usageLimitResetWaitMs === undefined
+      ? {}
+      : { usageLimitResetWaitMs: input.failure.usageLimitResetWaitMs }),
     retryReason: input.failure.retryReason,
     status: input.canRetry ? "waiting" : "failed",
     statusCode: input.failure.statusCode,

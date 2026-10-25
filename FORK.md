@@ -198,3 +198,35 @@ Con la ventana de 15min los dos defectos de UX que quedaban del "n/10":
    re-render o replay de snapshot no lo resetea. Sin el campo (runtime
    viejo) la UI queda igual que antes: solo el contador.
 
+## Ola 5 (25/10 noche): límites de uso z.ai — esperar al reset en vez de morir
+
+La doc oficial (docs.z.ai/api-reference/api-code) dice que 1308/1310/1316-1321
+(límites de ventana de uso) llevan `next_flush_time` — el momento en que el
+límite se resetea. Upstream los trata como terminales (mata el turno) y además
+descarta el campo en `summarizeProviderBusinessBody` (whitelist que no lo
+copiaba).
+
+Fix (FORK): si el error trae un reset **parseable**, la familia pasa de
+terminal a "reintentar a esa hora":
+
+- `failure-usage-limit-reset.ts` (nuevo): parsea `next_flush_time` del body
+  (campo JSON, unix s/ms o ISO) o del mensaje interpolado ("Your limit will
+  reset at …"); sin zona horaria se asume UTC. Wait con clamps: tope 24h
+  (ventana máxima documentada), piso 120s si el reset ya pasó (evita hot-loop;
+  cada reintento consume un attempt del presupuesto).
+- `classifyProviderBusinessFailure`: con código de la familia Y reset
+  parseable → `retryable: true` + `retryAfterMs`/`usageLimitResetWaitMs` =
+  wait. **Sin** reset parseable mantiene el fail-fast de upstream (no se
+  espera a ciegas). 1113/1309/1313 (saldo/plan/fair-use) quedan terminales.
+- `calculateRetryDelay`: el wait del reset bypasea el gate de 5min de
+  Retry-After (es determinista, no un header "parece razonable").
+- Bonus gratis: los stops de workflow por quota computan `resetAt` desde
+  `context.retryAfterMs` — ahora la notificación lleva la hora real de reset.
+- UI: el countdown de Ola 4b ya lo muestra ("Reconnecting 2/11 · 1:59:32").
+
+Tests: 11 del parser + 4 del clasificador (incluye 1113 intocado y 1308 sin
+flush sigue terminal) + 3 del bypass del gate. `runner.test.ts` tiene 1 falla
+preexistente en el baseline (delay 64000 vs 60000) verificada con stash — no
+es de esta ola.
+
+

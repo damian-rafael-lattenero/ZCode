@@ -32,6 +32,11 @@ import {
   isRetryableProviderBusinessNetworkFailure,
   isRetryableProviderBusinessTimeoutFailure,
 } from "./failure-provider-business-codes.js";
+import {
+  parseNextFlushTimeAtMs,
+  resolveUsageLimitResetWaitMs,
+  USAGE_LIMIT_RESET_PROVIDER_CODES,
+} from "./failure-usage-limit-reset.js";
 import { isModelStreamIdleTimeoutError } from "./stream-idle-timeout.js";
 
 const PROVIDER_BUSINESS_ERROR_WRAPPER_CODE = "PROVIDER_BUSINESS_ERROR";
@@ -43,6 +48,8 @@ export interface ClassifiedModelFailure {
   retryReason: ModelRetryReason;
   retryable: boolean;
   retryAfterMs?: number;
+  /** (FORK) 等到用量窗口重置的等待时长（来自 next_flush_time，已钳制）；仅解析成功时存在。 */
+  usageLimitResetWaitMs?: number;
   statusCode?: number;
 }
 
@@ -348,8 +355,33 @@ function classifyProviderBusinessFailure(
   const message = providerBusinessMessage(error);
   const providerCode = resolveProviderBusinessCode(error);
   const effectiveStatusCode = resolveProviderBusinessStatusCode(error, statusCode);
+  // (FORK) 1308/1310/1316-1321 携带 next_flush_time（重置时刻）；解析成功时把终态
+  // 改为等到重置点重试（配合 FORK.md Ola 4b 的倒计时），失败则保持终态快速失败。
+  const usageLimitResetWaitMs =
+    providerCode !== undefined && USAGE_LIMIT_RESET_PROVIDER_CODES.has(providerCode)
+      ? resolveUsageLimitResetWaitMs(
+          parseNextFlushTimeAtMs({
+            summary: error.responseBodySummary,
+            providerMessage: error.providerMessage,
+            message: error.message,
+          }),
+          Date.now(),
+        )
+      : undefined;
   const mappedFailure = providerCode ? getProviderBusinessCodeMapping(providerCode) : undefined;
   if (mappedFailure) {
+    if (usageLimitResetWaitMs !== undefined) {
+      return {
+        code: mappedFailure.code,
+        message: mappedFailure.message ?? message,
+        reason: mappedFailure.reason,
+        retryReason: mappedFailure.retryReason,
+        retryable: true,
+        retryAfterMs: usageLimitResetWaitMs,
+        usageLimitResetWaitMs,
+        statusCode: effectiveStatusCode,
+      };
+    }
     return {
       code: mappedFailure.code,
       message: mappedFailure.message ?? message,

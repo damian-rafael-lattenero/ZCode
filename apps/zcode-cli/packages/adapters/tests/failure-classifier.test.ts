@@ -1,5 +1,5 @@
 import { APICallError } from "ai";
-import { describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { classifyModelFailure, inspectProviderFailure } from "../src/model/failure-classifier.js";
 import { detectProviderBusinessFinishError } from "../src/model/provider-finish-business-error.js";
 import { ProviderBusinessError } from "../src/model/model-execution.js";
@@ -1064,3 +1064,103 @@ function providerBusinessError(input: {
     statusCode: input.statusCode,
   });
 }
+
+describe("(FORK) usage limit reset: next_flush_time makes 1308/1310/1316-1321 wait-until-reset", () => {
+  const NOW = Date.parse("2026-10-25T18:00:00Z");
+
+  beforeEach(() => {
+    vi.useFakeTimers();
+    vi.setSystemTime(NOW);
+  });
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it("1308 with next_flush_time in the body becomes retryable with the reset wait", () => {
+    const failure = classifyModelFailure(
+      new ProviderBusinessError({
+        providerCode: "1308",
+        providerId: "account:zai-start-plan",
+        providerKind: "openai-compatible",
+        providerMessage: "Your usage limit has been reached.",
+        responseBodySummary: {
+          error: {
+            code: "1308",
+            message: "Your usage limit has been reached.",
+            next_flush_time: "2026-10-25T20:00:00Z",
+          },
+        },
+        responseStatus: 429,
+        statusCode: 429,
+      }),
+    );
+
+    expect(failure).toMatchObject({
+      code: "model_rate_limited",
+      reason: "rate_limited",
+      retryable: true,
+      retryAfterMs: 2 * 3_600_000,
+      usageLimitResetWaitMs: 2 * 3_600_000,
+      statusCode: 429,
+    });
+  });
+
+  it("1316 with the reset time interpolated in the message becomes retryable (UTC assumed)", () => {
+    const failure = classifyModelFailure(
+      providerBusinessError({
+        providerCode: "1316",
+        providerMessage:
+          "Error code: 1316 - Your usage limit has been reached. Your limit will reset at 2026-10-25 19:30:00.",
+        statusCode: 429,
+      }),
+    );
+
+    expect(failure).toMatchObject({
+      code: "model_rate_limited",
+      retryable: true,
+      usageLimitResetWaitMs: 90 * 60_000,
+    });
+  });
+
+  it("1308 without a parseable reset time stays terminal (upstream behavior intact)", () => {
+    const failure = classifyModelFailure(
+      providerBusinessError({
+        providerCode: "1308",
+        providerMessage: "Your usage limit has been reached. Please top up or upgrade.",
+        statusCode: 429,
+      }),
+    );
+
+    expect(failure).toMatchObject({
+      code: "model_rate_limited",
+      retryable: false,
+    });
+    expect(failure.usageLimitResetWaitMs).toBeUndefined();
+  });
+
+  it("non-usage-limit codes are untouched even when the body carries a reset time", () => {
+    const failure = classifyModelFailure(
+      new ProviderBusinessError({
+        providerCode: "1113",
+        providerId: "account:zai-start-plan",
+        providerKind: "openai-compatible",
+        providerMessage: "Insufficient balance.",
+        responseBodySummary: {
+          error: {
+            code: "1113",
+            message: "Insufficient balance.",
+            next_flush_time: "2026-10-26T00:00:00Z",
+          },
+        },
+        responseStatus: 429,
+        statusCode: 429,
+      }),
+    );
+
+    // 1113 是余额不足：必须充值，等重置没有意义——终态语义不变。
+    expect(failure).toMatchObject({
+      retryable: false,
+    });
+    expect(failure.usageLimitResetWaitMs).toBeUndefined();
+  });
+});

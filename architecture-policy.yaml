@@ -898,3 +898,8 @@ exceptions:
     paths:
       - packages/services/src/zcode-agent/forkModelRetrySpawnEnv.ts
     reason: FORK（FORK.md「Ola 4」）：模型 API 重试退避的 fork 默认注入 helper——只读继承 env 并输出 spawn env 键值，被 node.ts 的 resolveSpawnEnv 消费，无任何跨域依赖；与同目录 agentTelemetryEnv.ts 同构。接管 packages/services/src/zcode-agent 目录需要单独的模块边界重构，不在本次范围内。
+  - id: fork-usage-limit-reset-unmanaged-new
+    rule: unmanaged-new-file
+    paths:
+      - apps/zcode-cli/packages/adapters/src/model/failure-usage-limit-reset.ts
+    reason: FORK（FORK.md「Ola 5」）：z.ai 用量窗口限制 next_flush_time 的纯解析模块——只导出常量与纯函数，被 failure-classifier.ts 消费，无 IO / 无跨域依赖；与同目录 failure-tls.ts 同构。接管 apps/zcode-cli 的 adapters 模块需要单独的模块边界重构，不在本次范围内。

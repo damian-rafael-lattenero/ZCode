@@ -1068,6 +1068,9 @@ function summarizeProviderBusinessBody(record: Record<string, unknown>): Record<
   copyScalar(record, summary, "message");
   copyScalar(record, summary, "request_id");
   copyScalar(record, summary, "requestId");
+  // (FORK) z.ai 用量窗口限制的重置时刻：分类器靠它把终态改成“等到重置再试”。
+  copyScalar(record, summary, "next_flush_time");
+  copyScalar(record, summary, "nextFlushTime");
 
   const errorRecord = asRecord(record.error);
   if (errorRecord) {
@@ -1081,6 +1084,9 @@ function summarizeProviderBusinessBody(record: Record<string, unknown>): Record<
     copyScalar(errorRecord, errorSummary, "request_id");
     copyScalar(errorRecord, errorSummary, "requestId");
     copyScalar(errorRecord, errorSummary, "type");
+    // (FORK) 同上：message 里的插值可能丢失，字段路径必须保留。
+    copyScalar(errorRecord, errorSummary, "next_flush_time");
+    copyScalar(errorRecord, errorSummary, "nextFlushTime");
     summary.error = errorSummary;
   }
 

@@ -16,15 +16,27 @@ cd "$(dirname "$0")/.."
 
 APP=/Applications/ZCode.app
 BUNDLE="$APP/Contents/Resources/glm/zcode.cjs"
+ASAR="$APP/Contents/Resources/app.asar"
 DIST="apps/zcode-cli/packages/cli/dist/zcode.cjs"
+# 构建产物（带原始 mtime）：swap 的 ditto 会刷新安装副本的 mtime，
+# 年龄对比必须用 staging 副本，否则永远误报 dist “更旧”。
+STAGED_BUNDLE="packages/desktop/bundled-agents/darwin-arm64/glm/zcode.cjs"
 
 fail() { echo "[verify-deploy] FAIL: $*" >&2; exit 1; }
 
 # 每波部署的代码 marker（新增波次就追加）。
-MARKERS=(
-  "nextAttemptAtMs"         # Ola 4b: countdown absoluto
+# AGENT_MARKERS 查 Resources/glm/zcode.cjs（CLI runtime）；UI_MARKERS 查 app.asar
+# （renderer + desktop services）。别放错列表：CLI 的 marker 在 asar 里查不到，反之亦然。
+AGENT_MARKERS=(
+  "nextAttemptAtMs"         # Ola 4b: countdown absoluto (adapter publish)
   "usageLimitResetWaitMs"   # Ola 5: wait-until-reset (next_flush_time)
-  "apiRetryStatusMessageId" # Ola 6 (B2): labels honestos por reason
+)
+# renderer/shared 打包进 asar 且会经过压缩混淆：marker 必须是字面量（i18n key、
+# 属性名），函数名会被 minify 吃掉。asar 是二进制 → grep 需要 -a。
+UI_MARKERS=(
+  "chat.apiRetryStatus.serverError" # Ola 6 (B2): labels honestos (i18n literal)
+  "chat.apiRetryStatus.recovery"    # Ola 6 (B2): stream recovery 标记
+  "nextRetryAtMs"                   # Ola 4b: normalizer + legacy schema (属性名)
 )
 
 echo "[verify-deploy] app: $APP"
@@ -43,25 +55,30 @@ if [ -n "$extras" ]; then
 fi
 
 [ -f "$BUNDLE" ] || fail "falta el agent del bundle: $BUNDLE"
-for marker in "${MARKERS[@]}"; do
-  grep -q "$marker" "$BUNDLE" || fail "agent del bundle sin marker: $marker"
+for marker in "${AGENT_MARKERS[@]}"; do
+  LC_ALL=C grep -a -q "$marker" "$BUNDLE" || fail "agent del bundle sin marker: $marker"
 done
-echo "[verify-deploy] ok: bundle del app tiene todos los markers (${#MARKERS[@]})"
+echo "[verify-deploy] ok: bundle del app (agent) tiene todos los markers (${#AGENT_MARKERS[@]})"
+
+[ -f "$ASAR" ] || fail "falta el asar del app: $ASAR"
+for marker in "${UI_MARKERS[@]}"; do
+  LC_ALL=C grep -a -q "$marker" "$ASAR" || fail "asar del app sin marker UI: $marker"
+done
+echo "[verify-deploy] ok: asar del app (UI/shared) tiene todos los markers (${#UI_MARKERS[@]})"
 
 if [ -f "$DIST" ]; then
-  for marker in "${MARKERS[@]}"; do
-    grep -q "$marker" "$DIST" ||
+  for marker in "${AGENT_MARKERS[@]}"; do
+    LC_ALL=C grep -a -q "$marker" "$DIST" ||
       fail "repo dist ($DIST) sin marker: $marker — en este workspace el agent se resuelve desde ahí ANTES que el bundle; regenerar con el build"
   done
   echo "[verify-deploy] ok: repo dist tiene todos los markers"
-  if [ "$DIST" -ot "$BUNDLE" ]; then
-    echo "[verify-deploy] WARN: repo dist más viejo que el bundle del app — los agents de este workspace correrían código viejo; recompilar"
-  fi
 else
   echo "[verify-deploy] note: sin repo dist (checkout limpio) — el agent saldrá del bundle del app"
 fi
 
-main_pid=$(pgrep -x ZCode | head -1 || true)
+# 主进程经 Dock 启动时 argv[0] 只是 "ZCode"（无完整路径），pgrep -f/-x 都不可靠；
+# ps 的 comm 字段是唯一稳定来源。
+main_pid=$(ps -A -o pid=,comm= | awk 'NF==2 && $2=="ZCode" {print $1; exit}')
 if [ -n "$main_pid" ]; then
   bundle_epoch=$(stat -f %m "$BUNDLE")
   start_line=$(ps -p "$main_pid" -o lstart= | sed 's/  */ /g')

@@ -12,6 +12,8 @@ import {
   type TestModelExecutionObservation,
 } from "./test-runtime-model.js";
 import { createTestSessionEventStore } from "./test-event-store.js";
+import { createToolRegistry } from "../src/tool/registry.js";
+import { registerReadOnlyTool } from "./runtime-output-token-continuation-test-helpers.js";
 
 type ReasoningFailureKind = "idle-timeout" | "network-reset";
 
@@ -149,4 +151,88 @@ describe("AgentRuntime reasoning-only stream recovery", () => {
       expect(new Set(reasoningAssistantIds).size).toBe(2);
     },
   );
+
+  it("(FORK) resets the recovery budget after a successful model step — failures count as consecutive, not per-turn cumulative", async () => {
+    // 回归：同一轮内「失败恢复 → 成功 → 失败恢复」的第二段必须从 retryNumber=1 重新计。
+    // 修复前计数只在整轮创建时清零，第二段会显示 2/10，几十个迭代的长任务里离散瞬时故障
+    // 会累计耗尽预算并整轮失败（FORK.md「Ola 4」延续）。
+    const sessionId = createSessionId("stream-recovery-budget-reset");
+    const eventStore = createTestSessionEventStore();
+    const registry = createToolRegistry();
+    registerReadOnlyTool(registry, "StreamRead", "stream tool result");
+    let modelCallCount = 0;
+    let firstRecovery: any;
+    let secondRecovery: any;
+
+    const runtime = createTestAgentRuntime(
+      sessionId,
+      {
+        mode: "yolo",
+        modelSelection: createTestModelSelection("test/recovery-budget-reset"),
+        modelStreaming: "on",
+      },
+      {
+        eventStore,
+        toolRegistry: registry,
+        modelFactory: createTestModelFactory({
+          async generateText() {
+            throw new Error("streaming path expected");
+          },
+          async *streamText(_request: any, observation) {
+            modelCallCount += 1;
+            if (modelCallCount === 1 || modelCallCount === 3) {
+              // 成功的模型步（带工具调用，让本轮继续）：第二次同时是恢复请求，验证 reset 后预算已回来。
+              if (modelCallCount === 3) firstRecovery = observation;
+              yield {
+                type: "tool_call",
+                toolCall: { id: `stream-read-${modelCallCount}`, name: "StreamRead", input: {} },
+              };
+              yield {
+                type: "finish",
+                finishReason: "tool-calls",
+                usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 },
+              };
+              return;
+            }
+            if (modelCallCount === 2 || modelCallCount === 4) {
+              // 可重试断流：可见 reasoning 后失败，触发 core stream recovery。
+              yield { type: "reasoning_start", id: `reasoning-failed-${modelCallCount}` };
+              yield {
+                type: "reasoning_delta",
+                id: `reasoning-failed-${modelCallCount}`,
+                text: "unfinished",
+              };
+              throw createReasoningFailure("idle-timeout");
+            }
+            secondRecovery = observation;
+            yield { type: "text_delta", text: "done after reset" };
+            yield {
+              type: "finish",
+              finishReason: "stop",
+              usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 },
+            };
+          },
+        } as never),
+      },
+    );
+
+    const result = await runtime.executeTurn("budget reset across successes");
+    const events = await eventStore.getEvents(sessionId);
+    const discardedCount = events.filter(
+      (event) => event.type === SessionEventType.StreamRecoveryTailDiscarded,
+    ).length;
+
+    expect(result.response).toBe("done after reset");
+    expect(modelCallCount).toBe(5);
+    expect(discardedCount).toBe(2);
+    expect(firstRecovery?.invocationContext?.streamRecovery).toMatchObject({
+      retryNumber: 1,
+      maxRetries: 10,
+    });
+    // 关键断言：中间夹着一次成功请求后，第二段恢复重新从 1 计（修复前是 2）。
+    expect(secondRecovery?.invocationContext?.streamRecovery).toMatchObject({
+      retryNumber: 1,
+      maxRetries: 10,
+    });
+  });
 });

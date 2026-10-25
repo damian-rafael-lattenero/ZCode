@@ -1,7 +1,9 @@
 /* eslint-disable max-lines -- 工具展示 */
 import {
   useCallback,
+  useEffect,
   useMemo,
+  useState,
   type ComponentProps,
   type KeyboardEvent as ReactKeyboardEvent,
   type RefObject,
@@ -132,6 +134,48 @@ export function matchesModelDisplayNameSearch(
     .includes(normalizedSearchText);
 }
 
+/** (FORK) 把剩余毫秒格式化为 mm:ss（>=1h 显示 h:mm:ss）。负值按 0 处理。 */
+export function formatRetryCountdown(remainingMs: number): string {
+  const totalSeconds = Math.max(0, Math.ceil(remainingMs / 1000));
+  const hours = Math.floor(totalSeconds / 3600);
+  const minutes = Math.floor((totalSeconds % 3600) / 60);
+  const seconds = totalSeconds % 60;
+  const mm = String(minutes).padStart(2, "0");
+  const ss = String(seconds).padStart(2, "0");
+  return hours > 0 ? `${hours}:${mm}:${ss}` : `${mm}:${ss}`;
+}
+
+/**
+ * (FORK) 基于绝对时间 nextRetryAtMs 的秒级倒计时。只给时长快照（retryDelayMs）的话，
+ * 重渲染/快照回放会让读数跳回满额，看起来像倒计时卡住；绝对时间自校准。
+ * nextRetryAtMs 缺失（旧 runtime / core stream recovery 立即重开）时不渲染倒计时。
+ */
+function useRetryCountdown(nextRetryAtMs: number | null | undefined): string | null {
+  const [nowMs, setNowMs] = useState(() => Date.now());
+  useEffect(() => {
+    if (nextRetryAtMs === null || nextRetryAtMs === undefined) {
+      return;
+    }
+    const timer = window.setInterval(() => {
+      setNowMs(Date.now());
+      if (Date.now() >= nextRetryAtMs) {
+        // 到点后停表：下一次 model_retry_scheduled / request_started 会带来新状态。
+        window.clearInterval(timer);
+      }
+    }, 1000);
+    return () => window.clearInterval(timer);
+  }, [nextRetryAtMs]);
+  if (nextRetryAtMs === null || nextRetryAtMs === undefined) {
+    return null;
+  }
+  const remainingMs = nextRetryAtMs - nowMs;
+  if (remainingMs <= -2000) {
+    // 事件比时钟旧（跨端时钟漂移）：宁可不显示也不要错误的大数。
+    return null;
+  }
+  return formatRetryCountdown(remainingMs);
+}
+
 export function ChatApiRetryStatus({
   apiRetry,
   intl,
@@ -141,14 +185,16 @@ export function ChatApiRetryStatus({
   intl: ReturnType<typeof useZCodeIntl>["intl"];
   locale: string;
 }) {
+  // (FORK) hooks 必须在 early return 之前稳定调用（见 ConfigSelect 的同类注释）。
+  const countdownLabel = useRetryCountdown(apiRetry?.nextRetryAtMs ?? null);
   const retryLabel = useMemo(() => {
     if (!apiRetry) {
       return null;
     }
 
-    // 当前 ZCode Agent 只会推送某一刻的 retryDelayMs 快照，不会每秒递减。
-    // 继续把这个值渲染成“X 秒后继续”会给用户造成倒计时在卡住的错觉。
-    // 这里先收敛成稳定的重试状态文案，只展示第几次重试。
+    // (FORK) 恢复倒计时：adapter 的 model_retry_scheduled 现在携带绝对时间
+    // nextRetryAtMs（15min 退避下用户需要知道还要等多久）；旧事件无此字段时
+    // 保持纯计数文案。倒计时段由 useRetryCountdown 单独渲染并每秒刷新。
     const formatter = new Intl.NumberFormat(locale);
     return intl.formatMessage(
       { id: "chat.apiRetryStatus" },
@@ -178,6 +224,11 @@ export function ChatApiRetryStatus({
       <span className="animated-gradient-text animated-gradient-text-subtle font-medium">
         {retryLabel}
       </span>
+      {countdownLabel ? (
+        <span className="ml-1.5 font-mono text-ui-sm text-foreground-subtle tabular-nums">
+          {countdownLabel}
+        </span>
+      ) : null}
     </span>
   );
 }

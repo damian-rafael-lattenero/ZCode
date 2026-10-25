@@ -467,6 +467,8 @@ export const zcodeSessionApiRetryStatusSchema = z
     attempt: z.number().int().positive(),
     maxRetries: z.number().int().nonnegative(),
     retryDelayMs: z.number().int().nonnegative(),
+    // (FORK) 下一次尝试绝对时间；旧事件/旧 runtime 缺省 null（strict schema 需允许缺省）。
+    nextRetryAtMs: z.number().int().nonnegative().nullable().optional(),
     errorStatus: z.number().int().nonnegative().nullable(),
     error: z.string(),
   })

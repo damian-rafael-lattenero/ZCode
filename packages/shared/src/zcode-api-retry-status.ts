@@ -24,6 +24,11 @@ export function normalizeZCodeApiRetryStatus(
     maxRetries,
     retryDelayMs:
       nonNegativeIntegerValue(record.retryDelayMs) ?? nonNegativeIntegerValue(record.delayMs) ?? 0,
+    // (FORK) 绝对时间优先（倒计时自校准）；缺失时按调度时刻 + 时长兜底，再缺省 null。
+    nextRetryAtMs:
+      nonNegativeIntegerValue(record.nextRetryAtMs) ??
+      nonNegativeIntegerValue(record.nextAttemptAtMs) ??
+      null,
     errorStatus:
       nonNegativeIntegerValue(record.errorStatus) ??
       nonNegativeIntegerValue(record.statusCode) ??
@@ -98,6 +103,8 @@ export function zcodeApiRetryFromStreamRecoveryPayload(
     attempt,
     maxRetries: Math.max(nonNegativeIntegerValue(record.maxRetries) ?? attempt, attempt),
     retryDelayMs: 0,
+    // core stream recovery 立即重开新请求，没有本地等待可倒计时。
+    nextRetryAtMs: null,
     errorStatus: null,
     error: stringValue(record.message) ?? "Model stream recovery retry started",
   };

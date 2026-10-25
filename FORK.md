@@ -174,3 +174,27 @@ seteó. Curva resultante 2s→4s→…→512s→900s ≈ 32min de ventana de
 recuperación con los mismos 10 reintentos (curva exponencial fija de
 upstream, solo se levanta el tope). Elegido por Damian: esperar a que z.ai
 se recupere (10-15min por espera está bien) antes que perder la tarea.
+
+## Ola 4b (25/10 noche): budget por fallas consecutivas + countdown mm:ss
+
+Con la ventana de 15min los dos defectos de UX que quedaban del "n/10":
+
+1. **El contador nunca reseteaba.** `streamRecoveryRetryCount` solo se
+   inicializaba al crear el turno, así que en tareas largas (decenas de
+   iteraciones) fallas discretas acumulaban hasta agotar las 10 recuperaciones
+   del core aunque entre cada una hubiera requests exitosos. Fix en
+   `turn-model-step.ts`: un modelo-request que completa devuelve el budget
+   completo (las fallas cuentan como *consecutivas*, no acumuladas por turno).
+   Test red-green en `runtime-stream-recovery.test.ts`: 2 recuperaciones
+   separadas por un éxito ambas muestran `retryNumber: 1`.
+
+2. **No se sabía cuánto faltaba para el próximo intento.** El adapter ahora
+   publica `nextAttemptAtMs` (epoch absoluto) en `model_retry_scheduled`
+   (runner-generate/runner-stream/empty-completion-retry, los 3 sitios);
+   shared lo normaliza a `ZCodeApiRetryStatus.nextRetryAtMs` (schema legacy
+   incluido; core stream recovery manda `null` porque reabre sin espera
+   local) y el UI (`ChatApiRetryStatus`) renderiza al lado del contador un
+   countdown `mm:ss` (`h:mm:ss` ≥1h) que se auto-calibra con el reloj —
+   re-render o replay de snapshot no lo resetea. Sin el campo (runtime
+   viejo) la UI queda igual que antes: solo el contador.
+

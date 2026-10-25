@@ -520,6 +520,14 @@ async function runModelBackedTurnStepImpl(
   state.modelResponse = result.text;
   state.modelStepCount += 1;
   state.tokenCount += getModelUsageTotalTokens(result.usage);
+  // FORK (damian)：流恢复预算按「连续失败」计——模型请求完整落地即证明链路已恢复，
+  // 预算全量返还。此前计数只在整轮创建时清零，长任务（几十个迭代）里离散的瞬时故障
+  // 会累计吃光 10 次预算并整轮失败，即使每次故障之间都有成功请求；配合 15min 退避
+  // （FORK.md「Ola 4」）预算更珍贵，必须按连续失败而不是整轮累计来计量。
+  // Start Plan busy 的 admission 重试发生在模型请求之间（无成功介入），其耗尽判定不受影响。
+  if (state.streamRecoveryRetryCount > 0) {
+    state.streamRecoveryRetryCount = 0;
+  }
 
   if (result.usage.cacheReadTokens && result.usage.cacheReadTokens > 0) {
     this.messageHistory.setCacheHit(result.usage.cacheReadTokens);

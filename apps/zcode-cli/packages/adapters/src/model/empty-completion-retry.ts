@@ -94,6 +94,8 @@ export async function scheduleEmptyCompletionRetry(input: {
       errorCode: failure.code,
       message: failure.message,
       nextAttempt: input.attempt + 1,
+      // (FORK) 绝对时间而非只有时长：UI 据此做真实倒计时，重渲染/快照回放不会重置读数。
+      nextAttemptAtMs: Date.now() + delayMs,
       reason: failure.retryReason,
       requestHeaderCount: Object.keys(input.requestHeaders).length,
       requestHeaders: input.requestHeaders,

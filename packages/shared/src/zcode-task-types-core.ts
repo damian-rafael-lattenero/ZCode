@@ -890,6 +890,11 @@ export interface ZCodeApiRetryStatus {
   attempt: number;
   maxRetries: number;
   retryDelayMs: number;
+  /**
+   * (FORK) 下一次尝试的绝对时间（epoch ms）。只给时长的话，UI 重渲染/快照回放会让倒计时
+   * 读数重置；绝对时间自校准。缺省/null（旧事件、core stream recovery 立即重开无等待可计）。
+   */
+  nextRetryAtMs?: number | null;
   errorStatus: number | null;
   error: string;
 }

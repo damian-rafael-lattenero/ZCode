@@ -50,6 +50,36 @@ Merge conflicts, if any, will be in the `[fork]` files above — resolve by
 re-applying the small change. If upstream reworks the recommendations pipeline,
 `git log -p -- packages/ui/src/plugin-ui/adapters/` shows where it moved.
 
+## Deploy de features (el proceso, 2026-10-25)
+
+Cada feature sigue SIEMPRE el mismo pipeline, en este orden:
+
+1. **Implementar** + tests (red-green cuando aplique) + `pnpm typecheck`
+   (¡la raíz NO compila `apps/zcode-cli`! cada package ahí compila con su
+   propio tsc — correr también `cd apps/zcode-cli/packages/adapters && npx
+   tsc --noEmit` si se tocó) + `pnpm lint` + `pnpm architecture:check
+   --changed`.
+2. **Commit** `[fork] ...` + `git push --no-verify origin damian`.
+3. **Bundle**: `ZCODE_ENV=production CSC_IDENTITY_AUTO_DISCOVERY=false
+   ELECTRON_MIRROR=https://artifacts.electronjs.org/ mise exec -- node
+   scripts/mise-run.mjs pnpm bundle:desktop` con salida a ARCHIVO y verificar
+   el `EXIT:` real (un `| tail` en background devuelve el exit del tail y
+   **enmascara el fallo** — pasó el 25/10 y casi instala un build viejo).
+4. **Swap** con semántica de rename (`mv` a `.prev` + `ditto` + `codesign
+   --sign -`): la app corriendo sigue viva hasta el ⌘Q.
+5. **⌘Q + reabrir** (lo hace Damian; nunca matar procesos zcode desde el bot).
+6. **Verificar**: `scripts/verify-deploy.sh` — chequea que el bundle del app
+   Y el repo dist tienen los markers de cada ola, que no hay apps ZCode extra
+   en /Applications, y que la app corriendo arrancó después del swap.
+
+**Mina documentada (25/10):** cuando el workspace activo ES este monorepo, el
+agent se resuelve desde `apps/zcode-cli/packages/cli/dist/zcode.cjs` ANTES que
+desde el bundle del app (`resolveDefaultZCodeAgentCommand` en
+`zcodeAgentProcessManager.ts`: env → monorepo dist → bundle). El paso de
+bundle regenera ese dist, así que el pipeline de arriba mantiene ambos frescos
+— pero un swap SIN bundle (o un bundle que falla a mitad) deja el repo dist
+viejo y "el deploy no impactó". Por eso el paso 6 chequea los dos binarios.
+
 ## Diff Ask plugin (separate repo)
 
 The three fork touch points (Changes button, `/diff`, plugin-grid card) resolve
@@ -230,3 +260,28 @@ preexistente en el baseline (delay 64000 vs 60000) verificada con stash — no
 es de esta ola.
 
 
+
+## Ola 6 (25/10 tarde): labels honestos (B2) + proceso de deploy a prueba de balas
+
+Lo que faltaba del cartel "Reconnecting n/10": decir QUÉ está pasando. El
+adapter ya publica `reason` en `model_retry_scheduled`; ahora viaja hasta el
+UI (`ZCodeApiRetryStatus.reason`, schema legacy incluido) y el texto cambia
+según la causa (i18n en/zh, fallback al texto genérico en reason desconocido):
+
+- `server_error` → "z.ai server error — retrying n/10" (+ countdown)
+- `provider_overloaded` → "z.ai overloaded — retrying n/10"
+- `rate_limited` → "Rate limited — retrying n/10" (las 429/1302 reales)
+- `timeout`/`stream_idle_timeout` → "Stream stalled — retrying n/10"
+- `network_error`/`stale_connection` → "Connection lost — retrying n/10"
+- stream recovery del core (marca `stream_recovery` en el normalizer) →
+  "Recovering stream n/10" sin countdown (reabre al instante — así se
+  distingue del retry con espera del adapter)
+
+Diagnóstico del "no impactó" del 25/10: sí había impactado (agente dist +
+bundle + renderer verificados frescos); lo que se vio fue un stream recovery
+(sin countdown por diseño, antes indistinguible) y/o apps viejas en
+/Applications confundiendo al Dock. Acciones: borradas `ZCode.prev.app` y
+`ZCode-3.16.2-patched.bak`; nuevo `scripts/verify-deploy.sh` (sección "Deploy
+de features"); documentada la mina de resolución del agent (monorepo dist
+antes que el bundle). Tests: 5 shared (reason passthrough ×3, stream recovery,
+fallback) + 5 UI (mapping puro ×2, render server_error/stream_recovery/fallback).

@@ -29,6 +29,8 @@ export function normalizeZCodeApiRetryStatus(
       nonNegativeIntegerValue(record.nextRetryAtMs) ??
       nonNegativeIntegerValue(record.nextAttemptAtMs) ??
       null,
+    // (FORK) 透传重试原因给 UI 做诚实文案（B2）。
+    reason: stringValue(record.reason) ?? null,
     errorStatus:
       nonNegativeIntegerValue(record.errorStatus) ??
       nonNegativeIntegerValue(record.statusCode) ??
@@ -105,6 +107,8 @@ export function zcodeApiRetryFromStreamRecoveryPayload(
     retryDelayMs: 0,
     // core stream recovery 立即重开新请求，没有本地等待可倒计时。
     nextRetryAtMs: null,
+    // (FORK·B2) 标记来源是 core 流恢复：UI 用独立文案与 adapter 退避重试区分。
+    reason: "stream_recovery",
     errorStatus: null,
     error: stringValue(record.message) ?? "Model stream recovery retry started",
   };

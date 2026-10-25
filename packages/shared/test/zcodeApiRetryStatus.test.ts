@@ -50,4 +50,30 @@ describe("normalizeZCodeApiRetryStatus (FORK: nextRetryAtMs 倒计时绝对时�
     });
     expect(status).toMatchObject({ kind: "api_retry", attempt: 2, nextRetryAtMs: null });
   });
+
+  // (FORK·B2) reason 透传：UI 靠它区分网关 502 / 限流 / 流恢复的诚实文案。
+  it("model_retry_scheduled 状态载荷透传 reason", () => {
+    const status = zcodeApiRetryFromModelNetworkStatusPayload({
+      type: "model_retry_scheduled",
+      attempt: 6,
+      maxRetries: 10,
+      delayMs: 52_381,
+      reason: "server_error",
+    });
+    expect(status).toMatchObject({ kind: "api_retry", attempt: 6, reason: "server_error" });
+  });
+
+  it("payload 无 reason 时归一为 null（旧事件）", () => {
+    const status = normalizeZCodeApiRetryStatus({ attempt: 2, maxRetries: 10, delayMs: 1000 });
+    expect(status?.reason).toBeNull();
+  });
+
+  it("streamRecovery 来源标记 reason=stream_recovery（UI 独立文案）", () => {
+    const status = zcodeApiRetryFromModelNetworkStatusPayload({
+      type: "model_request_started",
+      attempt: 1,
+      streamRecovery: { retryNumber: 3, maxRetries: 10 },
+    });
+    expect(status).toMatchObject({ reason: "stream_recovery" });
+  });
 });

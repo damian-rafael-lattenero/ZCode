@@ -895,6 +895,11 @@ export interface ZCodeApiRetryStatus {
    * 读数重置；绝对时间自校准。缺省/null（旧事件、core stream recovery 立即重开无等待可计）。
    */
   nextRetryAtMs?: number | null;
+  /**
+   * (FORK) 重试原因（ModelRetryReason 字符串，如 server_error/rate_limited）。让 UI
+   * 区分「z.ai 网关抽风」和「限流」——笼统的 "Reconnecting" 会让人误以为是自己打太猛。
+   */
+  reason?: string | null;
   errorStatus: number | null;
   error: string;
 }

@@ -176,6 +176,29 @@ function useRetryCountdown(nextRetryAtMs: number | null | undefined): string | n
   return formatRetryCountdown(remainingMs);
 }
 
+/**
+ * (FORK·B2) 重试原因 → 文案 id。笼统的 "Reconnecting" 会让人误以为是自己请求太猛，
+ * 而 z.ai 网关 502 / 限流 / 流恢复是三种完全不同的处境。未知 reason 一律回退到
+ * 通用文案，保证协议演进时不缺 key。
+ */
+const API_RETRY_REASON_MESSAGE_IDS: Record<string, string> = {
+  server_error: "chat.apiRetryStatus.serverError",
+  provider_overloaded: "chat.apiRetryStatus.overloaded",
+  rate_limited: "chat.apiRetryStatus.rateLimited",
+  timeout: "chat.apiRetryStatus.stalled",
+  stream_idle_timeout: "chat.apiRetryStatus.stalled",
+  stale_connection: "chat.apiRetryStatus.network",
+  network_error: "chat.apiRetryStatus.network",
+  stream_recovery: "chat.apiRetryStatus.recovery",
+};
+
+export function apiRetryStatusMessageId(reason: string | null | undefined): string {
+  if (reason === null || reason === undefined) {
+    return "chat.apiRetryStatus";
+  }
+  return API_RETRY_REASON_MESSAGE_IDS[reason] ?? "chat.apiRetryStatus";
+}
+
 export function ChatApiRetryStatus({
   apiRetry,
   intl,
@@ -195,9 +218,10 @@ export function ChatApiRetryStatus({
     // (FORK) 恢复倒计时：adapter 的 model_retry_scheduled 现在携带绝对时间
     // nextRetryAtMs（15min 退避下用户需要知道还要等多久）；旧事件无此字段时
     // 保持纯计数文案。倒计时段由 useRetryCountdown 单独渲染并每秒刷新。
+    // (FORK·B2) 文案按 reason 区分网关 502 / 限流 / 流恢复。
     const formatter = new Intl.NumberFormat(locale);
     return intl.formatMessage(
-      { id: "chat.apiRetryStatus" },
+      { id: apiRetryStatusMessageId(apiRetry.reason) },
       {
         attempt: formatter.format(apiRetry.attempt),
         maxRetries: formatter.format(apiRetry.maxRetries),

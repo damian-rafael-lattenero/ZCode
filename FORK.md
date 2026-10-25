@@ -158,3 +158,19 @@ mientras `api.z.ai` responde 1s). Dos fixes client-side (spec
   vez de lanzar la excepción por el RPC y abortar el prompt (bug de
   superficie: un 502 rápido mataba el turno completo). Post-presupuesto ya
   estaba cubierto (race libera in-flight).
+
+## Ola 4 (25/10 tarde): "Reconnecting n/10" de raíz — backoff hasta 15min
+
+Diagnóstico (log del CLI `~/.zcode/cli/log/zcode-2026-10-25.jsonl`): 567
+`model.request.failed` en el día, TODOS `statusCode: 502` de
+`api.z.ai/api/anthropic` (0 cuatro-veintinueve: no es rate limit ni el uso
+de Damian — es el gateway de z.ai). El "Reconnecting n/10" del UI es el
+retry del adapter (`maxAttempts: 11`, backoff 2s→60s): una falla de ~30s ×
+11 intentos se agota en ~5 min y **mata turnos largos enteros**.
+
+Fix: `forkModelRetrySpawnEnv.ts` inyecta al spawn del agent
+`ZCODE_MODEL_RETRY_MAX_DELAY_MS=900000` (15min) SOLO si el usuario no lo
+seteó. Curva resultante 2s→4s→…→512s→900s ≈ 32min de ventana de
+recuperación con los mismos 10 reintentos (curva exponencial fija de
+upstream, solo se levanta el tope). Elegido por Damian: esperar a que z.ai
+se recupere (10-15min por espera está bien) antes que perder la tarea.

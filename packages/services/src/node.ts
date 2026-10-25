@@ -62,6 +62,7 @@ import {
   readTopicResourceFromRelay,
   validateTopicResourceFromRelay,
 } from "./zcode-agent/topicResourceRelayClient.js";
+import { buildForkModelRetrySpawnEnv } from "./zcode-agent/forkModelRetrySpawnEnv.js";
 export {
   createTopicResourcePeers,
   type TopicResourcePeers,
@@ -135,6 +136,7 @@ export { createCredentialService } from "./credential/credentialService.js";
 export { createBroadcastService } from "./broadcast/broadcastService.js";
 export { createZCodeAgentService } from "./zcode-agent/zcodeAgentService.js";
 export { createZCodeTaskServiceAdapter } from "./zcode-agent/zcodeTaskServiceAdapter.js";
+export { buildForkModelRetrySpawnEnv } from "./zcode-agent/forkModelRetrySpawnEnv.js";
 export { createZCodeSessionService } from "./zcode-session/zcodeSessionService.js";
 export {
   resolveDefaultZCodeAgentCommand,
@@ -2380,6 +2382,9 @@ export function createLocalServices(options: {
       // 先拿到尚不存在的 provider_config.json 并发布短暂空 Registry。
       await providerConfigRuntime.start();
       return {
+        // FORK (damian)：模型 API 重试退避 fork 默认（cap 15min，等 z.ai 网关恢复而不丢长任务）。
+        // 只补继承 env 未定义的键，用户 shell 显式导出的同名变量优先（见 forkModelRetrySpawnEnv.ts）。
+        ...buildForkModelRetrySpawnEnv(process.env),
         ...buildAgentRuntimeEnv({
           httpProxy: agentNetwork.httpProxy,
           noProxy: agentNetwork.noProxy,

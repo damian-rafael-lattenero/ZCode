@@ -893,3 +893,8 @@ exceptions:
       - packages/ui/src/v4/ConversationVerbosityControl.tsx
       - packages/ui/src/v4/conversationTurnRenderUnitTypes.ts
     reason: 消息流详略档位（spec：docs/specs/conversation-verbosity-views.md）：新增「默认展开全部」镜像 store 与 composer 档位入口两个 renderer 视图文件；conversationTurnRenderUnitTypes.ts 为已准入的存量拆分文件，本次只追加 verbosity/expandAllByDefault 两个派生选项字段。三者均只读写 user-scope shared settings、不引入跨域实现依赖；接管 packages/ui/src 的 ToolCallBlocks / v4 目录需要单独的模块边界重构，不在本次范围内。
+  - id: fork-model-retry-spawn-env-unmanaged-new
+    rule: unmanaged-new-file
+    paths:
+      - packages/services/src/zcode-agent/forkModelRetrySpawnEnv.ts
+    reason: FORK（FORK.md「Ola 4」）：模型 API 重试退避的 fork 默认注入 helper——只读继承 env 并输出 spawn env 键值，被 node.ts 的 resolveSpawnEnv 消费，无任何跨域依赖；与同目录 agentTelemetryEnv.ts 同构。接管 packages/services/src/zcode-agent 目录需要单独的模块边界重构，不在本次范围内。

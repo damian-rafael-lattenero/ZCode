@@ -257,6 +257,11 @@ export interface ModelRetryScheduledStatusEvent extends ModelNetworkStatusBase {
   providerErrorMessage?: string;
   providerRequestId?: string;
   retryAfterMs?: number;
+  /**
+   * (FORK) 下一次尝试的绝对时间（epoch ms）。只带时长快照 delayMs 的话，UI 的倒计时在
+   * 重渲染/快照回放时读数会重置；绝对时间让 UI 自校准。旧事件缺省。
+   */
+  nextAttemptAtMs?: number;
 }
 
 export interface ModelStreamStalledStatusEvent extends ModelNetworkStatusBase {

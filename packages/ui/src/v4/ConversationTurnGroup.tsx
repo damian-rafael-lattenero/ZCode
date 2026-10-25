@@ -142,7 +142,9 @@ interface OffPeakTurnCard {
   task: OffPeakCreateTaskSummary;
 }
 
-const MIN_VISIBLE_API_RETRY_ATTEMPT = 3;
+// (FORK·Ola 7) upstream 把前两次重试当"普通加载"隐藏；fork 的重试曲线是确定性的
+// 2s→4s→…→1024s，第一次重试就该可见（Damian 要看完整序列 1/10…10/10）。
+const MIN_VISIBLE_API_RETRY_ATTEMPT = 1;
 
 interface HighspeedOutputFooterProps {
   generatedLabel: string;

@@ -301,3 +301,23 @@ reasonCode fault.* colapsa overloaded con server_error); el producer lo setea
 y `reason` (fallback a reasonCode para producers viejos, con los fault.*
 agregados al mapa de文案). Stream recovery: sin countdown (reabre al instante).
 Schema zod no-strict: campo opcional tolera producers/consumers viejos.
+
+## Ola 7 (25/10 noche): curva determinista — 2s→4s→…→1024s, sin jitter, visible desde 1/10
+
+Damian reportó (con captura): el pill arrancaba en 3/10 y los segundos no
+seguían la secuencia esperada. Diagnóstico con el log del día: (a) el jitter
+de upstream (`espera × [0.5,1)`) hace que las lecturas sean 1.9s/2.5s/7.0s en
+vez de 2/4/8 limpios (verificado: attempt 1 → 1934/1509/1625 ms); (b)
+upstream oculta los intentos 1-2 a propósito ("equivalentes a carga normal").
+
+Decisión de Damian (preguntado): **puro 2^n hasta 17:04** (cap 1024000ms =
+exactamente el intento 10), ventana total **34:06**, countdown **por intento**.
+
+- `retry-policy.ts`: env `ZCODE_MODEL_RETRY_JITTER` ("0"/"false" apaga;
+  inválido se ignora; options explícitas siguen mandando sobre env).
+- `forkModelRetrySpawnEnv.ts`: cap 900000→**1024000** + `JITTER=0` (solo si
+  el usuario no los definió).
+- `ConversationTurnGroup.tsx`: `MIN_VISIBLE_API_RETRY_ATTEMPT` 3→1 — la
+  secuencia completa 1/10…10/10 es visible.
+- Nota: el "~16 min" reportado nunca ocurrió (máximo del día: 4:23 en el
+  intento 9) — era la curva jitterada leída con expectativa de 2^n puros.

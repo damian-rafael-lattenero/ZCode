@@ -19,6 +19,9 @@ const ENV_MODEL_RETRY_MAX_RETRIES = "ZCODE_MODEL_RETRY_MAX_RETRIES";
 const ENV_MODEL_RETRY_BASE_DELAY_MS = "ZCODE_MODEL_RETRY_BASE_DELAY_MS";
 const ENV_MODEL_RETRY_BACKOFF_FACTOR = "ZCODE_MODEL_RETRY_BACKOFF_FACTOR";
 const ENV_MODEL_RETRY_MAX_DELAY_MS = "ZCODE_MODEL_RETRY_MAX_DELAY_MS";
+// (FORK·Ola 7) 抖动开关：纯指数曲线 2s→4s→…→1024s 才是可预期的倒计时读数
+// （jitter 让每次等待落在 [0.5,1)× 区间，UI 永远显示不出干净的 2 的幂）。
+const ENV_MODEL_RETRY_JITTER = "ZCODE_MODEL_RETRY_JITTER";
 
 const DEFAULT_RETRY_OPTIONS: ResolvedAiSdkModelRetryOptions = {
   backoffFactor: DEFAULT_RETRY_BACKOFF_FACTOR,
@@ -43,7 +46,8 @@ export function resolveAiSdkModelRetryOptions(
       options?.baseDelayMs,
       normalizeNonNegativeInteger(envOptions.baseDelayMs, DEFAULT_RETRY_OPTIONS.baseDelayMs),
     ),
-    jitter: options?.jitter ?? DEFAULT_RETRY_OPTIONS.jitter,
+    // (FORK·Ola 7) env 与显式 options 均可关抖动；显式 options 仍最优先。
+    jitter: options?.jitter ?? envOptions.jitter ?? DEFAULT_RETRY_OPTIONS.jitter,
     maxAttempts: normalizePositiveInteger(
       options?.maxAttempts,
       normalizePositiveInteger(envOptions.maxAttempts, DEFAULT_RETRY_OPTIONS.maxAttempts),
@@ -60,9 +64,18 @@ function readRetryOptionsFromEnv(env: EnvRecord): AiSdkModelRetryOptions {
   return {
     backoffFactor: parsePositiveNumber(env[ENV_MODEL_RETRY_BACKOFF_FACTOR]),
     baseDelayMs: parseNonNegativeInteger(env[ENV_MODEL_RETRY_BASE_DELAY_MS]),
+    jitter: parseJitterFlag(env[ENV_MODEL_RETRY_JITTER]),
     maxAttempts: maxRetries === undefined ? undefined : maxRetries + 1,
     maxDelayMs: parseNonNegativeInteger(env[ENV_MODEL_RETRY_MAX_DELAY_MS]),
   };
+}
+
+function parseJitterFlag(value: string | undefined): boolean | undefined {
+  if (value === undefined) return undefined;
+  const normalized = value.trim().toLowerCase();
+  if (normalized === "0" || normalized === "false") return false;
+  if (normalized === "1" || normalized === "true") return true;
+  return undefined;
 }
 
 function parseNonNegativeInteger(value: string | undefined): number | undefined {

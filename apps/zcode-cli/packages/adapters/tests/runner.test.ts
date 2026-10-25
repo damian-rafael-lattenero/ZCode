@@ -30,6 +30,88 @@ import {
   type ModelToolContract,
 } from "@zcode/contracts";
 import { executeAdapterGenerateText, executeAdapterStreamText } from "./test-adapter-model.js";
+import { resolveAiSdkModelRetryOptions } from "../src/model/retry-policy.js";
+
+describe("(FORK·Ola 7) ZCODE_MODEL_RETRY_JITTER env", () => {
+  it("jitter=0 时退避读数是干净的 2 的幂（无随机折半）", async () => {
+    vi.useFakeTimers();
+    // 即使 Math.random 被固定成最不利值，jitter=0 也必须产生精确的 2^n 读数。
+    const randomSpy = vi.spyOn(Math, "random").mockReturnValue(0.999);
+    try {
+      const events: ModelNetworkStatusEvent[] = [];
+      let attempts = 0;
+      const runtime: AiSdkModelRuntime = {
+        async generateText() {
+          attempts += 1;
+          if (attempts <= 5) {
+            throw apiError("server busy", { isRetryable: true, statusCode: 500 });
+          }
+          return {
+            text: "after pure exponential",
+            finishReason: "stop",
+            usage: usage(2, 3),
+            totalUsage: usage(2, 3),
+          } as never;
+        },
+        streamText() {
+          throw new Error("not used");
+        },
+      };
+      const adapter = new AiSdkModelAdapter({
+        env: { ZCODE_MODEL_RETRY_JITTER: "0" },
+        registry: registry(),
+        runtime,
+      });
+
+      const resultPromise = executeAdapterGenerateText(adapter, {
+        metadata: { requestId: "model_req_pure_exponential", traceId: "trace_pure_exponential" },
+        providerId: "test" as never,
+        modelId: "model-a" as never,
+        messages: [{ role: "user", content: "Ping" }],
+        statusSink: {
+          publish(event) {
+            events.push(event);
+          },
+        },
+      });
+      const retryEvents = () => events.filter((event) => event.type === "model_retry_scheduled");
+      const waitForRetryEvents = async (count: number) => {
+        for (let turn = 0; turn < 20 && retryEvents().length < count; turn += 1) {
+          await Promise.resolve();
+          await vi.advanceTimersByTimeAsync(0);
+        }
+        expect(retryEvents()).toHaveLength(count);
+      };
+
+      const expectedDelayMs = [2_000, 4_000, 8_000, 16_000, 32_000];
+      for (const [index, delayMs] of expectedDelayMs.entries()) {
+        await waitForRetryEvents(index + 1);
+        expect(retryEvents()[index]).toMatchObject({ delayMs });
+        await vi.advanceTimersByTimeAsync(delayMs);
+      }
+
+      await expect(resultPromise).resolves.toMatchObject({ text: "after pure exponential" });
+      expect(attempts).toBe(6);
+      expect(retryEvents().map((event) => event.delayMs)).toEqual(expectedDelayMs);
+    } finally {
+      randomSpy.mockRestore();
+      vi.useRealTimers();
+    }
+  });
+
+  it("非法 jitter 值被忽略（保持上游默认）；显式 options 仍最优先", () => {
+    expect(
+      resolveAiSdkModelRetryOptions(undefined, { ZCODE_MODEL_RETRY_JITTER: "banana" }).jitter,
+    ).toBe(true);
+    expect(resolveAiSdkModelRetryOptions(undefined, {}).jitter).toBe(true);
+    expect(
+      resolveAiSdkModelRetryOptions(undefined, { ZCODE_MODEL_RETRY_JITTER: "false" }).jitter,
+    ).toBe(false);
+    expect(
+      resolveAiSdkModelRetryOptions({ jitter: true }, { ZCODE_MODEL_RETRY_JITTER: "0" }).jitter,
+    ).toBe(true);
+  });
+});
 
 describe("AiSdkModelAdapter", () => {
   it("extends SSE idle timeout by 30 seconds for each retry", () => {

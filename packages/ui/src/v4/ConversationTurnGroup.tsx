@@ -194,16 +194,28 @@ function HighspeedOutputFooter({
   );
 }
 
-function toRetryStatus(apiRetry: ApiRetryState): ZCodeApiRetryStatus {
+/** (FORK·B2) 导出供单测：v4 ApiRetryState → UI 重试状态的最后一公里转换。 */
+export function toRetryStatus(apiRetry: ApiRetryState): ZCodeApiRetryStatus {
   const attempt = Math.max(1, Math.floor(apiRetry.attempt));
   // v4 maxAttempts 包含首次请求，而展示口径是重试次数；直接展示会把
   // 默认 10 次重试写成 1/11。
   const maxRetries = Math.max(Math.floor(apiRetry.maxAttempts) - 1, attempt);
+  // (FORK·B2/4b) v4 投影一直带着绝对时间 nextRetryAt 和原因，此前在最后一公里
+  // 被丢掉，pill 永远显示通用 "Reconnecting" 且无倒计时。reason 缺省（旧 producer）
+  // 时回退 reasonCode（fault.* 码也在文案映射表里）。流恢复立即重开：不渲染倒计时。
+  const reason = apiRetry.reason ?? apiRetry.reasonCode;
+  const isStreamRecovery = reason === "stream_recovery";
   return {
     kind: "api_retry",
     attempt,
     maxRetries,
     retryDelayMs: 0,
+    nextRetryAtMs: isStreamRecovery
+      ? null
+      : Number.isFinite(apiRetry.nextRetryAt)
+        ? apiRetry.nextRetryAt
+        : null,
+    reason,
     errorStatus: null,
     error: apiRetry.reasonCode,
   };

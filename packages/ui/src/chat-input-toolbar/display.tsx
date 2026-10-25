@@ -190,6 +190,13 @@ const API_RETRY_REASON_MESSAGE_IDS: Record<string, string> = {
   stale_connection: "chat.apiRetryStatus.network",
   network_error: "chat.apiRetryStatus.network",
   stream_recovery: "chat.apiRetryStatus.recovery",
+  // v4 投影的 fault.* 收敛码（旧 producer 无原始 reason 时的回退路径）。
+  "fault.provider.rateLimited": "chat.apiRetryStatus.rateLimited",
+  "fault.provider.serverError": "chat.apiRetryStatus.serverError",
+  "fault.network.timeout": "chat.apiRetryStatus.stalled",
+  "fault.network.sseStalled": "chat.apiRetryStatus.stalled",
+  "fault.network.sseDisconnected": "chat.apiRetryStatus.network",
+  "fault.network.unreachable": "chat.apiRetryStatus.network",
 };
 
 export function apiRetryStatusMessageId(reason: string | null | undefined): string {

@@ -285,3 +285,19 @@ bundle + renderer verificados frescos); lo que se vio fue un stream recovery
 de features"); documentada la mina de resolución del agent (monorepo dist
 antes que el bundle). Tests: 5 shared (reason passthrough ×3, stream recovery,
 fallback) + 5 UI (mapping puro ×2, render server_error/stream_recovery/fallback).
+
+### Ola 6b (25/10 noche): el pill del chat área — la última milla que faltaba
+
+El "Reconnecting 3/10" centrado sobre el input NO venía por el pipeline de
+`ZCodeApiRetryStatus` sino por la proyección **v4** (`sessionControl.apiRetry`,
+`ApiRetryState`): el producer del CLI (`product-projection.ts`) SÍ armaba
+`nextRetryAt` (evento + delayMs) y `reasonCode`, pero `toRetryStatus`
+(`ConversationTurnGroup.tsx`) los descartaba al construir el estado del UI —
+por eso ese pill nunca mostró countdown ni label honesto.
+
+Fix: `ApiRetryState` gana `reason` opcional (ModelRetryReason crudo — el
+reasonCode fault.* colapsa overloaded con server_error); el producer lo setea
+(stream recovery marca `stream_recovery`); `toRetryStatus` pasa `nextRetryAt`
+y `reason` (fallback a reasonCode para producers viejos, con los fault.*
+agregados al mapa de文案). Stream recovery: sin countdown (reabre al instante).
+Schema zod no-strict: campo opcional tolera producers/consumers viejos.

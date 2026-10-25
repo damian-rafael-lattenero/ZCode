@@ -127,6 +127,12 @@ export const apiRetryStateSchema = z.object({
   maxAttempts: z.number(),
   nextRetryAt: timestampSchema,
   reasonCode: z.string(),
+  /**
+   * (FORK·B2) 原始 ModelRetryReason（如 server_error / rate_limited / stream_recovery）。
+   * reasonCode 是收敛后的 fault.* 产品码（overloaded 与 server_error 同码），诚实文案
+   * 需要原始原因。可选：旧 producer 缺省，UI 回退按 reasonCode 映射。
+   */
+  reason: z.string().nullish(),
 });
 export type ApiRetryState = z.infer<typeof apiRetryStateSchema>;
 

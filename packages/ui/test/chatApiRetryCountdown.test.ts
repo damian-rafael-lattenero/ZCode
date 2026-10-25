@@ -4,6 +4,8 @@ import { createElement } from "react";
 import { cleanup, render, screen, act } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { ZCodeApiRetryStatus } from "@zcode/shared";
+import type { ApiRetryState } from "@zcode/shared";
+import { toRetryStatus } from "@/v4/ConversationTurnGroup.js";
 import {
   apiRetryStatusMessageId,
   ChatApiRetryStatus,
@@ -148,5 +150,48 @@ describe("ChatApiRetryStatus 按 reason 选文案 (FORK·B2)", () => {
       }),
     );
     expect(screen.getByText("Reconnecting... 4/10")).toBeTruthy();
+  });
+});
+
+describe("toRetryStatus — pill v4 最后一公里 (FORK·B2/4b)", () => {
+  it("透传 nextRetryAt 与原始 reason（adapter 重试：标签 + 倒计时数据齐全）", () => {
+    const status = toRetryStatus({
+      attempt: 4,
+      maxAttempts: 11,
+      nextRetryAt: 1_790_000_000_000 + 52_000,
+      reasonCode: "fault.provider.serverError",
+      reason: "server_error",
+    });
+    expect(status).toMatchObject({
+      kind: "api_retry",
+      attempt: 4,
+      maxRetries: 10,
+      nextRetryAtMs: 1_790_000_000_000 + 52_000,
+      reason: "server_error",
+    });
+  });
+
+  it("stream_recovery 不渲染倒计时（立即重开），文案走 recovery", () => {
+    const status = toRetryStatus({
+      attempt: 3,
+      maxAttempts: 11,
+      nextRetryAt: 1_790_000_000_000,
+      reasonCode: "fault.network.sseDisconnected",
+      reason: "stream_recovery",
+    });
+    expect(status.nextRetryAtMs).toBeNull();
+    expect(apiRetryStatusMessageId(status.reason)).toBe("chat.apiRetryStatus.recovery");
+  });
+
+  it("旧 producer 无 reason 时回退 reasonCode（fault.* 码也在映射表）", () => {
+    const status = toRetryStatus({
+      attempt: 2,
+      maxAttempts: 11,
+      nextRetryAt: 1_790_000_000_000 + 4_000,
+      reasonCode: "fault.provider.rateLimited",
+    });
+    expect(status.reason).toBe("fault.provider.rateLimited");
+    expect(apiRetryStatusMessageId(status.reason)).toBe("chat.apiRetryStatus.rateLimited");
+    expect(status.nextRetryAtMs).toBe(1_790_000_000_000 + 4_000);
   });
 });

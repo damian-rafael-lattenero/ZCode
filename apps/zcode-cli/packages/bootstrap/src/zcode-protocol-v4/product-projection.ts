@@ -2498,6 +2498,9 @@ export class ProductProjection {
           maxAttempts,
           nextRetryAt: this.ms(event) + nonNegativeInteger(payload.delayMs, 0),
           reasonCode: modelRetryReasonCode(payload.reason),
+          // (FORK·B2) 保留原始原因：reasonCode 收敛 fault.* 码后 overloaded 与
+          // server_error 同码，UI 诚实文案需要区分。
+          reason: payload.reason,
         });
       }
       case "model_request_started":
@@ -2585,6 +2588,8 @@ export class ProductProjection {
       maxAttempts: maxRetries + 1,
       nextRetryAt,
       reasonCode,
+      // (FORK·B2) 标记来源是 core 流恢复：立即重开无本地等待，UI 不渲染倒计时。
+      reason: "stream_recovery",
     };
   }
 
@@ -2597,7 +2602,8 @@ export class ProductProjection {
         current.attempt === apiRetry.attempt &&
         current.maxAttempts === apiRetry.maxAttempts &&
         current.nextRetryAt === apiRetry.nextRetryAt &&
-        current.reasonCode === apiRetry.reasonCode)
+        current.reasonCode === apiRetry.reasonCode &&
+        current.reason === apiRetry.reason)
     ) {
       return [];
     }

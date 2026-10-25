@@ -312,6 +312,12 @@ User        Renderer coordinator       Highspeed service/API       Session comma
    后 abort 并让 Promise reject，deadline 同时覆盖响应体读取；reject 触发 in-flight draw 的 `finally`
    释放，下一次发送即可重新 draw。代理/服务端接受连接后永不返回时，不得让「单 in-flight」退化为
    只能靠重启恢复的永久熔断。
+   (FORK) transport 对**瞬时性失败**先在内部短退避重试再放弃：网络错误、超时 abort、HTTP
+   502/503/504（网关未到达后端）。默认退避 1s、3s 各一次（可注入，测试可禁用）；每次尝试仍受
+   `HIGHSPEED_REQUEST_TIMEOUT_MS` 约束；重试发生在同一 draw Promise 内部，不新开并发，单 in-flight
+   不变。业务失败（非零 code）、4xx、结构校验失败不是瞬时失败，立即上抛不重试。背景：
+   zcode.z.ai 网关存在秒级 502 抖动（2026-10-24/25 实测），一次抖动即击穿当轮抽卡；重试让抖动被
+   吸收。总生命期上界 = 尝试次数 × 超时 + 退避总和，仍为有界。
 7. 本轮携带 `automationId`：在读取卡、冷却和发起 draw 之前直接 fallback；不得改变
    当前卡、`next_draw_at` 或 in-flight draw 状态。Task 的 `cronAutomationId` 不参与判断。
 8. 当前 Task 正在运行时，新的用户输入仍必须按既有 `queue` 语义准入，不得因为携带
@@ -380,6 +386,14 @@ User        Renderer coordinator       Highspeed service/API       Session comma
     会话旧组合抽卡后把用户的提交选择覆盖成卡模型。历史 edit 重发没有普通提交选择时按会话常驻
     Selection prepare；队列手动提升必须显式传入 QueueItem 自身的普通 Selection，禁止回看可能已被
     后续 admission 改写的 Session Selection。
+
+16. (FORK) draw Promise 在 1s 发送预算**内** reject 时，`prepareTurn` 必须按 `draw-miss`
+    fallback 普通发送并正常返回，禁止把异常上抛到 RPC / 发送路径：抽卡属于加速增强数据面，
+    它的失败不得让用户 prompt 的发送失败或阻塞（发送路径只依赖必备数据，增强数据各自带预算，
+    超预算/失败一律降级——「关键路径不被可选依赖阻塞」）。预算外（后台）reject 由既有语义兜住：
+    释放 in-flight、下一轮重新 draw，不得产生 unhandled rejection。配合规则 6 的固定退避表
+    （重试在预算外进行），默认配置下首个瞬时失败先进入 1s 退避，通常直接被预算兜住；本规则
+    保证即使退避被禁用或瞬时而同步的失败（连接拒绝等）也绝不停摆发送。
 
 ```text
 running Highspeed turn

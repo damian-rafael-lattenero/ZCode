@@ -141,3 +141,20 @@ Re-check after each sync — if the gate gets fast/reliable again, drop the flag
   se buildea desde este repo): cada runtime del protocolo sostiene la Mac
   despierta con `caffeinate -i -w <pid>` mientras vive (también en batería).
   Complementa el `caffeinate -s` del LaunchAgent del poller (AC-only).
+
+## Ola 3 (25/10): resiliencia highspeed ante 502 de zcode.z.ai
+
+El gateway auxiliar `zcode.z.ai` (donde vive `/api/v1/highspeed/`) sufre
+micro-cortes 502 de segundos (medido 24-25/10: 4-6 warn/día, ~5-10s cada uno,
+mientras `api.z.ai` responde 1s). Dos fixes client-side (spec
+`docs/highspeed/highspeed-card-spec.md` §3 reglas 6+16, marcados FORK):
+
+- **Retry de tabla fija** — `highspeedHttpTransport` reintenta SOLO fallos
+  transitorios (502/503/504, error de red, timeout): exactamente 2 extras a
+  1s y 3s (compilado, NO "n/10" abierto). Business codes y 4xx no se
+  reintentan. La tabla es inyectable (`transientRetryDelaysMs`) para tests.
+- **El envío nunca se rompe por la carta** — si el draw rechaza DENTRO del
+  presupuesto de 1s, `prepareTurn` degrada a envío normal (`draw-miss`) en
+  vez de lanzar la excepción por el RPC y abortar el prompt (bug de
+  superficie: un 502 rápido mataba el turno completo). Post-presupuesto ya
+  estaba cubierto (race libera in-flight).

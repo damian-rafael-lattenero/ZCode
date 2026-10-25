@@ -8,7 +8,10 @@ import {
   type HighspeedServiceTransport,
 } from "../src/highspeed/highspeedCardService.js";
 import { createHighspeedMockTransport } from "../src/highspeed/highspeedMockTransport.js";
-import { HIGHSPEED_REQUEST_TIMEOUT_MS } from "../src/highspeed/highspeedHttpTransport.js";
+import {
+  HIGHSPEED_REQUEST_TIMEOUT_MS,
+  HIGHSPEED_TRANSIENT_RETRY_DELAYS_MS,
+} from "../src/highspeed/highspeedHttpTransport.js";
 
 function deferred<T>() {
   let resolve!: (value: T) => void;
@@ -652,6 +655,34 @@ describe("HighspeedCardService", () => {
     expect(calls).toHaveLength(2);
   });
 
+  it("(FORK) falls back as draw-miss when the draw rejects inside the send budget, without throwing", async () => {
+    // spec §3 规则 16：draw 失败属于加速增强数据面——预算内 reject 也只降级 draw-miss 普通发送，
+    // 禁止异常上抛到 RPC/发送路径；in-flight 释放，下一轮重新 draw。
+    let now = 0;
+    let drawCalls = 0;
+    const { calls, transport } = createTransport(async (request) => {
+      drawCalls += 1;
+      if (drawCalls === 1) throw new Error("highspeed draw failed: 502");
+      return cardResponse(request.task_id, now);
+    });
+    const service = new HighspeedCardService({ transport, now: () => now });
+    const params = {
+      taskId: "task-1",
+      providerId: "account:zai-team-coding-plan",
+      model: "glm-5",
+      waitBudgetMs: 1000,
+    };
+
+    const first = await service.prepareTurn(params);
+    expect(first).toMatchObject({ kind: "fallback", reason: "draw-miss" });
+    expect((await service.getSnapshot()).drawing).toBe(false);
+
+    now += 1;
+    const second = await service.prepareTurn(params);
+    expect(second.kind).toBe("accelerated");
+    expect(calls).toHaveLength(2);
+  });
+
   it("honors next_draw_at and silently falls back for a foreign task card", async () => {
     let now = 30_000;
     const { calls, transport } = createTransport(async () => cardResponse("task-a", now));
@@ -836,7 +867,7 @@ describe("Highspeed HTTP contract", () => {
       }),
       healthyHeaders: async () => ({ Authorization: "Bearer must-not-be-logged" }),
       shareHeaders: async () => ({ Authorization: "Bearer must-not-be-logged" }),
-      logger: { warn },
+      logger: { warn, info: vi.fn() },
       fetchImpl: async (_input, init) => {
         requestHeaders = new Headers(init?.headers);
         return Response.json(
@@ -888,7 +919,7 @@ describe("Highspeed HTTP contract", () => {
       drawHeaders: async () => ({ Authorization: "Bearer draw-secret" }),
       healthyHeaders: async () => ({ Authorization: "Bearer healthy-secret" }),
       shareHeaders: async () => ({ Authorization: "Bearer share-secret" }),
-      logger: { warn },
+      logger: { warn, info: vi.fn() },
       fetchImpl: async () =>
         Response.json(
           { code: 3402, msg: "highspeed card is invalid" },
@@ -921,7 +952,7 @@ describe("Highspeed HTTP contract", () => {
       drawHeaders: async () => ({}),
       healthyHeaders: async () => ({}),
       shareHeaders: async () => ({}),
-      logger: { warn },
+      logger: { warn, info: vi.fn() },
       fetchImpl: async () =>
         Response.json(
           { ...cardResponse("task-1", 10_000), code: 2007, msg: "dependency failed" },
@@ -957,7 +988,9 @@ describe("Highspeed HTTP contract", () => {
         healthyBaseUrl: "https://example.test/api/v1/highspeed/",
         drawHeaders: async () => ({}),
         healthyHeaders: async () => ({}),
-        logger: { warn },
+        logger: { warn, info: vi.fn() },
+        // 本用例只验证 abort 机制本身；重试语义由固定退避表用例单独覆盖。
+        transientRetryDelaysMs: [],
         fetchImpl: (_input, init) =>
           new Promise<Response>((_resolve, reject) => {
             observedSignal = init?.signal;
@@ -988,5 +1021,100 @@ describe("Highspeed HTTP contract", () => {
     } finally {
       vi.useRealTimers();
     }
+  });
+
+  it("(FORK) retries a transient 502 on the fixed backoff schedule and then succeeds", async () => {
+    // spec §3 规则 6：网关 502 是瞬时失败，按固定退避表重试（表注入 + wait 注入保持同步）。
+    const warn = vi.fn();
+    const info = vi.fn();
+    const waits: number[] = [];
+    let fetchCalls = 0;
+    const transport = createHighspeedHttpTransport({
+      drawUrl: "https://example.test/api/v1/highspeed/draw",
+      healthyBaseUrl: "https://example.test/api/v1/highspeed/",
+      drawHeaders: async () => ({}),
+      healthyHeaders: async () => ({}),
+      logger: { warn, info },
+      transientRetryDelaysMs: [50, 150],
+      wait: async (ms) => {
+        waits.push(ms);
+      },
+      fetchImpl: async () => {
+        fetchCalls += 1;
+        if (fetchCalls === 1) {
+          return new Response("bad gateway", { status: 502, statusText: "Bad Gateway" });
+        }
+        return Response.json(cardResponse("task-1", 10_000));
+      },
+    });
+
+    const result = await transport.draw({ task_id: "task-1", provider: "zai", model: "glm-5" });
+    expect(result).toMatchObject({ code: 0, data: { card: { card_id: "hsc-1" } } });
+    // 固定退避表是契约的一部分：恰好两次重试，间隔编译期确定。
+    expect(HIGHSPEED_TRANSIENT_RETRY_DELAYS_MS).toEqual([1_000, 3_000]);
+    expect(fetchCalls).toBe(2);
+    expect(waits).toEqual([50]);
+    expect(warn).toHaveBeenCalledWith(
+      undefined,
+      "Highspeed 接口 HTTP 请求失败",
+      expect.objectContaining({ operation: "draw", status: 502 }),
+    );
+    expect(info).toHaveBeenCalledWith(
+      undefined,
+      "Highspeed 接口瞬时失败，按固定退避表重试",
+      expect.objectContaining({ operation: "draw", attempt: 1, retryDelayMs: 50 }),
+    );
+  });
+
+  it("(FORK) retries network failures a fixed number of times, never open-ended", async () => {
+    // spec §3 规则 6：固定表 [10, 20] = 初试 + 恰好两次重试；耗尽即上抛，不存在「n/10」式循环。
+    const warn = vi.fn();
+    const info = vi.fn();
+    const waits: number[] = [];
+    let fetchCalls = 0;
+    const transport = createHighspeedHttpTransport({
+      drawUrl: "https://example.test/api/v1/highspeed/draw",
+      healthyBaseUrl: "https://example.test/api/v1/highspeed/",
+      drawHeaders: async () => ({}),
+      healthyHeaders: async () => ({}),
+      logger: { warn, info },
+      transientRetryDelaysMs: [10, 20],
+      wait: async (ms) => {
+        waits.push(ms);
+      },
+      fetchImpl: async () => {
+        fetchCalls += 1;
+        throw new TypeError("network down");
+      },
+    });
+
+    await expect(
+      transport.draw({ task_id: "task-1", provider: "zai", model: "glm-5" }),
+    ).rejects.toThrow("network down");
+    expect(fetchCalls).toBe(3);
+    expect(waits).toEqual([10, 20]);
+    expect(info).toHaveBeenCalledTimes(2);
+  });
+
+  it("(FORK) does not retry business failures — server verdicts are final", async () => {
+    let fetchCalls = 0;
+    const transport = createHighspeedHttpTransport({
+      drawUrl: "https://example.test/api/v1/highspeed/draw",
+      healthyBaseUrl: "https://example.test/api/v1/highspeed/",
+      drawHeaders: async () => ({}),
+      healthyHeaders: async () => ({}),
+      logger: { warn: vi.fn(), info: vi.fn() },
+      transientRetryDelaysMs: [10],
+      wait: async () => {},
+      fetchImpl: async () => {
+        fetchCalls += 1;
+        return Response.json({ ...cardResponse("task-1", 10_000), code: 2007 });
+      },
+    });
+
+    await expect(
+      transport.draw({ task_id: "task-1", provider: "zai", model: "glm-5" }),
+    ).rejects.toThrow("business code 2007");
+    expect(fetchCalls).toBe(1);
   });
 });

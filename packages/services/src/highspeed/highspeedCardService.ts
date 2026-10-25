@@ -246,12 +246,22 @@ export class HighspeedCardService implements IHighspeedCardService {
     }
 
     const draw = this.inFlightDraw ?? this.startDraw(params, drawProviderId);
-    const outcome = await withinBudget(draw);
+    // (FORK) draw 失败属于加速增强数据面（spec §3 规则 16）：预算内 reject 也只降级 draw-miss
+    // 普通发送，禁止异常上抛到 RPC / 发送路径；预算外的后台 reject 由 Promise.race 的订阅兜住
+    // （释放 in-flight、下一轮重新 draw），不会变成 unhandled rejection。
+    const drawOutcome = draw.then(
+      (response) => ({ ok: true as const, response }),
+      () => ({ ok: false as const }),
+    );
+    const outcome = await withinBudget(drawOutcome);
     if (outcome.kind === "timeout") {
       return { kind: "fallback", reason: "draw-timeout", nextDrawAt: this.nextDrawAt };
     }
+    if (!outcome.value.ok) {
+      return { kind: "fallback", reason: "draw-miss", nextDrawAt: this.nextDrawAt };
+    }
 
-    this.applyDrawResponse(outcome.value);
+    this.applyDrawResponse(outcome.value.response);
     if (!this.card) {
       return { kind: "fallback", reason: "draw-miss", nextDrawAt: this.nextDrawAt };
     }

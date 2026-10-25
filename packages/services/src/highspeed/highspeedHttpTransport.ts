@@ -3,6 +3,7 @@ import {
   highspeedHealthyResponseSchema,
   type HighspeedDrawRequest,
 } from "@zcode/shared";
+import { ZodError } from "zod";
 import type { ServiceLogger } from "#src/logger/serviceLogger.js";
 import { withRequestIdHeader } from "#src/providers/api/requestIdHeaders.js";
 import type { HighspeedServiceTransport } from "./highspeedCardService.js";
@@ -14,6 +15,13 @@ const MAX_LOG_TEXT_CHARS = 1_000;
  * 同时保证永不返回的连接有界结束并释放 in-flight draw（spec §3 规则 6）。
  */
 export const HIGHSPEED_REQUEST_TIMEOUT_MS = 20_000;
+/**
+ * (FORK) 瞬时失败的固定退避表（spec §3 规则 6）：恰好两次重试（1s、3s），不是开放式的
+ * 「n/10 重连」——总尝试次数与总生命期上界在编译期确定。zcode.z.ai 网关存在秒级 502 抖动
+ * （2026-10-24/25 实测），单次失败即击穿抽卡；固定短退避把抖动吸收在 transport 内部，
+ * 不影响发送预算。测试可通过 transientRetryDelaysMs: [] 禁用。
+ */
+export const HIGHSPEED_TRANSIENT_RETRY_DELAYS_MS: readonly number[] = [1_000, 3_000];
 
 class HighspeedBusinessResponseError extends Error {
   constructor(
@@ -25,19 +33,53 @@ class HighspeedBusinessResponseError extends Error {
   }
 }
 
+/** HTTP 层失败（非 2xx）携带状态码，供瞬时分类（仅 502/503/504 重试）。 */
+class HighspeedHttpStatusError extends Error {
+  constructor(
+    readonly operation: "draw" | "healthy",
+    readonly status: number,
+  ) {
+    super(`highspeed ${operation} failed: ${status}`);
+    this.name = "HighspeedHttpStatusError";
+  }
+}
+
+/**
+ * (FORK) 瞬时失败判定（spec §3 规则 6）：网关 502/503/504、网络层异常、超时 abort 可重试；
+ * 业务码、4xx、JSON 结构/Schema 失败是服务端真实裁决，重试只会放大错误，立即上抛。
+ * 排除法实现：已知非瞬时类型（业务码 / ZodError / 200-垃圾响应 SyntaxError）之外，
+ * fetch/text 层抛出的 Error 视为链路瞬时故障。
+ */
+function isTransientHighspeedFailure(error: unknown): boolean {
+  if (error instanceof HighspeedHttpStatusError) {
+    return error.status === 502 || error.status === 503 || error.status === 504;
+  }
+  if (error instanceof HighspeedBusinessResponseError) return false;
+  if (error instanceof ZodError) return false;
+  if (error instanceof SyntaxError) return false;
+  return error instanceof Error;
+}
+
 export function createHighspeedHttpTransport(options: {
   drawUrl: string;
   healthyBaseUrl: string;
   drawHeaders: () => Promise<Record<string, string>>;
   healthyHeaders: () => Promise<Record<string, string>>;
   fetchImpl?: typeof fetch;
-  logger: Pick<ServiceLogger, "warn">;
+  logger: Pick<ServiceLogger, "warn" | "info">;
   /** 单次 draw/healthy 请求的生命期上限；缺省 HIGHSPEED_REQUEST_TIMEOUT_MS。 */
   requestTimeoutMs?: number;
+  /** (FORK) 瞬时失败退避表；缺省固定 [1s, 3s]（恰好两次重试），传 [] 禁用（测试）。 */
+  transientRetryDelaysMs?: readonly number[];
+  /** (FORK) 退避等待注入；缺省 setTimeout。 */
+  wait?: (milliseconds: number) => Promise<void>;
 }): HighspeedServiceTransport {
   const fetchImpl = options.fetchImpl ?? fetch;
   const logger = options.logger;
   const requestTimeoutMs = options.requestTimeoutMs ?? HIGHSPEED_REQUEST_TIMEOUT_MS;
+  const transientRetryDelaysMs =
+    options.transientRetryDelaysMs ?? HIGHSPEED_TRANSIENT_RETRY_DELAYS_MS;
+  const wait = options.wait ?? ((ms: number) => new Promise<void>((r) => setTimeout(r, ms)));
 
   async function performRequest<T>(params: {
     operation: "draw" | "healthy";
@@ -49,6 +91,8 @@ export function createHighspeedHttpTransport(options: {
   }): Promise<T> {
     const startedAt = Date.now();
     const safeUrl = sanitizeLogUrl(params.url);
+    // 凭证头一次解析、全部尝试复用：重试是同一个逻辑请求（同一 x-request-id 便于服务端对账），
+    // 且不重读凭证存储，避免退避期间凭据被切换导致前后尝试身份不一致。
     let headers: Headers;
     try {
       headers = withRequestIdHeader({
@@ -65,8 +109,41 @@ export function createHighspeedHttpTransport(options: {
       });
       throw error;
     }
-
     const requestId = headers.get("x-request-id") ?? undefined;
+
+    for (let attempt = 0; ; attempt += 1) {
+      try {
+        return await performAttempt<T>({ ...params, headers, requestId, startedAt });
+      } catch (error) {
+        const retryDelayMs = transientRetryDelaysMs[attempt];
+        if (retryDelayMs === undefined || !isTransientHighspeedFailure(error)) {
+          throw error;
+        }
+        logger.info(undefined, "Highspeed 接口瞬时失败，按固定退避表重试", {
+          operation: params.operation,
+          method: params.method,
+          url: safeUrl,
+          requestId,
+          attempt: attempt + 1,
+          retryDelayMs,
+          error: readErrorMessage(error, params.url, safeUrl),
+        });
+        await wait(retryDelayMs);
+      }
+    }
+  }
+
+  async function performAttempt<T>(params: {
+    operation: "draw" | "healthy";
+    method: "GET" | "POST";
+    url: string;
+    body?: HighspeedDrawRequest;
+    headers: Headers;
+    requestId: string | undefined;
+    startedAt: number;
+    parse: (payload: unknown) => { success: true; data: T } | { success: false; error: Error };
+  }): Promise<T> {
+    const safeUrl = sanitizeLogUrl(params.url);
     // Bug 根因：fetch 过去没有任何 deadline。代理/服务端接受连接后永不返回时 Promise 永久 pending，
     // 而 HighspeedCardService.inFlightDraw 只在该 Promise settle 的 finally 里释放——后续所有发送都
     // 复用这个死 Promise、各等 1s 再降级，整个应用生命周期内不再发起新 draw、next_draw_at 也无法更新。
@@ -83,7 +160,7 @@ export function createHighspeedHttpTransport(options: {
       try {
         response = await fetchImpl(params.url, {
           method: params.method,
-          headers,
+          headers: params.headers,
           signal: controller.signal,
           ...(params.body ? { body: JSON.stringify(params.body) } : {}),
         });
@@ -94,8 +171,8 @@ export function createHighspeedHttpTransport(options: {
           operation: params.operation,
           method: params.method,
           url: safeUrl,
-          requestId,
-          durationMs: Date.now() - startedAt,
+          requestId: params.requestId,
+          durationMs: Date.now() - params.startedAt,
           error: readErrorMessage(error, params.url, safeUrl),
         });
         throw error;
@@ -107,8 +184,8 @@ export function createHighspeedHttpTransport(options: {
         method: params.method,
         rawUrl: params.url,
         safeUrl,
-        requestId,
-        startedAt,
+        requestId: params.requestId,
+        startedAt: params.startedAt,
         response,
         parse: params.parse,
       });
@@ -177,9 +254,8 @@ async function readHighspeedResponse<T>(params: {
         responseHeaders,
         response: summarizeResponse(responseText),
       });
-      throw new Error(`highspeed ${params.operation} failed: ${params.response.status}`, {
-        cause: error,
-      });
+      // (FORK) 带 status 的类型化错误：瞬时分类只对 502/503/504 重试（spec §3 规则 6）。
+      throw new HighspeedHttpStatusError(params.operation, params.response.status);
     }
     logResponseFailure(params, "Highspeed 接口响应 JSON 解析失败", {
       responseHeaders,
@@ -195,7 +271,7 @@ async function readHighspeedResponse<T>(params: {
       responseHeaders,
       response: responseSummary,
     });
-    throw new Error(`highspeed ${params.operation} failed: ${params.response.status}`);
+    throw new HighspeedHttpStatusError(params.operation, params.response.status);
   }
 
   const parsed = params.parse(payload);

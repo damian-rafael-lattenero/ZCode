@@ -43,6 +43,7 @@ import { AiSdkModelAdapterError } from "./errors.js";
 import { canRetryEmptyCompletion, scheduleEmptyCompletionRetry } from "./empty-completion-retry.js";
 import { createStreamTextOptions } from "./runner-options.js";
 import {
+  createLiveCotTap,
   isDevelopmentModelIOEnv,
   recordStreamTextDebug,
   shouldRecordModelIO,
@@ -164,6 +165,18 @@ export async function* runStreamText(input: {
       attempt,
     );
     const toolCallAssembler = new StreamingToolCallAssembler({ logger: input.logger });
+    // FORK CHANGE (damian): one live-CoT tap per attempt — fed every yielded
+    // event, it keeps the live-io-<session>.jsonl sidecar current while the
+    // request streams (removed when the full record lands; see runner-debug).
+    const liveCotTap = createLiveCotTap({
+      attempt,
+      debugDir: input.debugDir,
+      isDev,
+      metadata: input.request.metadata,
+      recordModelIO,
+      requestId: statusContext.requestId,
+      startedAt,
+    });
     let streamIterator: AsyncIterator<TextStreamPart<ToolSet>> | undefined;
     let streamReachedNaturalEnd = false;
     let attemptFailed = false;
@@ -383,11 +396,13 @@ export async function* runStreamText(input: {
             emittedRetryBoundaryEvent = true;
             for (const pendingEvent of pendingRetrySafeEvents.splice(0)) {
               emittedEvent = true;
+              liveCotTap(pendingEvent);
               yield pendingEvent;
             }
             // 无 raw message-block provenance 的 provider 可能直接给完整 tool-call。
             // 先把 inferred block stop 交给隐藏 collector，再传播校验错误，避免 HTTP 重放。
             emittedEvent = true;
+            liveCotTap(directToolCommit);
             yield directToolCommit;
           }
           throw error;
@@ -448,6 +463,7 @@ export async function* runStreamText(input: {
             const observation = observeVisibleStreamEvent(visibleEvent, Date.now() - startedAt);
             await publishVisibleMilestones(observation);
             streamOutputCommitted = streamOutputCommitted || observation.outputCommitted;
+            liveCotTap(visibleEvent);
             yield visibleEvent;
           }
         }
@@ -475,6 +491,7 @@ export async function* runStreamText(input: {
           const observation = observeVisibleStreamEvent(visibleEvent, Date.now() - startedAt);
           await publishVisibleMilestones(observation);
           streamOutputCommitted = streamOutputCommitted || observation.outputCommitted;
+          liveCotTap(visibleEvent);
           yield visibleEvent;
         }
       }
@@ -484,6 +501,7 @@ export async function* runStreamText(input: {
         const observation = observeVisibleStreamEvent(pendingEvent, Date.now() - startedAt);
         await publishVisibleMilestones(observation);
         streamOutputCommitted = streamOutputCommitted || observation.outputCommitted;
+        liveCotTap(pendingEvent);
         yield pendingEvent;
       }
 

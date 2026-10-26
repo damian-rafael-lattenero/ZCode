@@ -8,7 +8,7 @@ import {
   writeFileSync,
 } from "node:fs";
 import { homedir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import type { ModelTextResult } from "@zcode/contracts";
 import { ZCODE_RUNTIME_ENV_KEY, normalizeZCodeRuntimeEnv } from "@zcode/shared";
 import { redactAnthropicRequestMetadata } from "./anthropic-request-metadata.js";
@@ -71,6 +71,135 @@ export function shouldRecordModelIO(env: EnvRecord): boolean {
 // 直接看 ZCODE_RUNTIME_ENV === "development";dev 桌面/CLI 启动时已注入该变量。
 export function isDevelopmentModelIOEnv(env: EnvRecord): boolean {
   return normalizeRuntimeEnv(env) === "development";
+}
+
+// FORK CHANGE (damian): live CoT sidecar — mid-request reasoning flushed to
+// disk (throttled) so file-based watchers (the Telegram bot's) see thinking
+// WHILE it happens instead of per completed request. The canonical
+// model-io-<session>.jsonl record stays exactly as before; partials live in
+// a sidecar `live-io-<session>.jsonl` next to it: truncated at each
+// request's first flush, appended at most once per throttle window, removed
+// when the request's full record lands. Must never affect the request path
+// (same rule as writeModelIODebugRecord).
+const LIVE_IO_THROTTLE_MS = 1000;
+const LIVE_IO_REASONING_TAIL_CHARS = 3000;
+const LIVE_IO_TEXT_TAIL_CHARS = 800;
+
+interface LiveCotTapContext {
+  attempt: number;
+  debugDir?: string;
+  isDev: boolean;
+  metadata: Record<string, unknown> | undefined;
+  recordModelIO: boolean;
+  requestId: string;
+  startedAt: number;
+}
+
+function liveCotSidecarPath(
+  sessionSegment: string,
+  debugDir: string | undefined,
+  isDev: boolean,
+): string {
+  return join(debugDir ?? getModelIOBaseDir(isDev), `live-io-${sessionSegment}.jsonl`);
+}
+
+// The request completed (its full record just landed): the sidecar has
+// nothing left to say. Best-effort; a crash mid-request leaves it behind and
+// the next request's first flush rewrites it anyway.
+export function clearLiveCotSidecar(input: {
+  debugDir?: string;
+  isDev: boolean;
+  metadata: Record<string, unknown> | undefined;
+}): void {
+  try {
+    const sessionId = stringMetadata(input.metadata?.sessionId);
+    if (!sessionId) {
+      return;
+    }
+    rmSync(
+      liveCotSidecarPath(sanitizeFileSegment(sessionId), input.debugDir, input.isDev),
+      { force: true },
+    );
+  } catch {
+    // never affects the request path
+  }
+}
+
+// One tap per model attempt: feed it the yielded stream events and it keeps
+// the sidecar's LAST line current ({type:"live_io_partial", reasoningChars,
+// reasoningTail, textChars, textTail, ...}). The first flush lands at once
+// (a file-based attach learns "it is thinking" the moment it starts); later
+// flushes are throttled. Tails are capped, so a line stays a few KB.
+export function createLiveCotTap(
+  context: LiveCotTapContext,
+): (event: { type: string; text?: string }) => void {
+  const sessionId = stringMetadata(context.metadata?.sessionId);
+  if (!context.recordModelIO || !sessionId) {
+    return () => {};
+  }
+  const filePath = liveCotSidecarPath(
+    sanitizeFileSegment(sessionId),
+    context.debugDir,
+    context.isDev,
+  );
+  const fixed = {
+    type: "live_io_partial",
+    sessionId,
+    querySource: stringMetadata(context.metadata?.querySource),
+    turnId: stringMetadata(context.metadata?.turnId),
+    traceId: stringMetadata(context.metadata?.traceId),
+    requestId: context.requestId,
+    attempt: context.attempt,
+    startedAt: new Date(context.startedAt).toISOString(),
+  };
+  let reasoningChars = 0;
+  let textChars = 0;
+  let reasoningTail = "";
+  let textTail = "";
+  let flushed = false;
+  let lastFlushAt = 0;
+  return (event) => {
+    try {
+      const delta =
+        event.type === "reasoning_delta" || event.type === "text_delta"
+          ? event.text ?? ""
+          : "";
+      if (!delta) {
+        return;
+      }
+      if (event.type === "reasoning_delta") {
+        reasoningChars += delta.length;
+        reasoningTail = (reasoningTail + delta).slice(-LIVE_IO_REASONING_TAIL_CHARS);
+      } else {
+        textChars += delta.length;
+        textTail = (textTail + delta).slice(-LIVE_IO_TEXT_TAIL_CHARS);
+      }
+      const now = Date.now();
+      if (flushed && now - lastFlushAt < LIVE_IO_THROTTLE_MS) {
+        return;
+      }
+      const line = `${stringifyDebugRecord({
+        ...fixed,
+        durationMs: now - context.startedAt,
+        reasoningChars,
+        reasoningTail,
+        textChars,
+        textTail,
+        updatedAt: new Date(now).toISOString(),
+      })}\n`;
+      // one sidecar per request: the first flush rewrites it, the rest append
+      mkdirSync(dirname(filePath), { recursive: true });
+      if (flushed) {
+        appendFileSync(filePath, line, "utf8");
+      } else {
+        writeFileSync(filePath, line, "utf8");
+        flushed = true;
+      }
+      lastFlushAt = now;
+    } catch {
+      // Model I/O debug logging must never affect the model request path.
+    }
+  };
 }
 
 export function recordGenerateTextDebug(input: {
@@ -157,6 +286,8 @@ export function recordGenerateTextDebug(input: {
     input.isDev,
     input.modelIoFullRetentionEnabled,
   );
+  // FORK CHANGE (damian): the full record landed — the live sidecar is spent.
+  clearLiveCotSidecar({ debugDir: input.debugDir, isDev: input.isDev, metadata });
 }
 
 /**
@@ -266,6 +397,8 @@ export async function recordStreamTextDebug(input: {
       input.isDev,
       input.modelIoFullRetentionEnabled,
     );
+    // FORK CHANGE (damian): the full record landed — the live sidecar is spent.
+    clearLiveCotSidecar({ debugDir: input.debugDir, isDev: input.isDev, metadata });
   } catch {
     // Model I/O debug logging must never affect the model request path.
   }

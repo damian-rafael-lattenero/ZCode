@@ -30,6 +30,7 @@ fail() { echo "[verify-deploy] FAIL: $*" >&2; exit 1; }
 AGENT_MARKERS=(
   "nextAttemptAtMs"         # Ola 4b: countdown absoluto (adapter publish)
   "usageLimitResetWaitMs"   # Ola 5: wait-until-reset (next_flush_time)
+  "live_io_partial"         # FORK live CoT: mid-request sidecar flush (runner-debug)
 )
 # renderer/shared 打包进 asar 且会经过压缩混淆：marker 必须是字面量（i18n key、
 # 属性名），函数名会被 minify 吃掉。asar 是二进制 → grep 需要 -a。

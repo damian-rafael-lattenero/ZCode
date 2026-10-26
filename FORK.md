@@ -21,6 +21,7 @@ Oct 2026); instead the change lives in source, as a normal git commit.
 | `[fork]` | `packages/ui/src/v4/SessionPane.tsx`, `packages/ui/src/SlashCommandPlugin.tsx` | **Client-side `/diff`**: an app-layer slash command that opens the Diff Ask panel instantly with NO model turn. App commands now take precedence over same-name CLI catalog entries (so the client-side /diff eclipses the CLI one). Requires a live session. |
 | `[fork]` | `packages/ui/test/useUiPluginRecommendations.test.ts`, `packages/ui/test/v4ConversationStatusPanelGitReview.test.ts`, `packages/ui/test/forkCommandModel.test.ts` | Expectations/new tests for the fork behavior. |
 | `[fork]` | `scripts/sync-upstream.sh`, `scripts/build-install.sh`, `scripts/bootstrap-diff-ask.sh`, `FORK.md` | This runbook. `build-install.sh` also ensures the Diff Ask plugin is installed (see "Diff Ask plugin" below). |
+| `[fork]` | `apps/zcode-cli/packages/adapters/src/model/runner-debug.ts`, `runner-stream.ts` (+ `tests/live-cot-tap.test.ts`) | **Live CoT sidecar**: mid-request reasoning/text flushed to `live-io-<session>.jsonl` next to the model-io rollout (first flush at once, then ≤1/s, tails capped 3k/800, rewritten per request, removed when the full record lands). File-based watchers (the Telegram bot) read thinking WHILE it happens instead of per completed request. The canonical `model-io-*.jsonl` is untouched. |
 
 Every modified upstream file carries a `FORK CHANGE` notice at the top (Apache-2.0 §4).
 `LICENSE` and `NOTICE.md` are kept intact.

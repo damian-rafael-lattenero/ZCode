@@ -147,6 +147,39 @@ describe("NodeSkillAdapter", () => {
     }
   });
 
+  it("(FORK·Ola 8) plugin 限定的请求名回落到裸段（模型把内置技能写成 插件:技能）", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "zcode-skills-"));
+    const skillDir = join(dir, ".zcode", "skills", "dynamic-workflows");
+
+    try {
+      await mkdir(skillDir, { recursive: true });
+      await writeSkill(skillDir, "dynamic-workflows", "Workflow authoring guidance");
+
+      const adapter = createNodeSkillAdapter({ homeDirectory: join(dir, "home") });
+
+      // 实测 2026-10-27：模型请求 "dynamic-workflows:dynamic-workflows" 直接 Skill not found，
+      // 计划执行被一次可纠正的笔误卡死。裸段回落必须命中；未知前缀同样回落（前缀不是身份）。
+      const loaded = await adapter.loadSkill({
+        name: "dynamic-workflows:dynamic-workflows",
+        workingDirectory: dir,
+      });
+      expect(loaded.metadata.name).toBe("dynamic-workflows");
+
+      const loadedOtherPrefix = await adapter.loadSkill({
+        name: "typo:dynamic-workflows",
+        workingDirectory: dir,
+      });
+      expect(loadedOtherPrefix.metadata.name).toBe("dynamic-workflows");
+
+      // 反方向不放宽：裸名请求不匹配带前缀的技能名，冒号结尾的畸形请求不命中。
+      await expect(
+        adapter.loadSkill({ name: "dynamic-workflows:", workingDirectory: dir }),
+      ).rejects.toThrow(/Skill not found/);
+    } finally {
+      await rm(dir, { force: true, recursive: true });
+    }
+  });
+
   it("loads skills without frontmatter by folder name", async () => {
     const dir = await mkdtemp(join(tmpdir(), "zcode-skills-"));
     const skillDir = join(dir, ".zcode", "skills", "plain-skill");

@@ -488,7 +488,12 @@ export function resolveDynamicWorkflowModeHostEnv(options: {
   if (options.isPreview) {
     return { [ZCODE_DYNAMIC_WORKFLOW_MODE_ENV]: "alwaysOn" };
   }
-  return {};
+  // FORK (damian, FORK.md Ola 8)：production 也固定 alwaysOn（同 preview）。
+  // 上游把「提供」交给 zcode.z.ai 的 client/configs 且 fail-closed——该网关 502 时
+  // （2026-10 实测，FORK.md Ola 3）动态工作流与 bundled skill 整个消失，运行中的
+  // 计划「找不到工具」。本地覆盖在任何网络动作之前裁决，根除网关健康对本机功能的门禁；
+  // 用户在设置里的显式选择仍永远优先（applyDynamicWorkflowUserMode 在覆盖之上折叠）。
+  return { [ZCODE_DYNAMIC_WORKFLOW_MODE_ENV]: "alwaysOn" };
 }
 
 export function buildHostProcessEnv(hostProcessLocalEnv: Record<string, string>) {

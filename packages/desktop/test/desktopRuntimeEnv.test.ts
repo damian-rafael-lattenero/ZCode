@@ -847,17 +847,19 @@ describe("desktopRuntimeEnv buildHostProcessEnv", () => {
       ).toEqual({ ZCODE_DYNAMIC_WORKFLOW_MODE: "alwaysOn" });
     });
 
-    it("打包 production 永不写入，shell 的合法取值同样无效", async () => {
+    it("(FORK·Ola 8) 打包 production 固定写入 alwaysOn，shell 的取值同样无效", async () => {
       const { resolveDynamicWorkflowModeHostEnv } =
         await import("../src/main/desktopRuntimeEnv.js");
 
+      // FORK：zcode.z.ai 网关 502 时 fail-closed 会把动态工作流整个关掉（FORK.md Ola 3/8）；
+      // production 与 preview 一样本地固定 alwaysOn，用户设置仍可覆盖。
       expect(
         resolveDynamicWorkflowModeHostEnv({
-          inheritedValue: "alwaysOn",
+          inheritedValue: "disabled",
           isPackaged: true,
           isPreview: false,
         }),
-      ).toEqual({});
+      ).toEqual({ ZCODE_DYNAMIC_WORKFLOW_MODE: "alwaysOn" });
     });
   });
 
@@ -889,22 +891,23 @@ describe("desktopRuntimeEnv buildHostProcessEnv", () => {
     expect(buildHostProcessEnv({}).ZCODE_DYNAMIC_WORKFLOW_MODE).toBe("alwaysOn");
   });
 
-  it("打包 production 的 host env 删除继承的 Dynamic Workflow 覆盖", async () => {
+  it("(FORK·Ola 8) 打包 production 的 host env 固定 alwaysOn，继承值被归一", async () => {
     appMock.isPackaged = true;
     productFlavorMock.value = "production";
     Object.defineProperty(process, "resourcesPath", {
       value: "/mock/resources",
       configurable: true,
     });
-    process.env["ZCODE_DYNAMIC_WORKFLOW_MODE"] = "alwaysOn";
+    process.env["ZCODE_DYNAMIC_WORKFLOW_MODE"] = "disabled";
 
     const { buildHostProcessEnv } = await import("../src/main/desktopRuntimeEnv.js");
 
-    // shell 和 .env 两条继承路径都要被删干净，本机环境变量不能自行打开灰度。
-    expect(buildHostProcessEnv({}).ZCODE_DYNAMIC_WORKFLOW_MODE).toBeUndefined();
+    // FORK：网关 502 的 fail-closed 会关掉整个动态工作流（FORK.md Ola 3/8）；
+    // production 与 preview 一致固定 alwaysOn——shell 想关也关不掉，用户设置仍可覆盖。
+    expect(buildHostProcessEnv({}).ZCODE_DYNAMIC_WORKFLOW_MODE).toBe("alwaysOn");
     expect(
-      buildHostProcessEnv({ ZCODE_DYNAMIC_WORKFLOW_MODE: "alwaysOn" }).ZCODE_DYNAMIC_WORKFLOW_MODE,
-    ).toBeUndefined();
+      buildHostProcessEnv({ ZCODE_DYNAMIC_WORKFLOW_MODE: "disabled" }).ZCODE_DYNAMIC_WORKFLOW_MODE,
+    ).toBe("alwaysOn");
   });
 });
 

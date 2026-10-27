@@ -415,7 +415,19 @@ function parseScalar(value: string | undefined): string | undefined {
 }
 
 function matchesSkillRequest(skill: SkillMetadata, requestName: string): boolean {
-  return skill.name === requestName || skill.qualifiedName === requestName;
+  if (skill.name === requestName || skill.qualifiedName === requestName) {
+    return true;
+  }
+  // FORK (damian, FORK.md Ola 8)：模型常把内置/无命名空间的技能按「插件:技能」习惯
+  // 拼写（实测 2026-10-27："dynamic-workflows:dynamic-workflows" → Skill not found，
+  // 整个计划执行被一次可纠正的笔误卡死）。限定为「冒号限定的请求回落到裸段」，
+  // 只放宽匹配面，不会把裸名请求放大到任意前缀。
+  const separatorIndex = requestName.lastIndexOf(":");
+  if (separatorIndex > 0 && separatorIndex < requestName.length - 1) {
+    const bareSegment = requestName.slice(separatorIndex + 1);
+    return skill.name === bareSegment || skill.qualifiedName === bareSegment;
+  }
+  return false;
 }
 
 async function readPluginNameForSkillRoot(skillRootPath: string): Promise<string | undefined> {

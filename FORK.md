@@ -322,3 +322,34 @@ exactamente el intento 10), ventana total **34:06**, countdown **por intento**.
   secuencia completa 1/10…10/10 es visible.
 - Nota: el "~16 min" reportado nunca ocurrió (máximo del día: 4:23 en el
   intento 9) — era la curva jitterada leída con expectativa de 2^n puros.
+
+## Ola 8 (27/10): los planes no encuentran sus herramientas — fail-closed del gateway
+
+Reporte: "ZCode no encuentra las herramientas para ejecutar los planes". El
+skill pack `dynamic-workflows` está sano (bundle + repo dist, 0 warns de
+carga). La cadena real de falla:
+
+1. La «oferta» del dynamic workflow sale de `configs.dynamicWorkflow.mode`
+   de zcode.z.ai (`client/configs`), **fail-closed a disabled** si el fetch
+   falla — y ese gateway es el de los 502 (Ola 3).
+2. En builds de producción, desktop main **borra** el env override local
+   `ZCODE_DYNAMIC_WORKFLOW_MODE` → la única fuente es la red.
+3. Sin elección del usuario en settings → efectivo = oferta = **disabled**
+   → CreateWorkflow + 9 herramientas + skill NO se registran.
+4. Síntoma adicional: el modelo invocó `Skill("dynamic-workflows:
+   dynamic-workflows")` (hábito plugin:skill) → `Skill not found`.
+
+Fix (de raíz + inmediato):
+
+- **Inmediato**: `~/.zcode/v2/setting.json` → `dynamicWorkflowMode:
+  "onDemand"` — la elección del usuario SIEMPRE le gana a la oferta fallida
+  (`applyDynamicWorkflowUserMode`); lecturas del archivo son por uso.
+- **Raíz**: `desktopRuntimeEnv.ts` — producción ahora fija
+  `ZCODE_DYNAMIC_WORKFLOW_MODE=alwaysOn` (igual que preview). El env override
+  se resuelve **antes de cualquier acción de red** → el gateway ya no gatea
+  la función. La elección del usuario sigue mandando encima.
+- **Tolerancia**: `matchesSkillRequest` (adapters/skills) — requests
+  «prefijo:nombre» prueban también el segmento desnudo; solo amplía el match,
+  no relaja nombres desnudos.
+- Tests: skills 19/19 (nuevo caso de fallback calificado), desktopRuntimeEnv
+  36/36 (producción ahora espera alwaysOn en dos tests actualizados).

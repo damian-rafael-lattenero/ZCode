@@ -153,6 +153,34 @@ describe("live cot sidecar tap", () => {
     }
   });
 
+  it("[fork] F81b counts tool-call argument streaming (the composing edit's growing lines)", () => {
+    const tap = createLiveCotTap({
+      attempt: 1,
+      debugDir: dir,
+      isDev: false,
+      metadata,
+      recordModelIO: true,
+      requestId: "req-1",
+      startedAt: Date.now(),
+    });
+    tap({ type: "tool_input_start", toolName: "Edit" } as never);
+    for (const chunk of ["line-1\n", "line-2\n", "line-3\n"]) {
+      tap({ type: "tool_input_delta", delta: chunk } as never);
+      vi.setSystemTime(new Date(Date.now() + 1100));
+    }
+    const last = records().at(-1)!;
+    expect(last.toolName).toBe("Edit");
+    expect(last.toolChars).toBe(21); // 3 chunks of "line-N\n" = 7 chars each
+    expect(String(last.toolTail).split("\n").length).toBeGreaterThanOrEqual(3);
+    // a second composition resets the counter: THIS edit, not the sum
+    tap({ type: "tool_input_start", toolName: "Write" } as never);
+    tap({ type: "tool_input_delta", delta: "x" } as never);
+    vi.setSystemTime(new Date(Date.now() + 1100));
+    const after = records().at(-1)!;
+    expect(after.toolName).toBe("Write");
+    expect(after.toolChars).toBe(1);
+  });
+
   it("clearLiveCotSidecar removes the sidecar after the full record", () => {
     feed(["hello"]);
     expect(existsSync(sidecar())).toBe(true);

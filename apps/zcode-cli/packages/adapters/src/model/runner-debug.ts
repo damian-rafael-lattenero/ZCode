@@ -84,6 +84,7 @@ export function isDevelopmentModelIOEnv(env: EnvRecord): boolean {
 const LIVE_IO_THROTTLE_MS = 1000;
 const LIVE_IO_REASONING_TAIL_CHARS = 3000;
 const LIVE_IO_TEXT_TAIL_CHARS = 800;
+const LIVE_IO_TOOL_TAIL_CHARS = 8000; // [fork] F81b: wider — the bot counts the composing edit's LINES from this tail
 
 interface LiveCotTapContext {
   attempt: number;
@@ -130,9 +131,20 @@ export function clearLiveCotSidecar(input: {
 // reasoningTail, textChars, textTail, ...}). The first flush lands at once
 // (a file-based attach learns "it is thinking" the moment it starts); later
 // flushes are throttled. Tails are capped, so a line stays a few KB.
+// [fork] F81b: tool-call ARGUMENT streaming also feeds the sidecar
+// (toolName/toolChars/toolTail) — while the model composes an Edit the
+// desktop header shows the edit's line count growing (20→42→100); the
+// bot mirrors that header, and until now its file source did not exist
+// (only reasoning/text deltas were counted). toolTail gets a WIDER cap
+// than textTail: the bot counts its lines while toolChars fits the cap.
 export function createLiveCotTap(
   context: LiveCotTapContext,
-): (event: { type: string; text?: string }) => void {
+): (event: {
+  type: string;
+  text?: string;
+  delta?: string;
+  toolName?: string;
+}) => void {
   const sessionId = stringMetadata(context.metadata?.sessionId);
   if (!context.recordModelIO || !sessionId) {
     return () => {};
@@ -156,20 +168,36 @@ export function createLiveCotTap(
   let textChars = 0;
   let reasoningTail = "";
   let textTail = "";
+  let liveToolName = "";
+  let toolChars = 0;
+  let toolTail = "";
   let flushed = false;
   let lastFlushAt = 0;
   return (event) => {
     try {
+      if (event.type === "tool_input_start" && event.toolName) {
+        // a NEW tool-call composition begins: reset the accumulator so
+        // the bot's counter mirrors THIS edit, not the sum of the turn
+        liveToolName = event.toolName;
+        toolChars = 0;
+        toolTail = "";
+        return;
+      }
       const delta =
         event.type === "reasoning_delta" || event.type === "text_delta"
           ? event.text ?? ""
-          : "";
+          : event.type === "tool_input_delta"
+            ? event.delta ?? ""
+            : "";
       if (!delta) {
         return;
       }
       if (event.type === "reasoning_delta") {
         reasoningChars += delta.length;
         reasoningTail = (reasoningTail + delta).slice(-LIVE_IO_REASONING_TAIL_CHARS);
+      } else if (event.type === "tool_input_delta") {
+        toolChars += delta.length;
+        toolTail = (toolTail + delta).slice(-LIVE_IO_TOOL_TAIL_CHARS);
       } else {
         textChars += delta.length;
         textTail = (textTail + delta).slice(-LIVE_IO_TEXT_TAIL_CHARS);
@@ -185,6 +213,9 @@ export function createLiveCotTap(
         reasoningTail,
         textChars,
         textTail,
+        toolName: liveToolName,
+        toolChars,
+        toolTail,
         updatedAt: new Date(now).toISOString(),
       })}\n`;
       // one sidecar per request: the first flush rewrites it, the rest append

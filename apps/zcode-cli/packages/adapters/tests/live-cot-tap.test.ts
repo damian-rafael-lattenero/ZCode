@@ -124,6 +124,35 @@ describe("live cot sidecar tap", () => {
     expect(existsSync(join(dir, "live-io-.jsonl"))).toBe(false);
   });
 
+  it("keeps the tail a true suffix of the whole reasoning across windows", () => {
+    // FORK CHANGE (damian): the bot's F75 cajitas RECONSTRUCT the text
+    // from the tail window (reasoningTail of reasoningChars) — across
+    // throttle windows and past the cap the tail must remain a strict
+    // SUFFIX of everything generated so far, and updatedAt must track
+    // the clock (the bot freshness-gates the file on it).
+    const tap = createLiveCotTap({
+      attempt: 1,
+      debugDir: dir,
+      isDev: false,
+      metadata,
+      recordModelIO: true,
+      requestId: "req-suffix",
+      startedAt: Date.now(),
+    });
+    const whole: string[] = [];
+    for (let i = 0; i < 6; i++) {
+      const chunk = String.fromCharCode(97 + i).repeat(1000);
+      whole.push(chunk);
+      tap({ type: "reasoning_delta", text: chunk });
+      vi.setSystemTime(new Date(Date.now() + 1500));
+      const last = records().at(-1)!;
+      const full = whole.join("");
+      expect(last.reasoningChars).toBe(full.length);
+      expect(String(last.reasoningTail)).toBe(full.slice(-3000));
+      expect(typeof last.updatedAt).toBe("string");
+    }
+  });
+
   it("clearLiveCotSidecar removes the sidecar after the full record", () => {
     feed(["hello"]);
     expect(existsSync(sidecar())).toBe(true);

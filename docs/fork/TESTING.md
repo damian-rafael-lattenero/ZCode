@@ -11,7 +11,7 @@
 | `packages/ui/test/chatApiRetryCountdown.test.ts` + `packages/shared/test/zcodeApiRetryStatus.test.ts` | 18 | ~3–5 s (jsdom) | countdown mm:ss, labels por reason, `toRetryStatus` última milla, normalizer |
 | `apps/…/core/tests/runtime-stream-recovery.test.ts` | 3 | ~6 s (import 5.8 s) | budget de recovery por fallas consecutivas (red-green) |
 | `apps/…/adapters/tests/failure-usage-limit-reset.test.ts` + `failure-classifier.test.ts` + `runner-retry.test.ts` | 109 | ~1.9 s | parser `next_flush_time`, tabla de códigos z.ai, bypass del gate 5 min |
-| `apps/…/adapters/tests/runner.test.ts` | 129 | ~2.6 s | curva 2^n con jitter=0 (random adverso), env parsing |
+| `apps/…/adapters/tests/runner.test.ts` | 129 | ~2.6 s | curva 2^n con jitter=0 (random adverso), env parsing, cap 60s default (verde tras §3.3) |
 | `apps/…/adapters/tests/skills.test.ts` | 19 | ~1.1 s | matcher de nombres `prefijo:nombre` → segmento desnudo |
 | `apps/…/bootstrap/tests/*projection*.test.ts` | 5 | ~5.5 s | proyección v4 (ApiRetryState con reason) |
 | `packages/services/test/forkModelRetrySpawnEnv.test.ts` | 3 | <1 s | inyección de env solo si el usuario no lo seteó |
@@ -50,8 +50,17 @@ cubren los contratos que el bot consume (sidecars, curvas, estados).
    NO es fmt-clean preexistente — correrlo ahí masacra el diff (~140 líneas
    de ruido). Edits a mano respetando el estilo del archivo.
    `pnpm fmt:check` falla repo-wide en ~2 136 archivos: preexistente.
-3. **`runner.test.ts` tiene 1 falla de baseline** (delay 64000 vs 60000,
-   verificada con stash el 25/10). No atribuirla a cambios nuevos.
+3. **(RESUELTO 28/10) `runner.test.ts` fallaba con 64000 vs 60000.**
+   Diagnóstico original (25/10, erróneo): "falla de baseline de upstream".
+   Causa real: correr vitest **dentro del agente spawn-eado del fork** hereda
+   `ZCODE_MODEL_RETRY_MAX_DELAY_MS=1024000` del spawn env — el cap de 60s del
+   test quedaba anulado. Upstream en CI (sin ese env) está verde. Fix:
+   `apps/zcode-cli/test/setup/fork-hermetic-env.ts` (setupFiles del vitest
+   del CLI) borra las variables que el fork inyecta; los tests que QUIEREN
+   probar comportamiento por env siguen pasándolo explícito. runner.test
+   129/129 verde. Lección general: cualquier test que corra en la app/bot
+   hereda el env del fork — desconfiar de fallos "misteriosos" que no
+   reproducen en CI.
 4. **Lint: 96–97 warnings preexistentes** (0 errores). Ninguno en archivos
    del fork al 28/10.
 5. **Un `| tail` en background devuelve el exit del tail** y enmascara

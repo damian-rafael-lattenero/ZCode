@@ -14,4 +14,16 @@ fi
 # shellcheck disable=SC2046
 unset $(git rev-parse --local-env-vars)
 # 修复原因：强制 mise 会阻止已用其他方式准备好 Node/pnpm 的开发者推送；沿用当前环境。
+# FORK (damian, FORK.md §Gotcha)：沿用当前环境的前提是环境里真的有 pnpm——交互 shell
+# 若未激活 mise（2026-10-28 实测：husky 127 "pnpm: command not found"），push 直接死。
+# 缺失时才把 mise shims 补进 PATH；已有 pnpm 的环境不受影响（尊重上面的注释）。
+if ! command -v pnpm >/dev/null 2>&1; then
+  for fork_pnpm_dir in "$HOME/.local/share/mise/shims" "$HOME/.mise/shims"; do
+    if [ -x "$fork_pnpm_dir/pnpm" ]; then
+      PATH="$fork_pnpm_dir:$PATH"
+      export PATH
+      break
+    fi
+  done
+fi
 ZCODE_PRE_PUSH_STDIN="$pre_push_stdin" pnpm run verify:pre-push

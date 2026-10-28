@@ -4,6 +4,26 @@ Personal fork of [zai-org/ZCode](https://github.com/zai-org/ZCode) (Apache-2.0).
 The app installed at `/Applications/ZCode.app` on this Mac is **built from this
 repo**, not downloaded from Z.ai. Updates arrive only through the ritual below.
 
+## Mapa de documentación (empezar por acá)
+
+- **[docs/fork/ARCHITECTURE.md](docs/fork/ARCHITECTURE.md)** — el mapa maestro:
+  componentes (app fork / agente CLI / bot de Telegram), diagrama, **por qué
+  el bot es headless**, los 10 patrones de diseño del fork con el commit que
+  los introduce, la tabla bot↔fork (qué commit habilita qué en el bot), y
+  las decisiones de arquitectura registradas con su por-qué.
+- **[docs/fork/TESTING.md](docs/fork/TESTING.md)** — suites con duraciones
+  **medidas**, el pipeline de verificación por cambio, las grietas conocidas
+  (typecheck raíz no cubre `apps/`, oxfmt no cubre `apps/`, baseline fallido
+  de `runner.test.ts`), y cómo se testea el deploy (`verify-deploy.sh`).
+- **Este archivo (FORK.md)** — runbook operativo: ritual de sync/deploy,
+  rollback, ledger de builds y el historial de olas (cronológico, con el
+  diagnóstico de cada una).
+
+Sistema en una línea: la app del fork sobrevive a la red inestable de z.ai
+y publica hechos (sidecars, eventos, countdowns); el bot de Telegram
+(`~/.zcode/hooks/zcode_bot/`) los lee y convierte la Mac en controlable
+desde el teléfono — la frontera entre ambos son archivos JSONL, no APIs.
+
 ## Why a fork
 
 Z.ai does not accept community PRs ("Only collaborators can create PRs") and the
@@ -12,6 +32,23 @@ feature request for a first-class Diff Ask entry went unanswered. The ZCode
 Oct 2026); instead the change lives in source, as a normal git commit.
 
 ## What the fork changes
+
+Áreas del fork (detalle archivo-por-archivo en las Olas de abajo y en
+[ARCHITECTURE.md §4–5](docs/fork/ARCHITECTURE.md)):
+
+| Área | Olas / commits | Resumen |
+| --- | --- | --- |
+| Diff Ask (3 superficies + bootstrap) | `e01206ef`, `6d441a8a`, `7c33c912`, `a3bd3f9b` | Card en plugins grid, Changes→Diff Ask, `/diff` client-side, install idempotente |
+| `model:` frontmatter por comando | `7c33c912` | El turno corre en el modelo que el comando pide |
+| Verbosidad del transcript | `942e82f7` | Modos de detalle + switch "expandir TODO" retroactivo |
+| Resiliencia red z.ai | `2b2d17a0`, `f6034b5f`, `c578e14a`, `f85a67f6` | Retry tabla fija, backoff 2^n a 1024s sin jitter, budget por fallas consecutivas |
+| Estados honestos en UI | `c578e14a`, `9bb337bf`, `3ab83c67` | Countdown absoluto mm:ss + labels por causa, en DOS superficies |
+| Límites de uso z.ai | `08d05f36` | `next_flush_time` → esperar al reset (tope 24h) en vez de morir |
+| Workflows siempre disponibles | `2ac70c51` | El gateway ya no puede apagar los planes; Skill tolera `prefijo:nombre` |
+| Telemetría viva para el bot | `1e4f7413`, `4b46d692`, `d4f231bc` | Sidecars live-io: CoT en vivo + tool-args componiéndose |
+| Deploy verificado | `f6659e93`, `40f0c958`, `d1c0b9f5` | Runbook, `verify-deploy.sh` con markers, build-install `--yes/--when-quit/--zip` |
+
+Detalle histórico (los primeros cambios):
 
 | Commit prefix | File | Change |
 | --- | --- | --- |

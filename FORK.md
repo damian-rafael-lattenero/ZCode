@@ -295,9 +295,9 @@ terminal a "reintentar a esa hora":
 - UI: el countdown de Ola 4b ya lo muestra ("Reconnecting 2/11 · 1:59:32").
 
 Tests: 11 del parser + 4 del clasificador (incluye 1113 intocado y 1308 sin
-flush sigue terminal) + 3 del bypass del gate. `runner.test.ts` tiene 1 falla
-preexistente en el baseline (delay 64000 vs 60000) verificada con stash — no
-es de esta ola.
+flush sigue terminal) + 3 del bypass del gate. (Corrección 28/10: la "falla
+de baseline" de `runner.test.ts` citada acá era el env del fork filtrándose
+a vitest — ver Ola 9 / docs/fork/TESTING.md §3.3; ya fixeada.)
 
 
 

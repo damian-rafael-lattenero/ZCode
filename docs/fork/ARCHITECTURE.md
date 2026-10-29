@@ -37,7 +37,10 @@ proceso puede leer un archivo, y un archivo sobrevive a ambos.
 │  Host (utility process) — packages/services                                                 │
 │   ├─ zcodeAgentService ──── spawn del agente + policy sync (dynamic workflow, off-peak)     │
 │   ├─ forkModelRetrySpawnEnv ── inyecta defaults de retry SOLO si el usuario no los seteó    │
-│   └─ codingPlanSubscription ── client/configs de zcode.z.ai (fail-closed ⇐ Ola 8 lo anula)  │
+│   ├─ codingPlanSubscription ── client/configs de zcode.z.ai (fail-closed ⇐ Ola 8 lo anula)  │
+│   └─ daemonChannel (B3a) ── unix socket ~/.zcode/daemon-local.sock: inbound al mismo camino │
+│                             que el composer + stream bot-channel-continuous + queries       │
+│                             (ADR-022; spec: docs/fork/DAEMON-CHANNEL.md)                    │
 │                                                                                             │
 │  Renderer (app.asar) — packages/ui                                                          │
 │   ├─ pill del chat: toRetryStatus → ChatApiRetryStatus (labels por reason + countdown)      │
@@ -180,6 +183,19 @@ del app — un swap sin bundle deja el dist viejo y "el deploy no impactó".
 El bot NO depende del fork para existir (degrada a "sin cajitas/sin
 countdown"), pero el fork es lo que lo hace **útil**: sin sidecars, el bot
 solo ve el post-mortem de los logs.
+
+### 5.1 El canal daemon-local (B3a, ADR-022 — 2026-10-29)
+
+La frontera histórica "archivos sidecar" tenía un techo: un proceso externo
+NO puede escribir en la conversación real (el stdio del agente es privado
+del Host; resumir la sesión desde afuera crea un segundo runtime). B3a abre
+el camino nativo: un unix socket del Host
+([`DAEMON-CHANNEL.md`](./DAEMON-CHANNEL.md)) que expone inbound vía
+`handleInboundMessage` (el MISMO pipeline del composer), el stream
+`bot-channel-continuous` y queries de servicio (listTasks/quota/meta/stop).
+El daemon Kotlin (B3b, repo `zcode-bot-kotlin`) es el cliente. En live mode
+el canal reemplaza al sidecar live-io como fuente de CoT/tool-args; el
+sidecar queda para el modo headless y el post-mortem.
 
 ## 6. Decisiones de arquitectura registradas (y por qué)
 

@@ -296,6 +296,9 @@ export * from "./mcp.js";
 export * from "./runtime-tool-runtime.js";
 export * from "./git.js";
 export * from "./bots.js";
+// [fork] B3a: contrato del canal «daemon local» (ADR-022), consumido también
+// por el cliente Kotlin del daemon como fuente normativa de shapes.
+export * from "./daemon-channel.js";
 export * from "./assistant-message-parts.js";
 export * from "./zcodePersistedMessageMerge.js";
 export * from "./assistant-presentation.js";

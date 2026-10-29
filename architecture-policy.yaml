@@ -747,6 +747,12 @@ global:
   acceptedUpstreamSnapshot: scripts/architecture/upstream-snapshot.json
 
 exceptions:
+  - id: fork-daemon-local-channel-new-files
+    rule: unmanaged-new-file
+    paths:
+      - packages/shared/src/daemon-channel.ts
+      - packages/services/src/bots/daemonChannel.ts
+    reason: "[fork] B3a (ADR-022): the daemon-local channel contract lives in shared (wire types consumed by the Kotlin client as the normative shapes) and the unix-socket server lives beside the bots channel runtimes in services; both are additive fork files, boundaries and owners of the surrounding packages are unchanged."
   - id: side-pane-full-view-shortcut-command-edit
     rule: unmanaged-new-file
     paths: [packages/shared/src/shortcutCommands.ts]

@@ -30,6 +30,9 @@ export const botProviders = [
   "feishu",
   "lark",
   "weixin",
+  // [fork] B3a (ADR-022): canal «daemon local» — bot sintética del unix socket;
+  // sin adapter de salida (las replies viajan por el socket) ni flujo de alta en UI.
+  "daemon",
   "discord",
   "wecom",
 ] as const;

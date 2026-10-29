@@ -840,6 +840,12 @@ export function createBotsService(
     weixin: createWeixinBotProvider({
       loadCredential: (key) => deps.credentialService.load(key),
     }),
+    // [fork] B3a: el canal daemon no envía salidas por provider adapter — las
+    // replies de handleInboundMessage vuelven por el socket y el stream crudo
+    // lo consume la propia conexión (daemonChannel.ts). Adapter null ⇒
+    // sendOutbound/startTyping lo salen sin efecto, y privateSyncSupported no
+    // lo lista, así que tampoco arma la suscripción persistente de replies.
+    daemon: null,
     discord: null,
     wecom: null,
   };

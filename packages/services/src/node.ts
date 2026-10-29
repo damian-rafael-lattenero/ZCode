@@ -174,6 +174,8 @@ export type {
 } from "./cua-permission-broker/index.js";
 export { createProjectWorkspaceNavigation } from "#src/project-workspace-navigation/index.js";
 export { createBotsService } from "./bots/botsService.js";
+// [fork] B3a
+export { createDaemonLocalChannel } from "./bots/daemonChannel.js";
 export { createFileWatcherService } from "./fileWatcher/fileWatcherService.js";
 export { createOAuthService } from "./oauth/oauthService.js";
 export { createOAuthProviderLogoutHandler } from "./oauth/oauthProviderLogout.js";
@@ -436,6 +438,8 @@ import { TaskIndexRepo } from "./session/taskIndexRepo.js";
 import { AutomationRepo } from "#src/session/automationRepo.js";
 import type { AppSettings } from "@zcode/shared";
 import { createBotsService } from "./bots/botsService.js";
+// [fork] B3a: canal «daemon local» del bot Kotlin (ADR-022).
+import { createDaemonLocalChannel } from "./bots/daemonChannel.js";
 import { BotsRepo } from "#src/bots/repo.js";
 import {
   createBotProjectRuntime,
@@ -738,6 +742,12 @@ export function getOffPeakRequestAuthBuilder(
   return offPeakRequestAuthBuilders.get(services);
 }
 const managedHostApiNetworkTransports = new WeakMap<ServiceCollection, HostApiNetworkTransport>();
+// [fork] B3a: canal «daemon local» (unix socket del bot Kotlin). El Host es el
+// dueño del socket — muere con el proceso, el daemon reconecta (ADR-022).
+const daemonLocalChannels = new WeakMap<
+  ServiceCollection,
+  { dispose(): Promise<void> }
+>();
 
 export function registerManagedCuaHelperHostForDispose(
   services: ServiceCollection,
@@ -2645,6 +2655,25 @@ export function createLocalServices(options: {
   const marketingAssets = createMarketingAssetRegistry({
     allowLoopback: ZCODE_ENV === "test" || process.env.NODE_ENV === "development",
   });
+  // [fork] B3a: botsService se alza antes de la cadena para que el canal
+  // daemon-local cierre sobre la MISMA instancia que se registra acá.
+  const botsService = createBotsService({
+    repo: botsRepo,
+    projectService,
+    remoteProjectService,
+    ownerHostId: options?.projectStorageHostId ?? "local",
+    credentialService,
+    zcodeTaskService,
+    broadcastService,
+    settingService,
+    modelSelectionService: providerRuntime.modelSelection,
+    remoteWorkspaceService: botRemoteWorkspaceService
+      ? { ...botRemoteWorkspaceService, resolveWorkspace: options?.resolveBotRemoteWorkspace }
+      : undefined,
+    // 远端与本地 Bot 都读取所属 Environment 的 Model Selection View。
+    // 远端启动期不再轮询旧 Preset，避免重新制造一套模型候选事实。
+    runStartupBackgroundTasks: !isDesktopAttachedRemote,
+  });
   const services = new ServiceCollection()
     .register(
       IMarketingTouchService,
@@ -2683,26 +2712,7 @@ export function createLocalServices(options: {
     .register(ICuaPermissionService, cuaPermissionService)
     .register(ICuaPipSessionService, cuaPipSessionService)
     .register(IConversationShareService, conversationShareService)
-    .register(
-      IBotsService,
-      createBotsService({
-        repo: botsRepo,
-        projectService,
-        remoteProjectService,
-        ownerHostId: options?.projectStorageHostId ?? "local",
-        credentialService,
-        zcodeTaskService,
-        broadcastService,
-        settingService,
-        modelSelectionService: providerRuntime.modelSelection,
-        remoteWorkspaceService: botRemoteWorkspaceService
-          ? { ...botRemoteWorkspaceService, resolveWorkspace: options?.resolveBotRemoteWorkspace }
-          : undefined,
-        // 远端与本地 Bot 都读取所属 Environment 的 Model Selection View。
-        // 远端启动期不再轮询旧 Preset，避免重新制造一套模型候选事实。
-        runStartupBackgroundTasks: !isDesktopAttachedRemote,
-      }),
-    )
+    .register(IBotsService, botsService)
     .register(IFileWatcherService, createFileWatcherService())
     .register(IOAuthService, oauthService)
     .register(ISourceServerWorkspaceService, sourceServerWorkspaceService)
@@ -3020,6 +3030,25 @@ export function createLocalServices(options: {
   // 见 sharedSqliteRepos 声明处注释：登记全部 tasks-index sqlite 句柄，dispose 链统一关闭
   sqliteReposToClose.push(taskIndexRepo);
   sharedSqliteRepos.set(services, sqliteReposToClose);
+  // [fork] B3a (ADR-022): canal «daemon local» del bot Kotlin. El Host (este
+  // utility process) es el dueño del socket: vive y muere con él. El main de
+  // Electron no participa. desktop-attached remote hosts no lo exponen — el
+  // canal pertenece al host local donde corre la conversación real.
+  if (!isDesktopAttachedRemote) {
+    const daemonChannel = createDaemonLocalChannel({
+      botsService,
+      zcodeTaskService,
+      usageStatsService: services.getOptional(IUsageStatsService),
+    });
+    daemonLocalChannels.set(services, daemonChannel);
+    void daemonChannel.start().catch((error: unknown) => {
+      createServiceLogger("daemon-channel").error(
+        undefined,
+        "daemon channel failed to start",
+        error,
+      );
+    });
+  }
   return services;
 }
 
@@ -3142,6 +3171,10 @@ export function disposeServiceResources(services: ServiceCollection): void {
   taskAutoArchiveDisposers.get(services)?.();
   taskAutoArchiveDisposers.delete(services);
   managedHostApiNetworkTransports.get(services)?.dispose();
+  // [fork] B3a: el socket muere con el host (ADR-022); el dispose síncrono es
+  // best-effort — la variante await espera el cierre real (bye + unlink).
+  void daemonLocalChannels.get(services)?.dispose().catch(() => undefined);
+  daemonLocalChannels.delete(services);
 }
 
 export async function disposeServiceResourcesAndWait(services: ServiceCollection): Promise<void> {
@@ -3189,6 +3222,12 @@ export async function disposeServiceResourcesAndWait(services: ServiceCollection
     .get(services)
     ?.disposeAndWait()
     .catch(() => {});
+  // [fork] B3a: bye best-effort a los clientes y cierre real del unix socket.
+  await daemonLocalChannels
+    .get(services)
+    ?.dispose()
+    .catch(() => undefined);
+  daemonLocalChannels.delete(services);
 }
 
 /** 所有应用入口在开放 RPC / 调度器前等待；失败不启动业务写者。 */

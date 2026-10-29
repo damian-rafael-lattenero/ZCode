@@ -1057,6 +1057,7 @@ const zhCN: Record<string, string> = {
   "bots.channel.discord": "Discord",
   "bots.channel.wecom": "企业微信",
   "bots.channel.webhook": "Webhook",
+  "bots.channel.daemon": "本地守护进程",
   "bots.newBot.title": "新建机器人",
   "bots.newBot.chooseChannel": "选择渠道",
   "bots.newBot.description":

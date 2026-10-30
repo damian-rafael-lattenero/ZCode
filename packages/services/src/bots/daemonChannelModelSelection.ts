@@ -60,7 +60,17 @@ function projectModelPlans(view: ModelSelectionView): DaemonChannelModelSelectio
     .map((provider) => ({
       providerId: provider.providerId,
       label: provider.providerName?.trim() || provider.providerId,
-      models: provider.models.map((model) => ({ id: model.modelId, label: model.modelId })),
+      // El effort vocabulary real de cada modelo viaja en la respuesta: es el
+      // MISMO catálogo que valida setModelSelection (setDefault/assertEffortAllowed).
+      // Sin esto el cliente no puede marcar 🎯 en el effort vigente (p. ej. «max»).
+      models: provider.models.map((model) => {
+        const levels = model.config.optionSpecs.reasoningLevel.values;
+        return {
+          id: model.modelId,
+          label: model.modelId,
+          ...(levels.length > 0 ? { reasoningLevels: [...levels] } : {}),
+        };
+      }),
     }));
 }
 

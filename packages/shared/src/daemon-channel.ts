@@ -235,7 +235,16 @@ export interface DaemonChannelModelSelectionInfo {
 export interface DaemonChannelModelSelectionPlan {
   providerId: string;
   label: string;
-  models: Array<{ id: string; label: string }>;
+  models: Array<{
+    id: string;
+    label: string;
+    /**
+     * Efforts («reasoningLevel») que el modelo acepta, de menor a mayor
+     * (el MISMO catálogo que valida setModelSelection: optionSpecs). Aditivo y
+     * opcional: servers viejos no lo mandan y el cliente cae a su vocabulario.
+     */
+    reasoningLevels?: string[];
+  }>;
 }
 
 /** Resultado de `modelSelection` y `setModelSelection`. */

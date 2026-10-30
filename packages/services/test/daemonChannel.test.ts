@@ -461,7 +461,8 @@ describe("daemon local channel (B3a)", () => {
           {
             providerId: "account:zai-individual-coding-plan",
             label: "Z.ai Coding Plan",
-            models: [{ id: "GLM-5.3", label: "GLM-5.3" }],
+            // El vocabulary de effort del catálogo viaja con cada modelo (aditivo).
+            models: [{ id: "GLM-5.3", label: "GLM-5.3", reasoningLevels: ["low", "high"] }],
           },
         ],
       },

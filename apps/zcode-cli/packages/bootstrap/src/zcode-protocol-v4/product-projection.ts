@@ -375,6 +375,10 @@ function modelRetryReasonCode(
     // off-peak 排队（429/3105）语义上就是"上游让我们等"，UI 归入限流可恢复形态。
     case "offpeak_queued":
       return "fault.provider.rateLimited";
+    // (FORK) 配额耗尽等到重置：收敛码仍归限流族（reasonCode 是旧读者的兜底路径）；
+    // 原始 reason=usage_limit_reset 随 apiRetry.reason 透传，UI 据此选 quota 文案。
+    case "usage_limit_reset":
+      return "fault.provider.rateLimited";
     case "provider_overloaded":
     case "server_error":
       return "fault.provider.serverError";

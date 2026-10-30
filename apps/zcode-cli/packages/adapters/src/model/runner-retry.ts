@@ -114,6 +114,11 @@ export function logRetryDelayDecision(input: {
     ...(input.failure.usageLimitResetWaitMs === undefined
       ? {}
       : { usageLimitResetWaitMs: input.failure.usageLimitResetWaitMs }),
+    // (FORK·时区守卫) next_flush_time 的原始字符串：生产上确认 z.ai 下发的时间形态
+    // （是否带时区偏移）——裸本地时间只触发 5min 保守探测，证据必须落盘。
+    ...(input.failure.usageLimitResetRawTime === undefined
+      ? {}
+      : { usageLimitResetRawTime: input.failure.usageLimitResetRawTime }),
     retryReason: input.failure.retryReason,
     status: input.canRetry ? "waiting" : "failed",
     statusCode: input.failure.statusCode,

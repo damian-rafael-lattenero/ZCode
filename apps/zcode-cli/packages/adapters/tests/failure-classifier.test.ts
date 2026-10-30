@@ -1076,7 +1076,7 @@ describe("(FORK) usage limit reset: next_flush_time makes 1308/1310/1316-1321 wa
     vi.useRealTimers();
   });
 
-  it("1308 with next_flush_time in the body becomes retryable with the reset wait", () => {
+  it("1308 with next_flush_time in the body becomes retryable with the reset wait and quota reason", () => {
     const failure = classifyModelFailure(
       new ProviderBusinessError({
         providerCode: "1308",
@@ -1095,17 +1095,40 @@ describe("(FORK) usage limit reset: next_flush_time makes 1308/1310/1316-1321 wa
       }),
     );
 
+    // (FORK·B2) 带 next_flush_time 的 1308 族不再伪装成秒级限流：reason/retryReason
+    // 均为 usage_limit_reset，UI 据此显示「配额耗尽」+ 真实重置倒计时。
     expect(failure).toMatchObject({
       code: "model_rate_limited",
-      reason: "rate_limited",
+      reason: "usage_limit_reset",
+      retryReason: "usage_limit_reset",
       retryable: true,
       retryAfterMs: 2 * 3_600_000,
       usageLimitResetWaitMs: 2 * 3_600_000,
+      usageLimitResetRawTime: "2026-10-25T20:00:00Z",
       statusCode: 429,
     });
   });
 
-  it("1316 with the reset time interpolated in the message becomes retryable (UTC assumed)", () => {
+  it("1316 with an explicit-offset reset time in the message waits exactly until it", () => {
+    const failure = classifyModelFailure(
+      providerBusinessError({
+        providerCode: "1316",
+        providerMessage:
+          "Error code: 1316 - Your usage limit has been reached. Your limit will reset at 2026-10-25T19:30:00Z.",
+        statusCode: 429,
+      }),
+    );
+
+    expect(failure).toMatchObject({
+      code: "model_rate_limited",
+      reason: "usage_limit_reset",
+      retryable: true,
+      usageLimitResetWaitMs: 90 * 60_000,
+      usageLimitResetRawTime: "2026-10-25T19:30:00Z",
+    });
+  });
+
+  it("1316 with a bare (offset-less) reset time only gets the conservative 5-minute probe", () => {
     const failure = classifyModelFailure(
       providerBusinessError({
         providerCode: "1316",
@@ -1115,10 +1138,14 @@ describe("(FORK) usage limit reset: next_flush_time makes 1308/1310/1316-1321 wa
       }),
     );
 
+    // (FORK·时区守卫) 裸 datetime 可能是北京时间字面量：按 UTC 假设会晚 8h。
+    // 只排 5min 保守探测（runner 分段循环自校正），原始字符串随分类结果带给决策日志。
     expect(failure).toMatchObject({
       code: "model_rate_limited",
+      reason: "usage_limit_reset",
       retryable: true,
-      usageLimitResetWaitMs: 90 * 60_000,
+      usageLimitResetWaitMs: 5 * 60_000,
+      usageLimitResetRawTime: "2026-10-25 19:30:00",
     });
   });
 

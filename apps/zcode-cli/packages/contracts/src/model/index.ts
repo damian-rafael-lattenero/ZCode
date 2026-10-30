@@ -137,6 +137,12 @@ export const ModelRetryReason = {
   ReasoningSignatureRepair: "reasoning_signature_repair",
   /** off-peak 闲时排队（429/3105+Retry-After）：豁免重试预算、无限探测（仅 idle plan provider）。 */
   OffpeakQueued: "offpeak_queued",
+  /**
+   * (FORK) z.ai 用量窗口耗尽（1308/1310/1316-1321 + 可解析的 next_flush_time）：
+   * 等到重置点再试。与秒级 rate_limited 是两种处境——等待可达小时级且用户充值即可提前解除，
+   * UI 需要独立的「配额耗尽」文案与真实重置倒计时。
+   */
+  UsageLimitReset: "usage_limit_reset",
 } as const;
 
 export type ModelRetryReason = (typeof ModelRetryReason)[keyof typeof ModelRetryReason];

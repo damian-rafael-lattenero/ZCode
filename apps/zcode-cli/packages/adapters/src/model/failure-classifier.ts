@@ -33,8 +33,7 @@ import {
   isRetryableProviderBusinessTimeoutFailure,
 } from "./failure-provider-business-codes.js";
 import {
-  parseNextFlushTimeAtMs,
-  resolveUsageLimitResetWaitMs,
+  resolveUsageLimitResetWait,
   USAGE_LIMIT_RESET_PROVIDER_CODES,
 } from "./failure-usage-limit-reset.js";
 import { isModelStreamIdleTimeoutError } from "./stream-idle-timeout.js";
@@ -50,6 +49,11 @@ export interface ClassifiedModelFailure {
   retryAfterMs?: number;
   /** (FORK) 等到用量窗口重置的等待时长（来自 next_flush_time，已钳制）；仅解析成功时存在。 */
   usageLimitResetWaitMs?: number;
+  /**
+   * (FORK) next_flush_time 的原始字符串（message 插值片段或字段原值）。随 retry 决策日志
+   * 落盘：生产上能看到 z.ai 实际下发的时间形态（含裸本地时间——时区守卫的输入证据）。
+   */
+  usageLimitResetRawTime?: string;
   statusCode?: number;
 }
 
@@ -357,28 +361,35 @@ function classifyProviderBusinessFailure(
   const effectiveStatusCode = resolveProviderBusinessStatusCode(error, statusCode);
   // (FORK) 1308/1310/1316-1321 携带 next_flush_time（重置时刻）；解析成功时把终态
   // 改为等到重置点重试（配合 FORK.md Ola 4b 的倒计时），失败则保持终态快速失败。
-  const usageLimitResetWaitMs =
+  // 裸 datetime（无时区偏移）不可信：只给 5min 保守探测（时区守卫，runner 分段自校正）。
+  const usageLimitReset =
     providerCode !== undefined && USAGE_LIMIT_RESET_PROVIDER_CODES.has(providerCode)
-      ? resolveUsageLimitResetWaitMs(
-          parseNextFlushTimeAtMs({
+      ? resolveUsageLimitResetWait(
+          {
             summary: error.responseBodySummary,
             providerMessage: error.providerMessage,
             message: error.message,
-          }),
+          },
           Date.now(),
         )
       : undefined;
+  const usageLimitResetWaitMs = usageLimitReset?.waitMs;
   const mappedFailure = providerCode ? getProviderBusinessCodeMapping(providerCode) : undefined;
   if (mappedFailure) {
     if (usageLimitResetWaitMs !== undefined) {
       return {
         code: mappedFailure.code,
         message: mappedFailure.message ?? message,
-        reason: mappedFailure.reason,
-        retryReason: mappedFailure.retryReason,
+        // (FORK·B2) 诚实文案：带 next_flush_time 的 1308 族是「配额耗尽，等到重置」，
+        // 与秒级限流（rate_limited）是两种处境；UI 据此显示 quota 文案 + 真实重置倒计时。
+        reason: ModelFailureReasonValue.UsageLimitReset,
+        retryReason: ModelRetryReasonValue.UsageLimitReset,
         retryable: true,
         retryAfterMs: usageLimitResetWaitMs,
         usageLimitResetWaitMs,
+        ...(usageLimitReset?.rawTime === undefined
+          ? {}
+          : { usageLimitResetRawTime: usageLimitReset.rawTime }),
         statusCode: effectiveStatusCode,
       };
     }

@@ -18,6 +18,8 @@ const FAKE_MESSAGES: Record<string, string> = {
   "chat.apiRetryStatus.serverError": "z.ai server error — retrying {attempt}/{maxRetries}",
   "chat.apiRetryStatus.overloaded": "z.ai overloaded — retrying {attempt}/{maxRetries}",
   "chat.apiRetryStatus.rateLimited": "Rate limited — retrying {attempt}/{maxRetries}",
+  "chat.apiRetryStatus.quota": "Quota exhausted — retrying {attempt}/{maxRetries}",
+  "chat.apiRetryStatus.authRefresh": "Refreshing sign-in… {attempt}/{maxRetries}",
   "chat.apiRetryStatus.stalled": "Stream stalled — retrying {attempt}/{maxRetries}",
   "chat.apiRetryStatus.network": "Connection lost — retrying {attempt}/{maxRetries}",
   "chat.apiRetryStatus.recovery": "Recovering stream {attempt}/{maxRetries}",
@@ -102,6 +104,9 @@ describe("apiRetryStatusMessageId — 诚实文案 (FORK·B2)", () => {
     expect(apiRetryStatusMessageId("stream_idle_timeout")).toBe("chat.apiRetryStatus.stalled");
     expect(apiRetryStatusMessageId("network_error")).toBe("chat.apiRetryStatus.network");
     expect(apiRetryStatusMessageId("stream_recovery")).toBe("chat.apiRetryStatus.recovery");
+    // (FORK·Ola 4) 配额耗尽与一次性 PAT 刷新不再落回笼统的 "Reconnecting..."。
+    expect(apiRetryStatusMessageId("usage_limit_reset")).toBe("chat.apiRetryStatus.quota");
+    expect(apiRetryStatusMessageId("auth_refresh")).toBe("chat.apiRetryStatus.authRefresh");
   });
 
   it("未知/缺省 reason 回退到通用文案 id", () => {
@@ -139,6 +144,34 @@ describe("ChatApiRetryStatus 按 reason 选文案 (FORK·B2)", () => {
     );
     expect(screen.getByText("Recovering stream 4/10")).toBeTruthy();
     expect(screen.queryByText(/\d{2}:\d{2}/)).toBeNull();
+  });
+
+  it("usage_limit_reset 显示配额耗尽文案，倒计时指向真实重置时间 (FORK·Ola 4)", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(1_790_000_000_000);
+    render(
+      createElement(ChatApiRetryStatus, {
+        apiRetry: retryStatus({
+          reason: "usage_limit_reset",
+          nextRetryAtMs: 1_790_000_000_000 + 2 * 3_600_000,
+        }),
+        intl: fakeIntl,
+        locale: "en-US",
+      }),
+    );
+    expect(screen.getByText("Quota exhausted — retrying 4/10")).toBeTruthy();
+    expect(screen.getByText("2:00:00")).toBeTruthy();
+  });
+
+  it("auth_refresh 显示刷新登录文案而不是笼统的 Reconnecting (FORK)", () => {
+    render(
+      createElement(ChatApiRetryStatus, {
+        apiRetry: retryStatus({ reason: "auth_refresh", nextRetryAtMs: null }),
+        intl: fakeIntl,
+        locale: "en-US",
+      }),
+    );
+    expect(screen.getByText("Refreshing sign-in… 4/10")).toBeTruthy();
   });
 
   it("缺省 reason（旧事件）保持通用文案", () => {

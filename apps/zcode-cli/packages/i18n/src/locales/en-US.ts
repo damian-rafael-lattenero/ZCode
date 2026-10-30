@@ -158,6 +158,9 @@ Slash Commands:
       responseReceivedWithTokens: (tokens) => `Model response received. ${tokens} tokens.`,
       retryScheduled: ({ attempt, delay, maxAttempts, reason }) =>
         `Retrying model request ${attempt}/${Math.max(1, maxAttempts - 1)} in ${delay}: ${reason}`,
+      // (FORK) Quota exhaustion is not rate limiting: the wait is the reset window, top-up resumes it.
+      retryScheduledQuota: ({ attempt, delay, maxAttempts }) =>
+        `Quota exhausted — resuming model request ${attempt}/${Math.max(1, maxAttempts - 1)} in ${delay}`,
       streamStalled: "Model stream stalled.",
     },
     sidebar: {

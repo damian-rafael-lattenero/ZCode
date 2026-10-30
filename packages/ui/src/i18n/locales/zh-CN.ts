@@ -5465,6 +5465,10 @@ const zhCN: Record<string, string> = {
   "chat.apiRetryStatus.serverError": "z.ai 服务端错误 — 重连中 {attempt}/{maxRetries}",
   "chat.apiRetryStatus.overloaded": "z.ai 过载 — 重连中 {attempt}/{maxRetries}",
   "chat.apiRetryStatus.rateLimited": "已限流 — 重连中 {attempt}/{maxRetries}",
+  // (FORK) 配额耗尽且已知重置时刻：旁边的倒计时显示真实恢复时间；充值后最迟 ~5 分钟自动恢复。
+  "chat.apiRetryStatus.quota": "配额已耗尽 — 重试中 {attempt}/{maxRetries}",
+  // (FORK) 一次性 PAT 刷新重试（reason auth_refresh）——此前误回退为「重新连接中」。
+  "chat.apiRetryStatus.authRefresh": "正在刷新登录… {attempt}/{maxRetries}",
   "chat.apiRetryStatus.stalled": "输出流停滞 — 重连中 {attempt}/{maxRetries}",
   "chat.apiRetryStatus.network": "连接中断 — 重连中 {attempt}/{maxRetries}",
   "chat.apiRetryStatus.recovery": "流恢复中 {attempt}/{maxRetries}",

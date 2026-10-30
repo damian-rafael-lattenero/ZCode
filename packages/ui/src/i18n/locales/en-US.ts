@@ -5844,6 +5844,11 @@ const enUS: Record<string, string> = {
   "chat.apiRetryStatus.serverError": "z.ai server error — retrying {attempt}/{maxRetries}",
   "chat.apiRetryStatus.overloaded": "z.ai overloaded — retrying {attempt}/{maxRetries}",
   "chat.apiRetryStatus.rateLimited": "Rate limited — retrying {attempt}/{maxRetries}",
+  // (FORK) Quota exhaustion with a known reset time: the countdown beside it shows the real flush time;
+  // replenishment is detected within ~5 minutes and the turn resumes on its own.
+  "chat.apiRetryStatus.quota": "Quota exhausted — retrying {attempt}/{maxRetries}",
+  // (FORK) One-shot PAT refresh before retrying (reason auth_refresh) — previously fell back to "Reconnecting...".
+  "chat.apiRetryStatus.authRefresh": "Refreshing sign-in… {attempt}/{maxRetries}",
   "chat.apiRetryStatus.stalled": "Stream stalled — retrying {attempt}/{maxRetries}",
   "chat.apiRetryStatus.network": "Connection lost — retrying {attempt}/{maxRetries}",
   "chat.apiRetryStatus.recovery": "Recovering stream {attempt}/{maxRetries}",

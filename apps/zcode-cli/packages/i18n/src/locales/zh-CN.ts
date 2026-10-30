@@ -155,6 +155,9 @@ Slash Commands:
       responseReceivedWithTokens: (tokens) => `已收到模型回复。${tokens} tokens。`,
       retryScheduled: ({ attempt, delay, maxAttempts, reason }) =>
         `将在 ${delay} 后重试模型请求 ${attempt}/${Math.max(1, maxAttempts - 1)}：${reason}`,
+      // (FORK) 配额耗尽不是限流：等待的是重置窗口，充值后立即恢复。
+      retryScheduledQuota: ({ attempt, delay, maxAttempts }) =>
+        `配额已耗尽 — 将于 ${delay} 后恢复模型请求 ${attempt}/${Math.max(1, maxAttempts - 1)}`,
       streamStalled: "模型流式输出停滞。",
     },
     sidebar: {

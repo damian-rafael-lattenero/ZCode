@@ -185,6 +185,11 @@ const API_RETRY_REASON_MESSAGE_IDS: Record<string, string> = {
   server_error: "chat.apiRetryStatus.serverError",
   provider_overloaded: "chat.apiRetryStatus.overloaded",
   rate_limited: "chat.apiRetryStatus.rateLimited",
+  // (FORK) 配额耗尽等到重置（1308 族 + next_flush_time）：等待可达小时级、充值即解除，
+  // 与秒级限流是两种处境；旁边的倒计时显示真实 flush 时间。
+  usage_limit_reset: "chat.apiRetryStatus.quota",
+  // (FORK) 一次性 PAT 刷新重试：此前误显示笼统的 "Reconnecting..."。
+  auth_refresh: "chat.apiRetryStatus.authRefresh",
   timeout: "chat.apiRetryStatus.stalled",
   stream_idle_timeout: "chat.apiRetryStatus.stalled",
   stale_connection: "chat.apiRetryStatus.network",

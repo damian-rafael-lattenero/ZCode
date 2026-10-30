@@ -103,6 +103,8 @@ export interface TuiCopy {
       maxAttempts: number;
       reason: string;
     }): string;
+    /** (FORK) 用量耗尽等到重置的专属状态行：与秒级限流区分，显示真实恢复等待。 */
+    retryScheduledQuota(input: { attempt: number; delay: string; maxAttempts: number }): string;
     streamStalled: string;
   };
   sidebar: {

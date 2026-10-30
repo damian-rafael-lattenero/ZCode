@@ -89,12 +89,19 @@ export function applyModelNetworkEvent(
     const delayMs = numberField(payload, "delayMs");
     const reason = stringField(payload, "reason") ?? "retry";
     setStatus(
-      copy.model.retryScheduled({
-        attempt,
-        delay: formatDuration(delayMs),
-        maxAttempts,
-        reason,
-      }),
+      // (FORK) 用量耗尽专属状态行：与秒级限流区分；delayMs 是真实重置等待（分段探测对 UI 透明）。
+      reason === "usage_limit_reset"
+        ? copy.model.retryScheduledQuota({
+            attempt,
+            delay: formatDuration(delayMs),
+            maxAttempts,
+          })
+        : copy.model.retryScheduled({
+            attempt,
+            delay: formatDuration(delayMs),
+            maxAttempts,
+            reason,
+          }),
     );
   } else if (type === "model_request_failed") {
     const message = stringField(payload, "message") ?? "request failed";

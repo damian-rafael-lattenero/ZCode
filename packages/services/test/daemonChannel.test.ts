@@ -165,6 +165,8 @@ describe("daemon local channel (B3a)", () => {
   async function startChannel(overrides?: {
     env?: Record<string, string | undefined>;
     config?: unknown;
+    modelSelectionService?: unknown;
+    modelSelectionDefault?: unknown;
   }) {
     const repo = overrides?.config ?? f.createMemoryRepo(f.baseConfig);
     botsService = f.createBotsService({
@@ -175,6 +177,8 @@ describe("daemon local channel (B3a)", () => {
       botsService,
       zcodeTaskService: taskService,
       usageStatsService: usageService,
+      modelSelectionService: overrides?.modelSelectionService as never,
+      modelSelectionDefault: overrides?.modelSelectionDefault as never,
       dataRootDir: () => dataDir,
       env: overrides?.env ?? {},
       handshakeTimeoutMs: 250,
@@ -204,6 +208,10 @@ describe("daemon local channel (B3a)", () => {
     });
     const helloOk = await client.waitFor((message) => message.type === "hello_ok");
     expect(helloOk).toMatchObject({ type: "hello_ok", protocolVersion: 1 });
+    // Capacidades nuevas del /plan (aditivas, protocolo v1).
+    expect((helloOk as { capabilities: string[] }).capabilities).toEqual(
+      expect.arrayContaining(["queries:modelSelection", "control:setModelSelection"]),
+    );
     return client;
   }
 
@@ -388,6 +396,155 @@ describe("daemon local channel (B3a)", () => {
       (message) => message.type === "error" && message.id === "q4",
     );
     expect(unknown).toMatchObject({ type: "error", code: "unknown_query" });
+    client.destroy();
+  });
+
+  it("answers modelSelection/setModelSelection: conversation scope + default scope", async () => {
+    // Registry fake: un plan Z.ai con un modelo y dos effort (low < high).
+    const modelSelectionView = {
+      providers: [
+        {
+          providerId: "account:zai-individual-coding-plan",
+          providerName: "Z.ai Coding Plan",
+          models: [
+            {
+              modelId: "GLM-5.3",
+              config: { optionSpecs: { reasoningLevel: { values: ["low", "high"] } } },
+            },
+          ],
+        },
+      ],
+    } as never;
+    const modelSelectionService = { getView: vi.fn(async () => modelSelectionView) };
+    let storedDefault: unknown;
+    const modelSelectionDefault = {
+      read: vi.fn(async () => storedDefault as never),
+      saveConfiguredDefault: vi.fn(async (selection: unknown) => {
+        storedDefault = selection;
+        return selection as never;
+      }),
+    };
+    await startChannel({ modelSelectionService, modelSelectionDefault });
+    const client = await connectAndHandshake();
+    const sendQuery = (id: string, query: unknown) =>
+      client.send({ type: "query", id, query } as never);
+    const queryResult = (id: string) =>
+      client.waitFor((message) => message.type === "query_result" && message.id === id);
+
+    // El hello anuncia las capacidades nuevas (verificado en connectAndHandshake).
+
+    // QUERY modelSelection: delega en botsService.getBotModelSelection y agrega
+    // default global + planes. Los dos spies quedan activos: el CONTROL
+    // conversation vuelve a leer el snapshot tras escribir.
+    const getSpy = vi
+      .spyOn(botsService, "getBotModelSelection")
+      .mockResolvedValue({
+        scope: "draft",
+        selection: {
+          providerId: "account:zai-start-plan",
+          modelId: "GLM-5.3",
+          reasoningLevel: "high",
+        },
+      });
+    sendQuery("m1", { kind: "modelSelection" });
+    const readResult = await client.waitFor(
+      (message) =>
+        (message.type === "query_result" || message.type === "error") && message.id === "m1",
+    );
+    expect(readResult.type).toBe("query_result");
+    expect(readResult).toMatchObject({
+      type: "query_result",
+      result: {
+        scope: "conversation",
+        selection: { providerId: "account:zai-start-plan", modelId: "GLM-5.3" },
+        plans: [
+          {
+            providerId: "account:zai-individual-coding-plan",
+            label: "Z.ai Coding Plan",
+            models: [{ id: "GLM-5.3", label: "GLM-5.3" }],
+          },
+        ],
+      },
+    });
+
+    // CONTROL conversation: setea plan/modelo y devuelve el snapshot nuevo.
+    // (el read-back post-escritura devuelve la selección YA cambiada)
+    getSpy.mockResolvedValue({
+      scope: "draft",
+      selection: {
+        providerId: "account:zai-individual-coding-plan",
+        modelId: "GLM-5.3",
+        reasoningLevel: "high",
+      },
+    });
+    const setSpy = vi
+      .spyOn(botsService, "setBotModelSelection")
+      .mockResolvedValue({
+        scope: "draft",
+        selection: {
+          providerId: "account:zai-individual-coding-plan",
+          modelId: "GLM-5.3",
+          reasoningLevel: "high",
+        },
+      });
+    sendQuery("m2", {
+      kind: "setModelSelection",
+      scope: "conversation",
+      plan: "account:zai-individual-coding-plan",
+      model: "GLM-5.3",
+    });
+    const setResult = await queryResult("m2");
+    expect(setSpy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        botId: "daemon-local",
+        plan: "account:zai-individual-coding-plan",
+        model: "GLM-5.3",
+      }),
+    );
+    expect(setResult).toMatchObject({
+      type: "query_result",
+      result: {
+        scope: "conversation",
+        selection: { providerId: "account:zai-individual-coding-plan" },
+      },
+    });
+    getSpy.mockRestore();
+    setSpy.mockRestore();
+
+    // CONTROL default: completa el effort con la tier máxima del modelo.
+    sendQuery("m3", {
+      kind: "setModelSelection",
+      scope: "default",
+      plan: "account:zai-individual-coding-plan",
+      model: "GLM-5.3",
+    });
+    const defaultResult = await queryResult("m3");
+    expect(modelSelectionDefault.saveConfiguredDefault).toHaveBeenCalledWith({
+      providerId: "account:zai-individual-coding-plan",
+      modelId: "GLM-5.3",
+      options: { reasoningLevel: "high" },
+    });
+    expect(defaultResult).toMatchObject({
+      type: "query_result",
+      result: {
+        scope: "default",
+        default: { providerId: "account:zai-individual-coding-plan", modelId: "GLM-5.3" },
+      },
+    });
+
+    // Effort inválido → error honesto con los valores válidos.
+    sendQuery("m4", {
+      kind: "setModelSelection",
+      scope: "default",
+      plan: "account:zai-individual-coding-plan",
+      model: "GLM-5.3",
+      effort: "turbo",
+    });
+    const effortError = await client.waitFor(
+      (message) => message.type === "error" && message.id === "m4",
+    );
+    expect(effortError).toMatchObject({ type: "error", code: "internal" });
+    expect((effortError as { message?: string }).message).toContain("valid values: low, high");
     client.destroy();
   });
 

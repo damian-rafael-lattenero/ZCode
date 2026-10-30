@@ -1,19 +1,12 @@
 /* [fork] B3a — canal «daemon local» (ADR-022): el único camino de lectura y
  * escritura hacia la conversación REAL para el daemon Kotlin del bot.
- *
  * Un unix socket (~/.zcode/daemon-local.sock) expuesto por el Host (utility
- * process — NUNCA el main de Electron) que habla el mismo lenguaje que los
- * demás canales del bot embebido:
- *
- *   inbound   → IBotsService.handleInboundMessage (el MISMO camino que el
- *               composer: draft/task → sendPrompt → V4 sendText → CommandInbox)
- *   stream    → IZCodeTaskService.onDynamicTaskEvent(deliveryKind:
- *               "bot-channel-continuous") — los eventos V4 crudos que renderiza
- *               el desktop (agent_thought_chunk, tool_call[_update] con la
- *               proyección de tool_input_*, task_complete...), sin replay.
- *   queries   → listTasks/listTaskList/meta/snapshot/usage/quota/botStatus
- *   control   → stop / stopAll / compact (V4 stopGeneration & compañía)
- *
+ * process — NUNCA el main de Electron):
+ *   inbound   → IBotsService.handleInboundMessage (el MISMO camino que el composer)
+ *   stream    → IZCodeTaskService.onDynamicTaskEvent("bot-channel-continuous"),
+ *               los eventos V4 crudos que renderiza el desktop, sin replay.
+ *   queries   → listTasks/taskList/meta/snapshot/usage/quota/botStatus/modelSelection
+ *   control   → stop / stopAll / compact / setModelSelection (V4 & compañía)
  * Auth: token en ~/.zcode/daemon-local.token (0600, rota en cada arranque del
  * host); hello obligatorio en la primera línea. El socket también es 0600.
  * Spec completa: docs/fork/DAEMON-CHANNEL.md.
@@ -45,6 +38,8 @@ import {
 } from "@zcode/shared";
 import type { IBotsService } from "./bots.js";
 import type { IZCodeTaskService } from "../session/zcodeTaskService.js";
+import { createDaemonChannelModelSelectionHandler } from "./daemonChannelModelSelection.js";
+import type { DaemonChannelModelSelectionDeps } from "./daemonChannelModelSelection.js";
 import type { IUsageStatsService } from "../usage-stats/usageStats.js";
 import type { ServiceLogger } from "../logger/serviceLogger.js";
 import { createServiceLogger } from "../logger/serviceLogger.js";
@@ -57,6 +52,9 @@ export interface DaemonLocalChannelDeps {
   botsService: IBotsService;
   zcodeTaskService: IZCodeTaskService;
   usageStatsService?: Pick<IUsageStatsService, "getEntitlementSnapshot">;
+  /** Vista del registry de planes/modelos y default global (para el /plan del bot). */
+  modelSelectionService?: DaemonChannelModelSelectionDeps["modelSelectionService"];
+  modelSelectionDefault?: DaemonChannelModelSelectionDeps["modelSelectionDefault"];
   logger?: ServiceLogger;
   /** Inyectable para tests herméticos; default: raíz de datos real (~/.zcode). */
   dataRootDir?: () => string;
@@ -114,6 +112,8 @@ const KNOWN_QUERY_KINDS = new Set([
   "taskUsage",
   "quota",
   "botStatus",
+  "modelSelection",
+  "setModelSelection",
   "stop",
   "stopAll",
   "compact",
@@ -192,6 +192,8 @@ export function createDaemonLocalChannel(
     "queries:taskUsage",
     "queries:quota",
     "queries:botStatus",
+    "queries:modelSelection",
+    "control:setModelSelection",
     "control:stop",
     "control:stopAll",
     "control:compact",
@@ -251,6 +253,14 @@ export function createDaemonLocalChannel(
       ? { workspacePath: context.workspacePath, workspaceIdentity: context.workspaceIdentity }
       : undefined;
   }
+
+  const modelSelection = createDaemonChannelModelSelectionHandler({
+    botsService: deps.botsService,
+    botId: daemonBotIdCache.id,
+    modelSelectionService: deps.modelSelectionService,
+    modelSelectionDefault: deps.modelSelectionDefault,
+    resolveContextWorkspace,
+  });
 
   async function runQuery(query: DaemonChannelQuery): Promise<unknown> {
     const taskService = deps.zcodeTaskService;
@@ -323,6 +333,10 @@ export function createDaemonLocalChannel(
           context: context ?? null,
         };
       }
+      case "modelSelection":
+        return modelSelection.read(query);
+      case "setModelSelection":
+        return modelSelection.set(query);
       case "stop": {
         await taskService.stopGeneration({
           taskId: query.taskId,

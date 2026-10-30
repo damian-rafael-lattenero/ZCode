@@ -752,7 +752,8 @@ exceptions:
     paths:
       - packages/shared/src/daemon-channel.ts
       - packages/services/src/bots/daemonChannel.ts
-    reason: "[fork] B3a (ADR-022): the daemon-local channel contract lives in shared (wire types consumed by the Kotlin client as the normative shapes) and the unix-socket server lives beside the bots channel runtimes in services; both are additive fork files, boundaries and owners of the surrounding packages are unchanged."
+      - packages/services/src/bots/daemonChannelModelSelection.ts
+    reason: "[fork] B3a (ADR-022): the daemon-local channel contract lives in shared (wire types consumed by the Kotlin client as the normative shapes) and the unix-socket server lives beside the bots channel runtimes in services; both are additive fork files, boundaries and owners of the surrounding packages are unchanged. daemonChannelModelSelection.ts keeps the /plan (model selection) handler beside the channel server while staying under the per-file line gate."
   - id: side-pane-full-view-shortcut-command-edit
     rule: unmanaged-new-file
     paths: [packages/shared/src/shortcutCommands.ts]

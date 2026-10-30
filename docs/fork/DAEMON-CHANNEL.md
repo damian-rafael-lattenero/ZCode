@@ -205,6 +205,8 @@ del mapa); y un `tool_input_delta` ya trae muestreo ~1 s del agente.
 | `taskUsage {taskId, workspacePath?}` | `getTaskTokenUsage` | `/usage` `/ctx` |
 | `quota {invalidateBalanceCache?}` | `IUsageStatsService.getEntitlementSnapshot` (5h pool, `remaining.percentage`, `nextResetTime`) | `/quota` |
 | `botStatus {}` | bot daemon: config + contexto (workspace activo, mode, activeTaskId, pendings) | `/status` del canal |
+| `modelSelection {workspacePath?, workspaceIdentity?}` | `botsService.getBotModelSelection` — selección vigente de la conversación (plan/modelo/effort) + default global + planes del registry | `/plan` (lectura) |
+| `setModelSelection {scope: conversation\|default, workspacePath?, workspaceIdentity?, plan?, model?, effort?}` | scope `conversation` → `botsService.setBotModelSelection` (draft: `writeDraftOptions`; task: `setModel`/`setConfigOption` — el MISMO camino de escritura de /model y /effort); scope `default` → `NodeModelSelectionConfigRepository.saveConfiguredDefault` (el default global de la app, effort completado con la tier máxima del modelo) | `/plan` (cambio) |
 | `stop {taskId, workspacePath?, runId?}` | `stopGeneration` — el MISMO V4 stop del botón de la UI (owner/lease/stale-run protection del lado servicio) | `/stop` |
 | `stopAll {workspacePath?}` | `listActiveTaskIds` × `stopGeneration` | primera mitad de `/nuclear` |
 | `compact {taskId, instructions?, expectedRevision?}` | `compactSession` | `/compact` |

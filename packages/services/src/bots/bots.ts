@@ -59,6 +59,30 @@ export interface BotAutomationRunWatchParams {
   workspaceIdentity?: string;
 }
 
+/** Selección de modelo proyectada para el canal del daemon (plan+modelo+effort). */
+export interface BotModelSelectionSnapshot {
+  /** «task» = conversación con turno activo; «draft» = contexto sin turno. */
+  scope: "draft" | "task";
+  taskId?: string;
+  selection: {
+    providerId: string;
+    modelId: string;
+    reasoningLevel?: string;
+  } | null;
+}
+
+export interface BotModelSelectionApplyParams {
+  botId: string;
+  workspacePath?: string;
+  workspaceIdentity?: string;
+  /** Plan = providerId de cuenta; ausente = mantener el vigente. */
+  plan?: string;
+  /** modelId; ausente = mantener el vigente. */
+  model?: string;
+  /** Reasoning level («effort»); ausente = mantener el vigente. */
+  effort?: string;
+}
+
 export interface BotWeixinRegistrationBeginResult {
   qrCode: string;
   qrUrl: string;
@@ -205,6 +229,20 @@ export interface IBotsService {
   /** 在 automation prompt 派发前订阅终态，并把结果回推到创建它的 Bot 会话。 */
   watchAutomationRun(params: BotAutomationRunWatchParams): Promise<void>;
   handleInboundMessage(message: BotInboundMessage): Promise<BotOutboundMessage[]>;
+  /** Lee la selección de modelo (plan/modelo/effort) del contexto del bot. */
+  getBotModelSelection(params: {
+    botId: string;
+    workspacePath?: string;
+    workspaceIdentity?: string;
+  }): Promise<BotModelSelectionSnapshot>;
+  /**
+   * Cambia plan/modelo/effort del contexto del bot SIN el flujo interactivo de
+   * /model: el mismo camino de escritura (draftOptions o setModel del task),
+   * pensado para el canal del daemon (frames setModelSelection).
+   */
+  setBotModelSelection(
+    params: BotModelSelectionApplyParams,
+  ): Promise<BotModelSelectionSnapshot>;
   handleProviderCallback(provider: BotProvider, payload: unknown): Promise<BotOutboundMessage[]>;
   handleProviderCallbackResponse(
     provider: BotProvider,

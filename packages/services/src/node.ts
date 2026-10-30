@@ -3039,6 +3039,8 @@ export function createLocalServices(options: {
       botsService,
       zcodeTaskService,
       usageStatsService: services.getOptional(IUsageStatsService),
+      modelSelectionService: services.getOptional(IModelSelectionService),
+      modelSelectionDefault: modelSelectionConfiguredDefaultSource,
     });
     daemonLocalChannels.set(services, daemonChannel);
     void daemonChannel.start().catch((error: unknown) => {

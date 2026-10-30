@@ -109,6 +109,8 @@ import type {
   BotAutomationRunWatchParams,
   BotCreateBindCodeParams,
   BotListWorkspaceRefsParams,
+  BotModelSelectionApplyParams,
+  BotModelSelectionSnapshot,
   BotSaveBotParams,
   BotTestResult,
   BotUserConfigOptionsParams,
@@ -2645,6 +2647,81 @@ export function createBotsService(
         (original.modelSelection ? view?.effectiveSelection : view?.preferredSelection) ??
         undefined,
     };
+  }
+
+  /** Resuelve el contexto del bot para las ops de selección de modelo del canal daemon. */
+  async function readContextForBotModelSelection(params: {
+    botId: string;
+    workspacePath?: string;
+    workspaceIdentity?: string;
+  }): Promise<BotContextState> {
+    const state = await repo.readState();
+    for (const context of Object.values(state.bots)) {
+      if (context.botId !== params.botId) continue;
+      if (params.workspacePath && context.workspacePath !== params.workspacePath) continue;
+      if (params.workspaceIdentity && context.workspaceIdentity !== params.workspaceIdentity) {
+        continue;
+      }
+      return context;
+    }
+    throw new Error(`no bot context found for botId ${params.botId}`);
+  }
+
+  /** Lee la selección vigente (plan/modelo/effort) de un contexto, draft o task. */
+  async function readBotModelSelectionSnapshot(
+    context: BotContextState,
+  ): Promise<BotModelSelectionSnapshot> {
+    if (context.mode !== "draft" && context.activeTaskId) {
+      const taskId = context.activeTaskId;
+      const zcodeTaskService = await resolveZCodeTaskServiceForContext(context);
+      const [sessionSelection, configOptions] = await Promise.all([
+        zcodeTaskService.getTaskModelSelection({ taskId }).catch(() => null),
+        zcodeTaskService.getTaskConfigOptions({ taskId }).catch(() => []),
+      ]);
+      // El thought_level del session (configOptions) es el effort vigente; el
+      // options.reasoningLevel de la ModelSelection es solo lo último seteado junto al modelo.
+      const thoughtLevel = readConfigSelectCurrentValue(configOptions, "thoughtLevel");
+      const selection = sessionSelection
+        ? {
+            providerId: sessionSelection.providerId,
+            modelId: sessionSelection.modelId,
+            ...(thoughtLevel
+              ? { reasoningLevel: thoughtLevel }
+              : sessionSelection.options?.reasoningLevel
+                ? { reasoningLevel: sessionSelection.options.reasoningLevel }
+                : {}),
+          }
+        : null;
+      return { scope: "task", taskId, selection };
+    }
+    const selection = context.draftOptions?.modelSelection;
+    return {
+      scope: "draft",
+      selection: selection
+        ? {
+            providerId: selection.providerId,
+            modelId: selection.modelId,
+            ...(selection.options?.reasoningLevel
+              ? { reasoningLevel: selection.options.reasoningLevel }
+              : {}),
+          }
+        : null,
+    };
+  }
+
+  /** Valida el effort pedido contra los niveles reales del modelo elegido. */
+  function assertEffortAllowed(
+    view: ModelSelectionView,
+    selection: { providerId: string; modelId: string },
+    effort: string,
+  ): void {
+    const model = view.providers
+      .find((provider) => provider.providerId === selection.providerId)
+      ?.models.find((candidate) => candidate.modelId === selection.modelId);
+    const allowed = model?.config.optionSpecs.reasoningLevel.values ?? [];
+    if (allowed.length > 0 && !allowed.includes(effort)) {
+      throw new Error(`unknown effort "${effort}" — valid values: ${allowed.join(", ")}`);
+    }
   }
 
   async function listDraftConfigOptions(
@@ -8524,6 +8601,109 @@ export function createBotsService(
           },
         };
       });
+    },
+    async getBotModelSelection(params: {
+      botId: string;
+      workspacePath?: string;
+      workspaceIdentity?: string;
+    }): Promise<BotModelSelectionSnapshot> {
+      const context = await readContextForBotModelSelection(params);
+      return readBotModelSelectionSnapshot(context);
+    },
+    async setBotModelSelection(
+      params: BotModelSelectionApplyParams,
+    ): Promise<BotModelSelectionSnapshot> {
+      const context = await readContextForBotModelSelection(params);
+      const wantsModel = params.plan !== undefined || params.model !== undefined;
+      const wantsEffort = params.effort !== undefined;
+      if (!wantsModel && !wantsEffort) {
+        return readBotModelSelectionSnapshot(context);
+      }
+      const selectionView = await readModelSelectionView(context);
+      if (!selectionView) {
+        throw new Error("model selection view is unavailable for this context");
+      }
+      if (context.mode !== "draft" && context.activeTaskId) {
+        const taskId = context.activeTaskId;
+        const zcodeTaskService = await resolveZCodeTaskServiceForContext(context);
+        const traceId = generateTraceId(taskId);
+        if (wantsModel) {
+          const current = await zcodeTaskService
+            .getTaskModelSelection({ taskId })
+            .catch(() => null);
+          const providerId =
+            params.plan ?? current?.providerId ?? selectionView.preferredSelection?.providerId;
+          const modelId = params.model ?? current?.modelId ?? selectionView.preferredSelection?.modelId;
+          if (!providerId || !modelId) {
+            throw new Error("plan and model are required: this context has no current selection");
+          }
+          const completed = completeNewModelSelection(selectionView, { providerId, modelId });
+          if (!completed) {
+            throw new Error(
+              `model ${providerId}/${modelId} is not selectable from this context`,
+            );
+          }
+          await zcodeTaskService.setModel({
+            taskId,
+            traceId,
+            modelSelection: completed,
+          });
+        }
+        if (wantsEffort) {
+          const configOptions = await zcodeTaskService.getTaskConfigOptions({ taskId });
+          const selectOption = findSelectConfigOption(configOptions, "thoughtLevel");
+          if (!selectOption) {
+            throw new Error("thought level is not configurable for the active task");
+          }
+          // La lista del session (configOptions) es la autoridad para el effort del task.
+          const allowed = (selectOption.options ?? []).map((item) => item.value);
+          if (allowed.length > 0 && !allowed.includes(params.effort!)) {
+            throw new Error(
+              `unknown effort "${params.effort}" — valid values: ${allowed.join(", ")}`,
+            );
+          }
+          await zcodeTaskService.setConfigOption({
+            taskId,
+            traceId,
+            configId: selectOption.id,
+            value: params.effort!,
+          });
+        }
+        return readBotModelSelectionSnapshot(context);
+      }
+      const draftOptions = await ensureDraftOptions(context);
+      let modelSelection = draftOptions.modelSelection;
+      if (wantsModel) {
+        const providerId =
+          params.plan ??
+          modelSelection?.providerId ??
+          selectionView.preferredSelection?.providerId;
+        const modelId =
+          params.model ?? modelSelection?.modelId ?? selectionView.preferredSelection?.modelId;
+        if (!providerId || !modelId) {
+          throw new Error("plan and model are required: this context has no current selection");
+        }
+        const completed = completeNewModelSelection(selectionView, { providerId, modelId });
+        if (!completed) {
+          throw new Error(
+            `model ${providerId}/${modelId} is not selectable from this context`,
+          );
+        }
+        modelSelection = completed;
+      }
+      if (wantsEffort) {
+        if (!modelSelection) {
+          throw new Error("effort requires an existing or newly selected model");
+        }
+        // Un effort inventado no debe persistirse como selección «completa» rota.
+        assertEffortAllowed(selectionView, modelSelection, params.effort!);
+        modelSelection = {
+          ...modelSelection,
+          options: { ...modelSelection.options, reasoningLevel: params.effort },
+        };
+      }
+      await writeDraftOptions(context, { ...draftOptions, modelSelection });
+      return readBotModelSelectionSnapshot(context);
     },
     async reconcileGroupResult(params: {
       botId: string;

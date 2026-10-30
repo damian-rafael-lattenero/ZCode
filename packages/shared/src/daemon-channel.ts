@@ -115,6 +115,24 @@ export type DaemonChannelQuery =
   | { kind: "quota"; invalidateBalanceCache?: boolean }
   | { kind: "botStatus" }
   | {
+      kind: "modelSelection";
+      workspacePath?: string;
+      workspaceIdentity?: string;
+    }
+  | {
+      kind: "setModelSelection";
+      /** «conversation» = la conversación enfocada del bot; «default» = el default global de la app. */
+      scope: "conversation" | "default";
+      workspacePath?: string;
+      workspaceIdentity?: string;
+      /** Plan = providerId de cuenta (p. ej. account:zai-individual-coding-plan). */
+      plan?: string;
+      /** modelId dentro del plan. */
+      model?: string;
+      /** Reasoning level («effort»). */
+      effort?: string;
+    }
+  | {
       kind: "stop";
       taskId: string;
       workspacePath?: string;
@@ -199,6 +217,36 @@ export interface DaemonChannelQueryResult {
   type: "query_result";
   id: string;
   result: unknown;
+}
+
+// ---- plan / modelo / effort (selección de modelo) -----------------------------
+// El protocolo es aditivo: las query kinds nuevas viajan por el mismo frame
+// `query`; clientes viejos jamás las envían y servidores viejos responden
+// `unknown_query`.
+
+/** Selección vigente proyectada: plan (provider) + modelo + effort. */
+export interface DaemonChannelModelSelectionInfo {
+  providerId: string;
+  modelId: string;
+  reasoningLevel?: string;
+}
+
+/** Un plan disponible con sus modelos (fila tap-to-change del /plan del bot). */
+export interface DaemonChannelModelSelectionPlan {
+  providerId: string;
+  label: string;
+  models: Array<{ id: string; label: string }>;
+}
+
+/** Resultado de `modelSelection` y `setModelSelection`. */
+export interface DaemonChannelModelSelectionResult {
+  scope: "conversation" | "default";
+  /** Selección vigente del alcance pedido (conversación o default global). */
+  selection: DaemonChannelModelSelectionInfo | null;
+  /** Default global de la app (`defaultModelSelection` del personal config). */
+  default: DaemonChannelModelSelectionInfo | null;
+  /** Planes disponibles con sus modelos, para armar los menús. */
+  plans: DaemonChannelModelSelectionPlan[];
 }
 
 export interface DaemonChannelPong {

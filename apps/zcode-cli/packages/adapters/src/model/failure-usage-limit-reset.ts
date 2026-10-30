@@ -146,29 +146,47 @@ export function resolveUsageLimitResetWaitMs(
   return rawWaitMs;
 }
 
+/**
+ * 在 summary 里查找 flush 时间字段。
+ * 除了文档形态（顶层 / error 子记录），SSE error chunk 会被 provider-finish-business-error
+ * 重建包装：其 responseBodySummary 是整块 chunk 记录，原始 body 里的 next_flush_time
+ * 被埋到任意深度（summary.error.responseBodySummary.error.next_flush_time…）。
+ * 这里做有界 BFS：既覆盖标准形态，也不在包装形态下丢掉确定性的重置时刻。
+ */
 function readFlushTimeFromSummary(
   summary: Record<string, unknown> | undefined,
 ): UsageLimitResetTime | undefined {
   if (summary === undefined) {
     return undefined;
   }
-  const nestedError =
-    typeof summary.error === "object" && summary.error !== null
-      ? (summary.error as Record<string, unknown>)
-      : undefined;
-  for (const source of [summary, nestedError]) {
-    if (source === undefined) {
+  const seen = new Set<unknown>();
+  const queue: unknown[] = [summary];
+  let visitsLeft = MAX_SUMMARY_SCAN_RECORDS;
+  while (queue.length > 0 && visitsLeft > 0) {
+    const current = queue.shift();
+    if (current === null || typeof current !== "object" || seen.has(current)) {
       continue;
     }
+    seen.add(current);
+    visitsLeft -= 1;
+    const record = current as Record<string, unknown>;
     for (const field of FLUSH_TIME_FIELD_NAMES) {
-      const parsed = parseScalarTimestamp(source[field]);
+      const parsed = parseScalarTimestamp(record[field]);
       if (parsed !== undefined) {
         return parsed;
+      }
+    }
+    for (const value of Object.values(record)) {
+      if (value !== null && typeof value === "object") {
+        queue.push(value);
       }
     }
   }
   return undefined;
 }
+
+/** 有界 BFS 的访问上限：summary 是已消毒的结构化数据，上限只防病态超大载荷。 */
+const MAX_SUMMARY_SCAN_RECORDS = 200;
 
 /** 字段值可能是 ISO 字符串，也可能是 unix 秒/毫秒数字（或数字字符串）。 */
 function parseScalarTimestamp(value: unknown): UsageLimitResetTime | undefined {

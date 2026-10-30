@@ -14,6 +14,7 @@ import {
   inspectProviderFailure,
   type ClassifiedModelFailure,
 } from "./failure-classifier.js";
+import { USAGE_LIMIT_RESET_SEGMENT_MS } from "./failure-usage-limit-reset.js";
 import { resolveAnthropicRequestMetadataUserId } from "./anthropic-request-metadata.js";
 import {
   getErrorCode,
@@ -149,6 +150,7 @@ export async function* runStreamText(input: {
     let emittedError = false;
     let retryScheduledFromStreamChunk = false;
     let offPeakQueueHoldFromStreamChunk = false;
+    let usageLimitResetHoldFromStreamChunk = false;
     const pendingRetrySafeEvents: ModelStreamEvent[] = [];
     const diagnostics = createStreamDiagnostics();
     const attemptAbortController = createLinkedAbortController(input.request.abortSignal);
@@ -453,6 +455,7 @@ export async function* runStreamText(input: {
           awaitIteratorClose = true;
           retryScheduledFromStreamChunk = true;
           offPeakQueueHoldFromStreamChunk = event.offPeakQueueHold;
+          usageLimitResetHoldFromStreamChunk = event.usageLimitResetHold;
           break;
         }
         if (event.terminalError) {
@@ -470,8 +473,8 @@ export async function* runStreamText(input: {
       }
 
       if (retryScheduledFromStreamChunk) {
-        if (offPeakQueueHoldFromStreamChunk) {
-          // 排队等待不消耗重试预算：回退计数让 for 自增后原地重试。
+        if (offPeakQueueHoldFromStreamChunk || usageLimitResetHoldFromStreamChunk) {
+          // 排队等待/用量分段探测不消耗重试预算：回退计数让 for 自增后原地重试。
           attempt -= 1;
         }
         continue;
@@ -905,8 +908,16 @@ export async function* runStreamText(input: {
       );
       // 退避期间不持票：槽位让给别人，重试再准入。
       admission.release();
+      // (FORK·Ola 4c) 用量重置等待分段：单段 sleep ≤5min，睡完一段就重新发出请求——
+      // 配额提前回补时下一次探测立即成功（最坏 ~5min 感知），不再一次睡满 next_flush_time。
+      // model_retry_scheduled 仍按完整等待发布（nextAttemptAtMs = 真实 flush 点），倒计时诚实。
+      const usageLimitResetProbe =
+        failure.usageLimitResetWaitMs !== undefined && offPeak?.kind !== "queued";
+      const sleepMs = usageLimitResetProbe
+        ? Math.min(delayMs, USAGE_LIMIT_RESET_SEGMENT_MS)
+        : delayMs;
       try {
-        await sleep(delayMs, input.request.abortSignal);
+        await sleep(sleepMs, input.request.abortSignal);
       } catch (sleepError) {
         const sleepFailure = classifyModelFailure(sleepError, input.request.abortSignal);
         await publishModelStatus(
@@ -936,8 +947,9 @@ export async function* runStreamText(input: {
           errorPhase: "connect",
         });
       }
-      if (offPeak?.kind === "queued") {
-        // 排队等待不消耗重试预算：回退计数让 for 自增后原地重试，无限探测。
+      if (offPeak?.kind === "queued" || usageLimitResetProbe) {
+        // 排队等待/用量分段探测不消耗重试预算：回退计数让 for 自增后原地重试。
+        // 服务端契约里整段配额等待是一次逻辑等待——分段再探测是它的内部动作，不是新重试。
         attempt -= 1;
       }
     } finally {
@@ -1099,6 +1111,8 @@ async function handleStreamChunk(input: {
   retryScheduled: boolean;
   /** off-peak 排队重试：外层 for 冻结 attempt 预算。 */
   offPeakQueueHold: boolean;
+  /** (FORK) 用量重置分段探测重试：外层 for 同样冻结 attempt 预算（一次逻辑等待）。 */
+  usageLimitResetHold: boolean;
   terminalError?: TerminalStreamChunkError;
   visibleEvents: ModelStreamEvent[];
 }> {
@@ -1404,6 +1418,13 @@ async function handleStreamErrorEvent(
           failure.retryAfterMs,
           failure.usageLimitResetWaitMs,
         );
+  // (FORK·Ola 4c) 用量重置等待分段（与外层 catch 同一策略）：单段 ≤5min，睡完即重发请求
+  // 探测；model_retry_scheduled 仍按完整等待发布，倒计时保持诚实。
+  const usageLimitResetProbe =
+    failure.usageLimitResetWaitMs !== undefined && offPeak?.kind !== "queued";
+  const sleepMs = usageLimitResetProbe
+    ? Math.min(delayMs, USAGE_LIMIT_RESET_SEGMENT_MS)
+    : delayMs;
   logRetryDelayDecision({
     attempt: input.attempt,
     canRetry: failureDecision.canRetry,
@@ -1429,7 +1450,7 @@ async function handleStreamErrorEvent(
   // Note: AI SDK can surface pre-output APICallError as an error chunk;
   // retry it here so protocol clients still receive the normal apiRetry status updates.
   try {
-    await sleep(delayMs, input.input.request.abortSignal);
+    await sleep(sleepMs, input.input.request.abortSignal);
   } catch (sleepError) {
     const sleepFailure = classifyModelFailure(sleepError, input.input.request.abortSignal);
     // SSE error chunk 在 helper 内等待 retry；取消发生时 iterator 仍存在，
@@ -1442,6 +1463,7 @@ async function handleStreamErrorEvent(
     emittedError: true,
     retryScheduled: true,
     offPeakQueueHold: offPeak?.kind === "queued",
+    usageLimitResetHold: usageLimitResetProbe,
   });
 }
 
@@ -1632,6 +1654,8 @@ function streamChunkResult(
     retryScheduled: boolean;
     /** off-peak 排队重试：外层 for 冻结 attempt 预算。 */
     offPeakQueueHold: boolean;
+    /** (FORK) 用量重置分段探测重试：外层 for 同样冻结 attempt 预算。 */
+    usageLimitResetHold: boolean;
     terminalError?: TerminalStreamChunkError;
     visibleEvents: ModelStreamEvent[];
   }> = {},
@@ -1642,6 +1666,7 @@ function streamChunkResult(
     emittedRetryBoundaryEvent: false,
     retryScheduled: false,
     offPeakQueueHold: false,
+    usageLimitResetHold: false,
     visibleEvents: [],
     ...overrides,
   };

@@ -7,6 +7,7 @@ import {
 } from "@zcode/contracts";
 import { classifyModelFailure, inspectProviderFailure } from "./failure-classifier.js";
 import type { ClassifiedModelFailure } from "./failure-classifier.js";
+import { USAGE_LIMIT_RESET_SEGMENT_MS } from "./failure-usage-limit-reset.js";
 import { getResponseHeaders, unwrapRetryError } from "./failure-inspection.js";
 import { offPeakTicketExpiredMessage, resolveOffPeakFailureDecision } from "./offpeak-retry.js";
 import { AiSdkModelAdapterError } from "./errors.js";
@@ -537,8 +538,19 @@ export async function runGenerateText(input: {
 
       // 退避期间不持票：槽位让给别人，重试再准入。
       admission.release();
+      // (FORK·Ola 4c) 用量重置等待不一次睡满：单段 sleep ≤5min，每段结束就重新发出请求。
+      // 配额提前回补（充值/管理员调整）→ 下一次探测立即成功，最坏 ~5 分钟感知恢复，
+      // 而不是把 next_flush_time 计算一次就冻结到点；额外成本是每小时个位数的探测请求。
+      // 若配额仍未回补，z.ai 会再回 1308 族（可能带更早的新 flush 时间）→ 排下一段。
+      // 分段是引擎内部机制：上面的 model_retry_scheduled 仍按完整等待发布
+      // （nextAttemptAtMs = 真实 flush 点），UI 倒计时保持诚实。
+      const usageLimitResetProbe =
+        failure.usageLimitResetWaitMs !== undefined && offPeak?.kind !== "queued";
+      const sleepMs = usageLimitResetProbe
+        ? Math.min(delayMs, USAGE_LIMIT_RESET_SEGMENT_MS)
+        : delayMs;
       try {
-        await sleep(delayMs, input.request.abortSignal);
+        await sleep(sleepMs, input.request.abortSignal);
       } catch (sleepError) {
         const sleepFailure = classifyModelFailure(sleepError, input.request.abortSignal);
         const sleepResponseHeaders = sanitizeModelNetworkHeaders(
@@ -570,8 +582,10 @@ export async function runGenerateText(input: {
           errorPhase: "connect",
         });
       }
-      if (offPeak?.kind === "queued") {
-        // 排队等待不消耗重试预算：回退计数让 for 自增后原地重试，无限探测。
+      if (offPeak?.kind === "queued" || usageLimitResetProbe) {
+        // 排队等待/用量分段探测不消耗重试预算：回退计数让 for 自增后原地重试。
+        // 服务端契约里整段配额等待是一次逻辑等待——分段再探测是这次等待的内部动作，
+        // 不是新的重试；预算闸门（retryBudgetAllows）在下一段的失败分类处照常生效。
         attempt -= 1;
       }
     } finally {

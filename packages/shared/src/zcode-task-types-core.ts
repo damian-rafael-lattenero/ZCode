@@ -625,6 +625,14 @@ export interface ZCodeToolCallUpdate {
     pluginId?: string;
     source?: "agents" | "zcode" | "bundled" | "plugin" | "remote";
   };
+  /**
+   * The background subagent's agentId (the launch ACK's `agentId:`), emitted
+   * ONLY on the dispatch lane's held-open result projection (Agent/Task tools).
+   * Additive + optional: the bot constructs the child session id
+   * (`sess_subagent_<agentId>`, the CLI session store's convention) to
+   * subscribe to the subagent's OWN stream; absent = an older projection.
+   */
+  subagentAgentId?: string;
 }
 export interface ZCodePlan {
   type: "plan";

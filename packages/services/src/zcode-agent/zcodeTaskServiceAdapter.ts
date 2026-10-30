@@ -4715,6 +4715,11 @@ function mapToolUpdated(
     const toolName = rememberedToolName;
     const content = normalizeToolResultContent(toolName, result);
     const status = toolResultStatus(toolName, result);
+    // the dispatch lane's held-open result IS the launch ACK: it carries the
+    // child's agentId — the REAL lane→session link (the CLI stores the child
+    // session as sess_subagent_<agentId>); emitted once, additively
+    const launchAgentId =
+      status === "in_progress" ? subagentAgentIdFromLaunchAck(toolName, result) : null;
     const toolEvent: ZCodeStreamEvent = {
       type: "tool_call_update",
       taskId,
@@ -4726,6 +4731,7 @@ function mapToolUpdated(
       kind: toolName,
       title: toolName,
       ...(rememberedInput !== undefined ? { input: rememberedInput } : {}),
+      ...(launchAgentId ? { subagentAgentId: launchAgentId } : {}),
       status,
       content,
       error: stringValue(asRecord(result.error).message),
@@ -4830,10 +4836,31 @@ function isBackgroundAgentLaunchResult(
     parsed !== null &&
     (isSubagentDispatchToolName(toolName) || stringValue(parsed.agentId) !== undefined) &&
     ((parsedStatus === "backgrounded" && stringValue(parsed.backgroundTaskId) !== undefined) ||
-      (parsedStatus === "async_launched" &&
-        stringValue(parsed.agentId) !== undefined &&
-        stringValue(parsed.outputFile) !== undefined))
+        (parsedStatus === "async_launched" &&
+          stringValue(parsed.agentId) !== undefined &&
+          stringValue(parsed.outputFile) !== undefined))
   );
+}
+
+/**
+ * The background subagent's agentId from its launch ACK — the REAL link
+ * between the dispatch lane (its toolId) and the child session the CLI
+ * stores as `sess_subagent_<agentId>`. Only the launch result carries it:
+ * the lane's later updates never do, so the projection emits it ONCE, at
+ * spawn (additive + optional; every ACK format from legacy to current
+ * carries the agentId except the oldest backgroundTaskId one, which
+ * honestly yields null).
+ */
+export function subagentAgentIdFromLaunchAck(
+  toolName: string | undefined,
+  result: Record<string, unknown>,
+): string | null {
+  if (!isBackgroundAgentLaunchResult(toolName, result)) {
+    return null;
+  }
+  const content = stringValue(result.content) ?? "";
+  const match = /"?agentId"?:\s*"?(agent_[A-Za-z0-9_-]+)/.exec(content);
+  return match?.[1] ?? null;
 }
 
 function isBackgroundAgentLaunchAcknowledgement(content: string): boolean {

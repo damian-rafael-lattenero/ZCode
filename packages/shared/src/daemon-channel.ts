@@ -112,7 +112,19 @@ export type DaemonChannelQuery =
       workspacePath?: string;
       workspaceIdentity?: string;
     }
-  | { kind: "quota"; invalidateBalanceCache?: boolean }
+  | {
+      kind: "quota";
+      invalidateBalanceCache?: boolean;
+      /**
+       * La conversación activa del bot (aditivo, 30/10): de su model
+       * selection sale el providerId → el hint de accountAccess
+       * ({mode: start-plan | individual-coding-plan}) que hace que el
+       * provider resuelva el acceso DINÁMICO real en el borde — sin él el
+       * camino Start Plan nunca entra y la respuesta es el mentiroso
+       * not_configured (medido en vivo 30/10).
+       */
+      taskId?: string;
+    }
   | { kind: "botStatus" }
   | {
       kind: "modelSelection";
@@ -166,8 +178,17 @@ export interface DaemonChannelContextWindowResult {
   model: string | null;
   /** Tokens del contexto actual (última proyección de usage del runtime). */
   usedTokens: number | null;
-  /** Ventana de contexto del modelo (runtime o registry); null = desconocida. */
+  /** Ventana de contexto del modelo; null = desconocida. */
   windowTokens: number | null;
+  /**
+   * De dónde salió la ventana (aditivo, 30/10): "model" = el contextWindow
+   * del registry (la ventana REAL del modelo — el size del runtime resultó
+   * ser un tope por segmento, no la ventana); "runtime" = el size del
+   * runtime cuando el registry no cubre el modelo; "owner_default" = la
+   * calibración del dueño (sus modelos son 1M máximo) cuando nada lo
+   * expone — el bot la marca con (~). Ausente = servers viejos.
+   */
+  windowSource?: "model" | "runtime" | "owner_default";
 }
 
 export interface DaemonChannelQueryRequest {

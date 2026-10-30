@@ -27,9 +27,12 @@ import {
   DAEMON_CHANNEL_SOCKET_FILENAME,
   DAEMON_CHANNEL_TOKEN_FILENAME,
   ZCODE_VERSION,
+  isCodingPlanModelProviderId,
+  isStartPlanModelProviderId,
   type BotConfig,
   type BotInboundMessage,
   type BotOutboundMessage,
+  type ZCodeAccountAccess,
   type ZCodeStreamEvent,
   type DaemonChannelClientMessage,
   type DaemonChannelContextWindowResult,
@@ -85,6 +88,31 @@ export interface DaemonLocalChannel {
   dispose(): Promise<void>;
   getState(): DaemonLocalChannelState;
   getSocketPath(): string;
+}
+
+/**
+ * El hint de accountAccess del providerId ACTIVO de la conversación: el
+ * shape estático con `mode` dispara la resolución DINÁMICA del acceso real
+ * en el provider (resolveRequestAccountAccess lee la conexión de cuenta
+ * vigente — el hint apunta, el servicio responde con la verdad). Null para
+ * providers que no son de plan (el camino genérico es el correcto ahí).
+ */
+function accountAccessHintFor(providerId: string): ZCodeAccountAccess | null {
+  if (isStartPlanModelProviderId(providerId)) {
+    return {
+      type: "zhipu-account",
+      family: "zai",
+      planKind: "start-plan",
+    };
+  }
+  if (isCodingPlanModelProviderId(providerId)) {
+    return {
+      type: "zhipu-account",
+      family: "zai",
+      planKind: "individual-coding-plan",
+    };
+  }
+  return null;
 }
 
 function sha256(value: string): Buffer {
@@ -293,19 +321,38 @@ export function createDaemonLocalChannel(
     const selection = await taskService.getTaskModelSelection({ taskId }).catch(() => null);
     const usage = snapshot.runtime?.contextUsage;
     const usedTokens = usage && usage.used > 0 ? usage.used : null;
-    let windowTokens = usage && usage.size > 0 ? usage.size : null;
-    if (windowTokens === null && deps.modelSelectionService && selection) {
+    // La PRECEDENCIA de la ventana, corregida 30/10 (el dueño vio 200K/200K
+    // con modelos de 1M): el contextWindow del registry es la ventana REAL
+    // del modelo — el size del runtime resultó ser un tope por segmento.
+    // Registry primero, runtime de respaldo, y la calibración del dueño
+    // (sus modelos son 1M máximo) cuando nada la expone — marcada para que
+    // el cliente la muestre aproximada, nunca como hecho.
+    let windowTokens: number | null = null;
+    let windowSource: "model" | "runtime" | "owner_default" | null = null;
+    if (deps.modelSelectionService && selection) {
       const view = await deps.modelSelectionService.getView().catch(() => null);
       const configured = view?.providers
         .find((provider) => provider.providerId === selection.providerId)
         ?.models.find((model) => model.modelId === selection.modelId)?.config.properties
         .contextWindow;
-      if (typeof configured === "number" && configured > 0) windowTokens = configured;
+      if (typeof configured === "number" && configured > 0) {
+        windowTokens = configured;
+        windowSource = "model";
+      }
+    }
+    if (windowTokens === null && usage && usage.size > 0) {
+      windowTokens = usage.size;
+      windowSource = "runtime";
+    }
+    if (windowTokens === null && usedTokens !== null) {
+      windowTokens = 1_000_000;
+      windowSource = "owner_default";
     }
     return {
       model: selection?.modelId ?? snapshot.meta.model ?? null,
       usedTokens,
       windowTokens,
+      ...(windowSource ? { windowSource } : {}),
     };
   }
 
@@ -365,9 +412,25 @@ export function createDaemonLocalChannel(
       }
       case "quota": {
         if (!deps.usageStatsService) throw new Error("usage stats service is unavailable");
-        return deps.usageStatsService.getEntitlementSnapshot(
-          query.invalidateBalanceCache ? { invalidateBalanceCache: true } : {},
-        );
+        // El bot lee la cuota del DUEÑO: del model selection de su conversación
+        // activa sale el providerId → el hint {mode: …} cuyo shape dispara la
+        // resolución DINÁMICA del acceso real en el provider (resolveRequest-
+        // AccountAccess). Sin hint, el camino Start Plan nunca entra y la
+        // respuesta es el mentiroso not_configured (medido en vivo 30/10).
+        const selection = query.taskId
+          ? await taskService.getTaskModelSelection({ taskId: query.taskId }).catch(() => null)
+          : null;
+        const hint = selection ? accountAccessHintFor(selection.providerId) : null;
+        return deps.usageStatsService.getEntitlementSnapshot({
+          ...(query.invalidateBalanceCache ? { invalidateBalanceCache: true } : {}),
+          ...(selection && hint
+            ? {
+                preferredProviderId: selection.providerId,
+                accountAccess: hint,
+                allowDisabledPreferredProvider: true,
+              }
+            : {}),
+        });
       }
       case "botStatus": {
         const config = await deps.botsService.getConfig();

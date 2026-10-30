@@ -576,10 +576,11 @@ describe("daemon local channel (B3a)", () => {
 
     sendQuery("cw1", { kind: "contextWindow", taskId: "task-7", workspacePath: "/tmp/workspace" });
     const result = await queryResult("cw1");
-    // El model de la sesión activa gana sobre meta.model; el meter viaja crudo.
+    // El model de la sesión activa gana sobre meta.model; el meter viaja crudo
+    // (sin registry, el size del runtime es el respaldo — y viaja su fuente).
     expect(result).toMatchObject({
       type: "query_result",
-      result: { model: "GLM-5.3-Flash", usedTokens: 45300, windowTokens: 200000 },
+      result: { model: "GLM-5.3-Flash", usedTokens: 45300, windowTokens: 200000, windowSource: "runtime" },
     });
     // El medidor se lee liviano: 1 mensaje basta (no es el /last del snapshot).
     expect(taskService.getTaskSnapshot).toHaveBeenCalledWith(
@@ -622,6 +623,104 @@ describe("daemon local channel (B3a)", () => {
     expect(fallback).toMatchObject({
       type: "query_result",
       result: { model: "meta-model", usedTokens: null, windowTokens: null },
+    });
+    client.destroy();
+  });
+
+  it("the registry's contextWindow WINS over the runtime's segment cap (the owner's 200K/200K bug)", async () => {
+    const modelSelectionView = {
+      providers: [
+        {
+          providerId: "account:zai-start-plan",
+          providerName: "Start Plan",
+          models: [
+            {
+              modelId: "GLM-5.3-Flash",
+              config: { properties: { contextWindow: 1_000_000 } },
+            },
+          ],
+        },
+      ],
+    };
+    const modelSelectionService = { getView: vi.fn(async () => modelSelectionView) };
+    await startChannel({ modelSelectionService, modelSelectionDefault: null });
+    const client = await connectAndHandshake();
+    const sendQuery = (id: string, query: unknown) =>
+      client.send({ type: "query", id, query } as never);
+    const queryResult = (id: string) =>
+      client.waitFor((message) => message.type === "query_result" && message.id === id);
+    // the runtime's 200K is a segment cap, NOT the model's window — the
+    // registry's 1M is the truth (the owner saw 200K/200K = 100%)
+    (taskService.getTaskSnapshot as ReturnType<typeof vi.fn>).mockResolvedValue({
+      meta: { taskId: "task-7", title: "T", workspacePath: "/tmp/workspace", model: "meta-model" },
+      messages: [],
+      runtime: { contextUsage: { used: 200000, size: 200000 } },
+    });
+    (taskService.getTaskModelSelection as ReturnType<typeof vi.fn>).mockResolvedValue({
+      providerId: "account:zai-start-plan",
+      modelId: "GLM-5.3-Flash",
+      options: { reasoningLevel: "max" },
+    });
+    sendQuery("cw4", { kind: "contextWindow", taskId: "task-7", workspacePath: "/tmp/workspace" });
+    const result = await queryResult("cw4");
+    expect(result).toMatchObject({
+      type: "query_result",
+      result: { usedTokens: 200000, windowTokens: 1_000_000, windowSource: "model" },
+    });
+    client.destroy();
+  });
+
+  it("quota resolves the account access from the active conversation's provider (the not_configured fix)", async () => {
+    await startChannel();
+    const client = await connectAndHandshake();
+    const sendQuery = (id: string, query: unknown) =>
+      client.send({ type: "query", id, query } as never);
+    const queryResult = (id: string) =>
+      client.waitFor((message) => message.type === "query_result" && message.id === id);
+    (taskService.getTaskModelSelection as ReturnType<typeof vi.fn>).mockResolvedValue({
+      providerId: "account:zai-start-plan",
+      modelId: "GLM-5.3-Flash",
+      options: { reasoningLevel: "max" },
+    });
+    sendQuery("q9", { kind: "quota", taskId: "task-7" });
+    await queryResult("q9");
+    // the Start Plan path's gate: the request carries the access hint (the
+    // provider resolves the DYNAMIC truth from it) + the active provider
+    expect(usageService.getEntitlementSnapshot).toHaveBeenCalledWith(
+      expect.objectContaining({
+        preferredProviderId: "account:zai-start-plan",
+        accountAccess: { type: "zhipu-account", family: "zai", planKind: "start-plan" },
+        allowDisabledPreferredProvider: true,
+      }),
+    );
+    client.destroy();
+  });
+
+  it("nothing exposes the window: the owner's 1M calibration, marked as such", async () => {
+    await startChannel(); // sin registry
+    const client = await connectAndHandshake();
+    const sendQuery = (id: string, query: unknown) =>
+      client.send({ type: "query", id, query } as never);
+    const queryResult = (id: string) =>
+      client.waitFor((message) => message.type === "query_result" && message.id === id);
+    // used is KNOWN, the window is not exposed anywhere → the owner's own
+    // calibration (his models are 1M max), travelling its source so the
+    // bot renders it approximate
+    (taskService.getTaskSnapshot as ReturnType<typeof vi.fn>).mockResolvedValue({
+      meta: { taskId: "task-7", title: "T", workspacePath: "/tmp/workspace", model: "meta-model" },
+      messages: [],
+      runtime: { contextUsage: { used: 200000, size: 0 } },
+    });
+    (taskService.getTaskModelSelection as ReturnType<typeof vi.fn>).mockResolvedValue({
+      providerId: "account:zai-start-plan",
+      modelId: "GLM-5.3-Flash",
+      options: { reasoningLevel: "max" },
+    });
+    sendQuery("cw5", { kind: "contextWindow", taskId: "task-7", workspacePath: "/tmp/workspace" });
+    const result = await queryResult("cw5");
+    expect(result).toMatchObject({
+      type: "query_result",
+      result: { usedTokens: 200000, windowTokens: 1_000_000, windowSource: "owner_default" },
     });
     client.destroy();
   });

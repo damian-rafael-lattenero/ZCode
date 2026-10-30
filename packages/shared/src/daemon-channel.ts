@@ -59,6 +59,14 @@ export interface DaemonChannelInboundRequest {
   messageId?: string;
   attachments?: DaemonChannelInboundAttachment[];
   receivedAt?: number;
+  /**
+   * Sesión DESTINO del texto (aditivo, 30/10): presente → el canal envía el
+   * prompt DIRECTO a esa task (sendPrompt) en vez del botsService — es la
+   * ÓRDEN del dueño a un subagente attachado; la respuesta vuelve por el
+   * stream de la sesión (la carta attachada la muestra). Ausente → el
+   * routing de siempre (la conversación bindeada).
+   */
+  taskId?: string;
 }
 
 export interface DaemonChannelSubscribeRequest {

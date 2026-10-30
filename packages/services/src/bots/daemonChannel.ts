@@ -570,6 +570,39 @@ export function createDaemonLocalChannel(
         ...(message.messageId ? { providerMessageId: message.messageId } : {}),
       },
     };
+    // LA ORDEN DIRIGIDA (aditivo, 30/10): con taskId el texto va DIRECTO a
+    // esa sesión (sendPrompt) — la orden del dueño a un subagente attachado;
+    // su respuesta vuelve por el stream de la sesión, que la carta attachada
+    // ya muestra. Sin taskId: el routing de siempre (botsService).
+    if (message.taskId) {
+      void deps.zcodeTaskService
+        .sendPrompt({
+          taskId: message.taskId,
+          traceId: `daemon-ord-${message.id}`,
+          content: message.text,
+          clientId: connection.clientId ?? "daemon-channel",
+          clientLabel: "daemon-channel-order",
+        })
+        .then(() => {
+          send(connection.socket, {
+            type: "inbound_result",
+            id: message.id,
+            duplicate: false,
+            replies: [],
+          });
+        })
+        .catch((error: unknown) => {
+          sendError(connection, connection.socket, {
+            type: "error",
+            id: message.id,
+            code: "internal",
+            message: `order to ${message.taskId} failed: ${
+              error instanceof Error ? error.message : String(error)
+            }`,
+          });
+        });
+      return;
+    }
     void deps.botsService
       .handleInboundMessage(inbound)
       .then((replies) => {

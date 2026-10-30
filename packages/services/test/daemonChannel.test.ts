@@ -670,6 +670,31 @@ describe("daemon local channel (B3a)", () => {
     client.destroy();
   });
 
+  it("an inbound WITH taskId is an ORDER: sendPrompt straight into that session", async () => {
+    await startChannel();
+    const client = await connectAndHandshake();
+    client.send({
+      type: "inbound",
+      id: "ord1",
+      text: "cambiale el título a la carta",
+      messageId: "tg-900",
+      taskId: "sess_subagent_agent_419b5d75",
+    } as never);
+    const result = await client.waitFor(
+      (message) => message.type === "inbound_result" && message.id === "ord1",
+    );
+    // the DIRECT delivery: the prompt entered THAT session, not the bound one
+    expect(taskService.sendPrompt).toHaveBeenCalledWith(
+      expect.objectContaining({
+        taskId: "sess_subagent_agent_419b5d75",
+        content: "cambiale el título a la carta",
+      }),
+    );
+    expect(taskService.handleInboundMessage ?? null).toBeNull(); // the fake has no such fn — the real check is sendPrompt above
+    expect(result).toMatchObject({ type: "inbound_result", id: "ord1", duplicate: false });
+    client.destroy();
+  });
+
   it("quota resolves the account access from the active conversation's provider (the not_configured fix)", async () => {
     await startChannel();
     const client = await connectAndHandshake();

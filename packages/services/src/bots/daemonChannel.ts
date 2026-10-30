@@ -32,6 +32,7 @@ import {
   type BotOutboundMessage,
   type ZCodeStreamEvent,
   type DaemonChannelClientMessage,
+  type DaemonChannelContextWindowResult,
   type DaemonChannelError,
   type DaemonChannelQuery,
   type DaemonChannelServerMessage,
@@ -117,6 +118,7 @@ const KNOWN_QUERY_KINDS = new Set([
   "stop",
   "stopAll",
   "compact",
+  "contextWindow",
 ]);
 
 function buildDaemonBotConfig(existing?: BotConfig): BotConfig {
@@ -193,6 +195,7 @@ export function createDaemonLocalChannel(
     "queries:quota",
     "queries:botStatus",
     "queries:modelSelection",
+    "queries:contextWindow",
     "control:setModelSelection",
     "control:stop",
     "control:stopAll",
@@ -261,6 +264,50 @@ export function createDaemonLocalChannel(
     modelSelectionDefault: deps.modelSelectionDefault,
     resolveContextWorkspace,
   });
+
+  /**
+   * El medidor de contexto REAL de la conversación (query `contextWindow`,
+   * /context_window del bot): runtime.contextUsage del snapshot — la MISMA
+   * fuente que restaura el meter del desktop (contextUsageFromRuntime ??
+   * contextUsageFromProjection del adapter), NUNCA el acumulado del resumen
+   * (getTaskTokenUsage es otra cosa). Ventana de respaldo: el
+   * properties.contextWindow del registry del modelo. Honesto por contrato:
+   * lo que el host no sabe viaja null — used=0 es inicialización, no dato.
+   */
+  async function contextWindowResult(
+    taskId: string,
+    workspacePath: string,
+    workspaceIdentity?: string,
+  ): Promise<DaemonChannelContextWindowResult> {
+    const taskService = deps.zcodeTaskService;
+    const snapshot = await taskService.getTaskSnapshot({
+      taskId,
+      workspacePath,
+      ...(workspaceIdentity ? { workspaceIdentity } : {}),
+      // Solo el medidor importa: 1 mensaje mantiene el paquete liviano.
+      messageLimit: 1,
+    });
+    if (!snapshot) {
+      throw new Error(`task ${taskId} has no snapshot to read the context meter from`);
+    }
+    const selection = await taskService.getTaskModelSelection({ taskId }).catch(() => null);
+    const usage = snapshot.runtime?.contextUsage;
+    const usedTokens = usage && usage.used > 0 ? usage.used : null;
+    let windowTokens = usage && usage.size > 0 ? usage.size : null;
+    if (windowTokens === null && deps.modelSelectionService && selection) {
+      const view = await deps.modelSelectionService.getView().catch(() => null);
+      const configured = view?.providers
+        .find((provider) => provider.providerId === selection.providerId)
+        ?.models.find((model) => model.modelId === selection.modelId)?.config.properties
+        .contextWindow;
+      if (typeof configured === "number" && configured > 0) windowTokens = configured;
+    }
+    return {
+      model: selection?.modelId ?? snapshot.meta.model ?? null,
+      usedTokens,
+      windowTokens,
+    };
+  }
 
   async function runQuery(query: DaemonChannelQuery): Promise<unknown> {
     const taskService = deps.zcodeTaskService;
@@ -372,6 +419,19 @@ export function createDaemonLocalChannel(
           ...(query.instructions ? { instructions: query.instructions } : {}),
           ...(query.expectedRevision !== undefined ? { expectedRevision: query.expectedRevision } : {}),
         });
+      }
+      case "contextWindow": {
+        let workspacePath = query.workspacePath;
+        let workspaceIdentity = query.workspaceIdentity;
+        if (!workspacePath) {
+          const fallback = await resolveContextWorkspace();
+          if (!fallback) {
+            throw new Error("workspacePath is required when the daemon bot has no active context");
+          }
+          workspacePath = fallback.workspacePath;
+          workspaceIdentity = workspaceIdentity ?? fallback.workspaceIdentity;
+        }
+        return contextWindowResult(query.taskId, workspacePath, workspaceIdentity);
       }
       default: {
         // Exhaustividad: una query nueva del shared sin rama acá es un bug del host.

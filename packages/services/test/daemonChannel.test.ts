@@ -208,9 +208,13 @@ describe("daemon local channel (B3a)", () => {
     });
     const helloOk = await client.waitFor((message) => message.type === "hello_ok");
     expect(helloOk).toMatchObject({ type: "hello_ok", protocolVersion: 1 });
-    // Capacidades nuevas del /plan (aditivas, protocolo v1).
+    // Capacidades nuevas del /plan y del /context_window (aditivas, protocolo v1).
     expect((helloOk as { capabilities: string[] }).capabilities).toEqual(
-      expect.arrayContaining(["queries:modelSelection", "control:setModelSelection"]),
+      expect.arrayContaining([
+        "queries:modelSelection",
+        "control:setModelSelection",
+        "queries:contextWindow",
+      ]),
     );
     return client;
   }
@@ -546,6 +550,118 @@ describe("daemon local channel (B3a)", () => {
     );
     expect(effortError).toMatchObject({ type: "error", code: "internal" });
     expect((effortError as { message?: string }).message).toContain("valid values: low, high");
+    client.destroy();
+  });
+
+  it("answers contextWindow with the REAL context meter (used, window, model)", async () => {
+    await startChannel();
+    const client = await connectAndHandshake();
+    const sendQuery = (id: string, query: unknown) =>
+      client.send({ type: "query", id, query } as never);
+    const queryResult = (id: string) =>
+      client.waitFor((message) => message.type === "query_result" && message.id === id);
+
+    // runtime.contextUsage = la MISMA fuente que restaura el meter del desktop
+    // (contextUsageFromRuntime ?? contextUsageFromProjection del adapter).
+    (taskService.getTaskSnapshot as ReturnType<typeof vi.fn>).mockResolvedValue({
+      meta: { taskId: "task-7", title: "T", workspacePath: "/tmp/workspace", model: "meta-model" },
+      messages: [],
+      runtime: { contextUsage: { used: 45300, size: 200000 } },
+    });
+    (taskService.getTaskModelSelection as ReturnType<typeof vi.fn>).mockResolvedValue({
+      providerId: "account:zai-start-plan",
+      modelId: "GLM-5.3-Flash",
+      options: { reasoningLevel: "max" },
+    });
+
+    sendQuery("cw1", { kind: "contextWindow", taskId: "task-7", workspacePath: "/tmp/workspace" });
+    const result = await queryResult("cw1");
+    // El model de la sesión activa gana sobre meta.model; el meter viaja crudo.
+    expect(result).toMatchObject({
+      type: "query_result",
+      result: { model: "GLM-5.3-Flash", usedTokens: 45300, windowTokens: 200000 },
+    });
+    // El medidor se lee liviano: 1 mensaje basta (no es el /last del snapshot).
+    expect(taskService.getTaskSnapshot).toHaveBeenCalledWith(
+      expect.objectContaining({ taskId: "task-7", workspacePath: "/tmp/workspace", messageLimit: 1 }),
+    );
+    client.destroy();
+  });
+
+  it("contextWindow stays honest without a meter: nulls, and model falls back to meta", async () => {
+    await startChannel(); // sin modelSelectionService: no hay registry de donde caer
+    const client = await connectAndHandshake();
+    const sendQuery = (id: string, query: unknown) =>
+      client.send({ type: "query", id, query } as never);
+    const queryResult = (id: string) =>
+      client.waitFor((message) => message.type === "query_result" && message.id === id);
+    (taskService.getTaskSnapshot as ReturnType<typeof vi.fn>).mockResolvedValue({
+      meta: { taskId: "task-7", title: "T", workspacePath: "/tmp/workspace", model: "meta-model" },
+      messages: [],
+    });
+    (taskService.getTaskModelSelection as ReturnType<typeof vi.fn>).mockResolvedValue({
+      providerId: "account:zai-start-plan",
+      modelId: "session-model",
+      options: { reasoningLevel: "max" },
+    });
+
+    // Sin runtime.contextUsage NO se inventa nada: ambos null.
+    sendQuery("cw2", { kind: "contextWindow", taskId: "task-7", workspacePath: "/tmp/workspace" });
+    const result = await queryResult("cw2");
+    expect(result).toMatchObject({
+      type: "query_result",
+      result: { model: "session-model", usedTokens: null, windowTokens: null },
+    });
+
+    // Sin selección de sesión viva → el model cae a meta.model.
+    (taskService.getTaskModelSelection as ReturnType<typeof vi.fn>).mockRejectedValue(
+      new Error("task target is not live"),
+    );
+    sendQuery("cw3", { kind: "contextWindow", taskId: "task-7", workspacePath: "/tmp/workspace" });
+    const fallback = await queryResult("cw3");
+    expect(fallback).toMatchObject({
+      type: "query_result",
+      result: { model: "meta-model", usedTokens: null, windowTokens: null },
+    });
+    client.destroy();
+  });
+
+  it("contextWindow falls back to the registry window when the meter lacks size", async () => {
+    const modelSelectionService = {
+      getView: vi.fn(async () => ({
+        providers: [
+          {
+            providerId: "account:zai-start-plan",
+            models: [
+              { modelId: "GLM-5.3-Flash", config: { properties: { contextWindow: 200000 } } },
+            ],
+          },
+        ],
+      })),
+    };
+    await startChannel({ modelSelectionService });
+    const client = await connectAndHandshake();
+    const sendQuery = (id: string, query: unknown) =>
+      client.send({ type: "query", id, query } as never);
+    const queryResult = (id: string) =>
+      client.waitFor((message) => message.type === "query_result" && message.id === id);
+    (taskService.getTaskSnapshot as ReturnType<typeof vi.fn>).mockResolvedValue({
+      meta: { taskId: "task-7", title: "T", workspacePath: "/tmp/workspace", model: "GLM-5.3-Flash" },
+      messages: [],
+    });
+    (taskService.getTaskModelSelection as ReturnType<typeof vi.fn>).mockResolvedValue({
+      providerId: "account:zai-start-plan",
+      modelId: "GLM-5.3-Flash",
+      options: { reasoningLevel: "max" },
+    });
+
+    // El meter no sabe la ventana, pero el registry sí: properties.contextWindow.
+    sendQuery("cw4", { kind: "contextWindow", taskId: "task-7", workspacePath: "/tmp/workspace" });
+    const result = await queryResult("cw4");
+    expect(result).toMatchObject({
+      type: "query_result",
+      result: { model: "GLM-5.3-Flash", usedTokens: null, windowTokens: 200000 },
+    });
     client.destroy();
   });
 

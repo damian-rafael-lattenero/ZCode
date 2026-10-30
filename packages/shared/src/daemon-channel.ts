@@ -147,7 +147,28 @@ export type DaemonChannelQuery =
       workspaceIdentity?: string;
       instructions?: string;
       expectedRevision?: number;
+    }
+  | {
+      kind: "contextWindow";
+      taskId: string;
+      workspacePath?: string;
+      workspaceIdentity?: string;
     };
+
+/**
+ * Resultado de `contextWindow` (el medidor de contexto REAL de la
+ * conversación — la misma fuente que restaura el meter del desktop:
+ * runtime.contextUsage del snapshot). Honesto por contrato: null = el host
+ * no lo sabe; NUNCA se estima del lado del host ni del cliente.
+ */
+export interface DaemonChannelContextWindowResult {
+  /** modelId vigente de la conversación (settings.model del task, o meta). */
+  model: string | null;
+  /** Tokens del contexto actual (última proyección de usage del runtime). */
+  usedTokens: number | null;
+  /** Ventana de contexto del modelo (runtime o registry); null = desconocida. */
+  windowTokens: number | null;
+}
 
 export interface DaemonChannelQueryRequest {
   type: "query";

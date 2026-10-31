@@ -22,6 +22,13 @@ export const DAEMON_CHANNEL_HANDSHAKE_TIMEOUT_MS = 10_000;
 /** Ventana de dedupe de inbound por messageId (paridad con el offset de Telegram). */
 export const DAEMON_CHANNEL_INBOUND_DEDUPE_TTL_MS = 2 * 60_000;
 
+/**
+ * Intervalo del latido del stream continuo (stream_keepalive). 15s da un
+ * margen 4× bajo el watchdog de 60s del consumidor (el bot re-suscribe a los
+ * 60s de silencio crudo; con el latido keyará en «3+ intervalos sin frames»).
+ */
+export const DAEMON_CHANNEL_STREAM_KEEPALIVE_INTERVAL_MS = 15_000;
+
 /** Provider sintético del canal: una bot entry más en bot-config.v3.json. */
 export const DAEMON_CHANNEL_PROVIDER = "daemon";
 export const DAEMON_CHANNEL_DEFAULT_BOT_ID = "daemon-local";
@@ -346,6 +353,27 @@ export interface DaemonChannelStreamEventFrame {
   event: ZCodeStreamEvent;
 }
 
+/**
+ * Latido del stream continuo (aditivo 30/10/2026): una frame por suscripción
+ * viva cada DAEMON_CHANNEL_STREAM_KEEPALIVE_INTERVAL_MS mientras no haya
+ * eventos que reenviar.
+ *
+ * CONTRATO DEL CONSUMIDOR: la ausencia PURA de frames (ni stream_event ni
+ * stream_keepalive) durante más de ~3 intervalos = stream muerto, aunque el
+ * modelo esté callado. Un modelo callado NO rompe el latido; solo la muerte
+ * real del canal (host caído, socket roto, suscripción perdida) lo hace.
+ * El watchdog del consumidor debe keyar en el latido, no en el silencio
+ * crudo — el silencio crudo confunde «modelo pensativo» con «bus muerto»
+ * (medido 30/10: burst on subscribe, then silence on a LIVE turn).
+ */
+export interface DaemonChannelStreamKeepaliveFrame {
+  type: "stream_keepalive";
+  taskId: string;
+  /** El MISMO contador monótono por conexión que stream_event: los gaps se detectan igual. */
+  seq: number;
+  at: number;
+}
+
 /** Best-effort antes de un cierre limpio del host. */
 export interface DaemonChannelBye {
   type: "bye";
@@ -361,4 +389,5 @@ export type DaemonChannelServerMessage =
   | DaemonChannelPong
   | DaemonChannelError
   | DaemonChannelStreamEventFrame
+  | DaemonChannelStreamKeepaliveFrame
   | DaemonChannelBye;

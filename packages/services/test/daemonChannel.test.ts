@@ -167,6 +167,7 @@ describe("daemon local channel (B3a)", () => {
     config?: unknown;
     modelSelectionService?: unknown;
     modelSelectionDefault?: unknown;
+    streamKeepaliveIntervalMs?: number;
   }) {
     const repo = overrides?.config ?? f.createMemoryRepo(f.baseConfig);
     botsService = f.createBotsService({
@@ -182,6 +183,9 @@ describe("daemon local channel (B3a)", () => {
       dataRootDir: () => dataDir,
       env: overrides?.env ?? {},
       handshakeTimeoutMs: 250,
+      ...(overrides?.streamKeepaliveIntervalMs !== undefined
+        ? { streamKeepaliveIntervalMs: overrides.streamKeepaliveIntervalMs }
+        : {}),
       logger: {
         debug: () => undefined,
         info: () => undefined,
@@ -368,6 +372,70 @@ describe("daemon local channel (B3a)", () => {
     await client.waitFor((message) => message.type === "unsubscribed" && message.id === "u1");
     stream!.fire({ type: "task_complete", taskId: "task-9", traceId: "t" } as ZCodeStreamEvent);
     await new Promise((resolve) => setTimeout(resolve, 50));
+    client.destroy();
+  });
+
+  it("heartbeats stream_keepalive per live subscription, sharing the connection seq counter", async () => {
+    await startChannel({ streamKeepaliveIntervalMs: 20 });
+    const client = await connectAndHandshake();
+    client.send({
+      type: "subscribe",
+      id: "s1",
+      taskId: "task-9",
+      workspacePath: "/tmp/workspace",
+    });
+    await client.waitFor((message) => message.type === "subscribed" && message.id === "s1");
+    // El latido llega sin eventos: un modelo callado NO rompe el canal.
+    const firstBeat = await client.waitFor((message) => message.type === "stream_keepalive");
+    expect(firstBeat).toMatchObject({ type: "stream_keepalive", taskId: "task-9" });
+    expect(firstBeat).toHaveProperty("at");
+    expect((firstBeat as { seq: number }).seq).toBeGreaterThanOrEqual(1);
+    // El seq del latido comparte el MISMO contador monótono de stream_event.
+    const stream = taskService.streamFor("task-9");
+    expect(stream).toBeDefined();
+    stream!.fire({ type: "task_complete", taskId: "task-9", traceId: "t" } as ZCodeStreamEvent);
+    const event = (await client.waitFor((message) => message.type === "stream_event")) as {
+      seq: number;
+    };
+    const nextBeat = (await client.waitFor(
+      (message) => message.type === "stream_keepalive" && message.seq > event.seq,
+    )) as { seq: number };
+    expect(nextBeat.seq).toBeGreaterThan(event.seq);
+    client.destroy();
+  });
+
+  it("unsubscribe stops the heartbeat; a resubscribe replaces the timer instead of stacking", async () => {
+    await startChannel({ streamKeepaliveIntervalMs: 15 });
+    const client = await connectAndHandshake();
+    client.send({
+      type: "subscribe",
+      id: "s1",
+      taskId: "task-9",
+      workspacePath: "/tmp/workspace",
+    });
+    await client.waitFor((message) => message.type === "subscribed" && message.id === "s1");
+    await client.waitFor((message) => message.type === "stream_keepalive");
+    const stream = taskService.streamFor("task-9");
+    expect(stream).toBeDefined();
+    // Re-subscribir la misma task reemplaza la suscripción: un solo listener vivo
+    // (el dispose del reemplazo limpió el timer viejo — cero latidos dobles).
+    client.send({
+      type: "subscribe",
+      id: "s2",
+      taskId: "task-9",
+      workspacePath: "/tmp/workspace",
+    });
+    await client.waitFor((message) => message.type === "subscribed" && message.id === "s2");
+    expect(stream!.listeners.size).toBe(1);
+    // Unsubscribe mata la suscripción Y su latido: nada de frames en 5 intervalos.
+    client.send({ type: "unsubscribe", id: "u1", taskId: "task-9" });
+    await client.waitFor((message) => message.type === "unsubscribed" && message.id === "u1");
+    expect(stream!.listeners.size).toBe(0);
+    const beatAfterUnsubscribe = await Promise.race([
+      client.waitFor((message) => message.type === "stream_keepalive"),
+      new Promise<"none">((resolve) => setTimeout(() => resolve("none"), 75)),
+    ]);
+    expect(beatAfterUnsubscribe).toBe("none");
     client.destroy();
   });
 

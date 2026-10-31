@@ -25,6 +25,7 @@ import {
   DAEMON_CHANNEL_PROVIDER,
   DAEMON_CHANNEL_PROVIDER_USER_ID,
   DAEMON_CHANNEL_SOCKET_FILENAME,
+  DAEMON_CHANNEL_STREAM_KEEPALIVE_INTERVAL_MS,
   DAEMON_CHANNEL_TOKEN_FILENAME,
   ZCODE_VERSION,
   isCodingPlanModelProviderId,
@@ -66,6 +67,13 @@ export interface DaemonLocalChannelDeps {
   now?: () => number;
   /** Inyectable para tests; default: DAEMON_CHANNEL_HANDSHAKE_TIMEOUT_MS. */
   handshakeTimeoutMs?: number;
+  /**
+   * Intervalo del latido stream_keepalive por suscripción viva (aditivo 30/10).
+   * Inyectable para tests; default: DAEMON_CHANNEL_STREAM_KEEPALIVE_INTERVAL_MS.
+   * 0 lo desactiva. Los consumidores viejos ignoran la frame nueva: el default
+   * puede quedar siempre encendido.
+   */
+  streamKeepaliveIntervalMs?: number;
 }
 
 export type DaemonLocalChannelState =
@@ -671,7 +679,39 @@ export function createDaemonLocalChannel(
         connection.subscriptions.delete(message.taskId);
       }
     });
-    connection.subscriptions.set(message.taskId, disposable);
+    // [fork 30/10] Latido por suscripción viva: el consumidor distingue
+    // «modelo callado» de «bus muerto» (contrato en DaemonChannelStreamKeepaliveFrame).
+    // El seq comparte el contador monótono de la conexión; un socket roto mata la
+    // suscripción igual que en stream_event. El timer va unref: nunca bloquea el
+    // shutdown del host por sí solo.
+    const keepaliveIntervalMs = deps.streamKeepaliveIntervalMs ?? DAEMON_CHANNEL_STREAM_KEEPALIVE_INTERVAL_MS;
+    let keepaliveTimer: ReturnType<typeof setInterval> | undefined;
+    if (keepaliveIntervalMs > 0) {
+      keepaliveTimer = setInterval(() => {
+        connection.seq += 1;
+        const delivered = send(connection.socket, {
+          type: "stream_keepalive",
+          taskId: message.taskId,
+          seq: connection.seq,
+          at: now(),
+        });
+        if (!delivered) {
+          connection.subscriptions.get(message.taskId)?.dispose();
+          connection.subscriptions.delete(message.taskId);
+        }
+      }, keepaliveIntervalMs);
+      keepaliveTimer.unref?.();
+    }
+    const disposableWithKeepalive = {
+      dispose() {
+        if (keepaliveTimer) {
+          clearInterval(keepaliveTimer);
+          keepaliveTimer = undefined;
+        }
+        disposable.dispose();
+      },
+    };
+    connection.subscriptions.set(message.taskId, disposableWithKeepalive);
     send(connection.socket, { type: "subscribed", id: message.id, taskId: message.taskId });
   }
 

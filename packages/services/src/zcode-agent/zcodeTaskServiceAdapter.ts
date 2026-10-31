@@ -400,6 +400,8 @@ export function createZCodeTaskServiceAdapter(
       logReason?: string;
       modelSelection?: CommandPayloadMap["sendText"]["modelSelection"];
       modelExecution?: CommandPayloadMap["sendText"]["modelExecution"];
+      /** STEER (aditivo, 30/10): «guide» → el payload sendText pide delivery guide. */
+      requestedDelivery?: "guide";
     } & ZCodeBackgroundTurnAttribution,
   ): Promise<void> {
     const startedAt = Date.now();
@@ -464,6 +466,9 @@ export function createZCodeTaskServiceAdapter(
             payload: {
               text: params.content,
               heldQueueDisposition: "keepQueueAndSend",
+              // STEER (aditivo, 30/10): guide → el CLI admission lo inyecta
+              // DENTRO del turno corriendo (turn.steerQueued); idle → turno nuevo.
+              ...(params.requestedDelivery ? { requestedDelivery: params.requestedDelivery } : {}),
               ...(params.modelSelection ? { modelSelection: params.modelSelection } : {}),
               ...(params.modelExecution ? { modelExecution: params.modelExecution } : {}),
               ...turnAttributionOf(params),
@@ -2096,6 +2101,7 @@ export function createZCodeTaskServiceAdapter(
         clientMode: params.clientMode,
         modelSelection: params.modelSelection,
         modelExecution: params.modelExecution,
+        ...(params.requestedDelivery ? { requestedDelivery: params.requestedDelivery } : {}),
       });
     },
 

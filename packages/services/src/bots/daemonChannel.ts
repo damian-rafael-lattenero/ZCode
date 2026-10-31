@@ -752,6 +752,63 @@ export function createDaemonLocalChannel(
       });
   }
 
+  /**
+   * STEER (aditivo, 30/10): redirigir el turno EN CURSO — la frame `steer`
+   * {taskId, text} envía el texto al task service con delivery «guide»
+   * (requestedDelivery=guide en el payload v4 sendText), y el admission del
+   * CLI lo inyecta DENTRO del turno corriendo (turn.steerQueued →
+   * turn.steerDrained en el próximo límite de herramienta). Idle → el CLI
+   * arranca un turno normal con el mismo texto (la guía no se pierde). El
+   * ACK es el MISMO inbound_result del inbound (replies vacías) — el
+   * destino del turno lo cuenta el STREAM, no el ack. El fallo viaja COMO
+   * ERROR (task desconocida, sin target) — nunca un ok mentiroso.
+   */
+  function handleSteerRequest(
+    connection: DaemonConnection,
+    message: Extract<DaemonChannelClientMessage, { type: "steer" }>,
+  ): void {
+    if (!message.taskId || !message.text.trim()) {
+      sendError(connection, connection.socket, {
+        type: "error",
+        id: message.id,
+        code: "bad_request",
+        message: "steer requires taskId and text",
+      });
+      return;
+    }
+    void deps.zcodeTaskService
+      .sendPrompt({
+        taskId: message.taskId,
+        traceId: `daemon-steer-${message.id}`,
+        content: message.text,
+        clientId: connection.clientId ?? "daemon-channel",
+        clientLabel: "daemon-channel-steer",
+        requestedDelivery: "guide",
+      })
+      .then(() => {
+        send(connection.socket, {
+          type: "inbound_result",
+          id: message.id,
+          duplicate: false,
+          replies: [],
+        });
+      })
+      .catch((error: unknown) => {
+        logger.warn(
+          undefined,
+          `steer task=${message.taskId} failed: ${error instanceof Error ? error.message : String(error)}`,
+        );
+        sendError(connection, connection.socket, {
+          type: "error",
+          id: message.id,
+          code: "internal",
+          message: `steer to ${message.taskId} failed: ${
+            error instanceof Error ? error.message : String(error)
+          }`,
+        });
+      });
+  }
+
   function handleSubscribe(
     connection: DaemonConnection,
     message: Extract<DaemonChannelClientMessage, { type: "subscribe" }>,
@@ -843,6 +900,9 @@ export function createDaemonLocalChannel(
         return;
       case "respond":
         handleRespondRequest(connection, message);
+        return;
+      case "steer":
+        handleSteerRequest(connection, message);
         return;
       case "subscribe":
         handleSubscribe(connection, message);

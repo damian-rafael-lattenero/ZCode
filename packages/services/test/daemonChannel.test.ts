@@ -763,6 +763,59 @@ describe("daemon local channel (B3a)", () => {
     client.destroy();
   });
 
+  it("a steer frame sends the prompt with requestedDelivery guide (the running turn's redirection)", async () => {
+    await startChannel();
+    const client = await connectAndHandshake();
+    client.send({
+      type: "steer",
+      id: "st1",
+      taskId: "task-77",
+      text: "cambiá el enfoque a la API",
+    } as never);
+    const result = await client.waitFor(
+      (message) => message.type === "inbound_result" && message.id === "st1",
+    );
+    // the delivery: sendPrompt CARRIES the guide — the CLI admission injects it INSIDE the live turn
+    expect(taskService.sendPrompt).toHaveBeenCalledWith(
+      expect.objectContaining({
+        taskId: "task-77",
+        content: "cambiá el enfoque a la API",
+        requestedDelivery: "guide",
+      }),
+    );
+    expect(result).toMatchObject({ type: "inbound_result", id: "st1", duplicate: false });
+    client.destroy();
+  });
+
+  it("a steer WITHOUT text or taskId is refused by name (bad_request)", async () => {
+    await startChannel();
+    const client = await connectAndHandshake();
+    client.send({ type: "steer", id: "st2", taskId: "", text: "  " } as never);
+    const result = await client.waitFor(
+      (message) => message.type === "error" && message.id === "st2",
+    );
+    expect(result).toMatchObject({ type: "error", code: "bad_request" });
+    client.destroy();
+  });
+
+  it("a steer failure travels AS AN ERROR (the task service's own word)", async () => {
+    await startChannel();
+    (taskService.sendPrompt as ReturnType<typeof vi.fn>).mockRejectedValueOnce(
+      new Error("no target for task-77"),
+    );
+    const client = await connectAndHandshake();
+    client.send({ type: "steer", id: "st3", taskId: "task-77", text: "probando" } as never);
+    const result = await client.waitFor(
+      (message) => message.type === "error" && message.id === "st3",
+    );
+    expect(result).toMatchObject({
+      type: "error",
+      code: "internal",
+      message: expect.stringContaining("steer to task-77 failed: no target for task-77"),
+    });
+    client.destroy();
+  });
+
   it("quota resolves the account access from the active conversation's provider (the not_configured fix)", async () => {
     await startChannel();
     const client = await connectAndHandshake();

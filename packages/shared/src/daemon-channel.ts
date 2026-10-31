@@ -252,6 +252,22 @@ export interface DaemonChannelRespondRequest {
   messageId?: string;
 }
 
+/**
+ * STEER (aditivo, 30/10): redirigir UN turno EN CURSO desde el teléfono.
+ * El texto viaja al task service con delivery «guide» (v4 sendText
+ * requestedDelivery=guide → el admission del CLI lo inyecta DENTRO del
+ * turno corriendo — turn.steerQueued → turn.steerDrained en el próximo
+ * límite de herramienta). Idle → el CLI arranca un turno normal con el
+ * mismo texto (la guía no se pierde; el cliente lo dice honesto). El ACK
+ * es el MISMO inbound_result del inbound (replies vacías).
+ */
+export interface DaemonChannelSteerRequest {
+  type: "steer";
+  id: string;
+  taskId: string;
+  text: string;
+}
+
 export type DaemonChannelClientMessage =
   | DaemonChannelHelloRequest
   | DaemonChannelInboundRequest
@@ -259,7 +275,8 @@ export type DaemonChannelClientMessage =
   | DaemonChannelUnsubscribeRequest
   | DaemonChannelQueryRequest
   | DaemonChannelPingRequest
-  | DaemonChannelRespondRequest;
+  | DaemonChannelRespondRequest
+  | DaemonChannelSteerRequest;
 
 // ---- servidor → cliente ------------------------------------------------------
 

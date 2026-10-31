@@ -31,6 +31,7 @@ const PROCESS_TREE_FORCE_AFTER_MS = 2_000;
 const PROCESS_TREE_WINDOWS_TASKKILL_TIMEOUT_MS = 1_000;
 const PROCESS_TREE_WINDOWS_EXIT_OBSERVATION_GRACE_MS = 250;
 const processTreeLogger = createServiceLogger("zcode-agent-process-tree");
+const stdioTransportLogger = createServiceLogger("zcode-agent-stdio-transport");
 
 export class ZCodeStdioTransport implements ZCodeProtocolTransport {
   readonly kind = "stdio" as const;
@@ -258,15 +259,30 @@ export class ZCodeStdioTransport implements ZCodeProtocolTransport {
     if (line.trim().length === 0) {
       return;
     }
+    let parsed: ReturnType<typeof zcodeProtocolMessageSchema.parse>;
     try {
-      const parsed = zcodeProtocolMessageSchema.parse(JSON.parse(line));
-      // 协议帧分发曾同步查询系统进程表，telemetry/streaming 高峰会阻塞
-      // Host event loop 并让 subagent 面板无输出。运行期 data plane 只做解析和转发；
-      // 完整进程树查询严格留在 dispose cleanup 边界。
-      this.messageEmitter.fire(parsed);
+      parsed = zcodeProtocolMessageSchema.parse(JSON.parse(line));
     } catch (error) {
       const reason = error instanceof Error ? error.message : String(error);
       this.fireClose({ reason: `protocol_parse_error: ${reason}` });
+      return;
+    }
+    // 协议帧分发曾同步查询系统进程表，telemetry/streaming 高峰会阻塞
+    // Host event loop 并让 subagent 面板无输出。运行期 data plane 只做解析和转发；
+    // 完整进程树查询严格留在 dispose cleanup 边界。
+    // [fork 2026-10-30] 解析与分发的失败语义分离：帧错误（JSON/schema）= transport 不可信，
+    // 维持 fireClose；listener 的同步异常是消费方缺陷，不得被误判成 protocol_parse_error
+    // 而关闭 transport —— 那会连坐回收 CLI 进程树、盲掉该 runtime 上的全部会话（桌面 v4
+    // 与 bot channel 一起死，且进程重启卷进用户回合）。listener 缺陷记录后继续泵帧。
+    try {
+      this.messageEmitter.fire(parsed);
+    } catch (error) {
+      const reason = error instanceof Error ? `${error.message}` : String(error);
+      stdioTransportLogger.warn(
+        undefined,
+        "ZCode Protocol frame dispatch listener threw; transport kept alive",
+        { reason },
+      );
     }
   }
 

@@ -42,6 +42,76 @@ afterEach(() => {
 });
 
 describe("ZCodeStdioTransport", () => {
+  it("a throwing dispatch listener does NOT close the transport (parse and dispatch fail separately)", async () => {
+    // [fork 2026-10-30] 回归：fire 的同步 listener 异常曾落进 handleStdoutFrame 的
+    // parse catch，被误判成 protocol_parse_error 直接关闭 transport —— 连坐回收 CLI
+    // 进程树、盲掉该 runtime 上的所有会话。listener 缺陷必须只记录，泵帧继续。
+    const child = spawn(
+      process.execPath,
+      [
+        "-e",
+        `
+      const frame = (method) => JSON.stringify({ method, params: { sessionId: "s1" } }) + "\\n";
+      process.stdout.write(frame("first/notification"));
+      setTimeout(() => process.stdout.write(frame("second/notification")), 30);
+      process.stdin.resume();
+      process.stdin.once("end", () => process.exit(0));
+    `,
+      ],
+      { stdio: ["pipe", "pipe", "pipe"] },
+    );
+    activeChildren.add(child);
+    const transport = new ZCodeStdioTransport(child);
+    const methods: string[] = [];
+    let closeFired = false;
+    transport.onClose(() => {
+      closeFired = true;
+    });
+    let threw = false;
+    const stopThrowing = transport.onMessage((message) => {
+      if ((message as { method?: string }).method === "first/notification") {
+        threw = true;
+        throw new Error("listener bug (must not kill the transport)");
+      }
+      methods.push((message as { method: string }).method);
+    });
+    await vi.waitFor(
+      () => {
+        expect(threw).toBe(true);
+        expect(methods).toContain("second/notification");
+      },
+      { timeout: 3_000, interval: 20 },
+    );
+    // 两条帧之后 transport 仍然活着（没有任何 close 事件）。
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    expect(closeFired).toBe(false);
+    stopThrowing.dispose();
+    await transport.disposeAndWait();
+  });
+
+  it("a real protocol parse error still closes the transport", async () => {
+    const child = spawn(
+      process.execPath,
+      [
+        "-e",
+        `
+      process.stdout.write("not-json\\n");
+      process.stdin.resume();
+      process.stdin.once("end", () => process.exit(0));
+      setInterval(() => {}, 1000);
+    `,
+      ],
+      { stdio: ["pipe", "pipe", "pipe"] },
+    );
+    activeChildren.add(child);
+    const transport = new ZCodeStdioTransport(child);
+    const closeEvent = await new Promise<{ reason?: string }>((resolve) =>
+      transport.onClose((event) => resolve(event)),
+    );
+    expect(closeEvent.reason).toContain("protocol_parse_error");
+    await transport.disposeAndWait();
+  });
+
   it("stderr failure alone leaves a responsive protocol usable", async () => {
     const child = spawn(
       process.execPath,

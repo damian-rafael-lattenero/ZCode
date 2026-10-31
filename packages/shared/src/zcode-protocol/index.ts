@@ -1564,6 +1564,9 @@ export const zcodeTurnSteerQueuedEventPayloadSchema = z
     targetTurnId: nonEmptyString,
     queueLength: z.number().int().nonnegative(),
     intent: jsonObjectSchema.optional(),
+    // [fork 2026-10-30 审计] 新版 CLI 的 steer 入队事件携带 inputPresentation；strict
+    // 漏字段会丢弃整条 live 事件（机器日志实测 85 条/两天）。
+    inputPresentation: z.string().optional(),
   })
   .strict();
 export const zcodeTurnSteerDrainedEventPayloadSchema = z
@@ -1618,6 +1621,10 @@ export const zcodeTurnCompletedEventPayloadSchema = z
       "error_max_tool_calls",
     ]),
     backgroundSubagentResultConsumed: z.boolean().optional(),
+    // [fork 2026-10-30 审计] 新版 CLI 的终态事件携带 preserveQueueAutoDrainOnCancel；
+    // strict 漏字段会丢弃整条 turn.completed（桌面端此前因 cacheStats 同因丢过终态，
+    // 见上方 cacheStats 注释 —— 同一 bug 类的再一次复发）。
+    preserveQueueAutoDrainOnCancel: z.boolean().optional(),
   })
   .strict();
 export const zcodeTurnFailedEventPayloadSchema = z
@@ -1676,6 +1683,17 @@ const zcodeToolCallBasePayloadSchema = z
     childSessionId: nonEmptyString.optional(),
     childToolCallId: nonEmptyString.optional(),
     description: z.string().optional(),
+    // [fork 2026-10-30 审计] 新版 CLI 在 tool.updated 全 kind 上携带以下字段；strict
+    // 漏字段会让整条 live session/event 被丢弃（机器日志实测 2026-10-20 起每天 350-4600
+    // 条「丢弃无效 ZCode Protocol session event」），而 agentic 回合的 live 流几乎全是
+    // tool.updated —— bot-channel-continuous 的连续流因此成段静默（burst-then-silence）。
+    // 值形状按机器上 CLI 的实际输出审计：readOnly/sideEffectScope 布尔/字符串、display 与
+    // skillMetadata 形状未定先透传 unknown、pluginId 字符串。后续 CLI 新字段照此补审计。
+    readOnly: z.boolean().optional(),
+    sideEffectScope: z.string().optional(),
+    display: z.unknown().optional(),
+    skillMetadata: z.unknown().optional(),
+    pluginId: nonEmptyString.optional(),
   })
   .strict();
 
@@ -1757,6 +1775,10 @@ export const zcodePermissionRequestedEventPayloadSchema = z
     options: z.array(zcodePermissionOptionSchema).min(1),
     childSessionId: nonEmptyString.optional(),
     background: z.boolean().optional(),
+    // [fork 2026-10-30 审计] 新版 CLI 的权限请求事件携带 fullAccessSupported；strict
+    // 漏字段会丢弃整条 live 事件（机器日志实测 22 条）。值形状布尔，按字段名与
+    // permission 面语义审计。
+    fullAccessSupported: z.boolean().optional(),
   })
   .strict();
 export const zcodePermissionResolvedEventPayloadSchema = z
@@ -1831,6 +1853,82 @@ export const zcodeSessionEventSchema = z.discriminatedUnion("type", [
   zcodeSessionEventEnvelopeFor("streamRecovery.updated", jsonObjectSchema),
 ]);
 export type ZCodeSessionEvent = z.infer<typeof zcodeSessionEventSchema>;
+
+export type TolerantProtocolParseResult<T> =
+  | { ok: true; value: T; strippedKeys: string[] }
+  | { ok: false; error: z.ZodError };
+
+/**
+ * [fork 2026-10-30] 「CLI 新字段让 strict schema 丢弃整条事件」这一 bug 类的结构性收口
+ * （cacheStats、assistantMessageId、readOnly/sideEffectScope 三次同因复发，第三次直接
+ * 造成了 bot-channel-continuous 连续流的 burst-then-silence）。
+ *
+ * 策略：strict 校验失败且失败原因全部是 `unrecognized_keys` 时，把这些键从帧副本中剥除
+ * 后重试一次。已知字段照常审计进入协议（升级到新字段仍然必须显式补 schema）；剥除保证
+ * 未审计字段不穿透到 renderer（fail-closed 的本意），但事件本身继续流动 —— 一个比 app
+ * 新的 CLI 不再能把订阅方打成全盲。
+ *
+ * 返回值携带 strippedKeys 作为审计线索；调用方应记录它。除 unrecognized_keys 之外的
+ * 校验失败（缺字段、类型错）不参与重试，保持原有丢弃语义。
+ */
+export function safeParseStrippingUnrecognizedKeys<T>(
+  schema: z.ZodType<T>,
+  raw: unknown,
+): TolerantProtocolParseResult<T> {
+  const first = schema.safeParse(raw);
+  if (first.success) {
+    return { ok: true, value: first.data, strippedKeys: [] };
+  }
+  const unrecognizedIssues = first.error.issues.filter(
+    (issue) => issue.code === "unrecognized_keys",
+  );
+  if (unrecognizedIssues.length === 0 || unrecognizedIssues.length !== first.error.issues.length) {
+    return { ok: false, error: first.error };
+  }
+  // 帧来自 JSON 线路，JSON 往返是安全的深拷贝；undefined 值在线路上本就不存在。
+  let clone: unknown;
+  try {
+    clone = JSON.parse(JSON.stringify(raw));
+  } catch {
+    return { ok: false, error: first.error };
+  }
+  const strippedKeys: string[] = [];
+  for (const issue of unrecognizedIssues) {
+    // zod 的 unrecognized_keys message 形如 `Unrecognized key(s): "a", "b"`；键名只能从
+    // message 提取（issue 不携带单独的 keys 字段）。
+    const keys = [
+      ...issue.message.matchAll(/"([^"]+)"/g),
+    ].map((match): string => match[1] ?? "");
+    if (keys.length === 0) {
+      return { ok: false, error: first.error };
+    }
+    let target: unknown = clone;
+    for (const segment of issue.path) {
+      if (target === null || typeof target !== "object") {
+        return { ok: false, error: first.error };
+      }
+      target = (target as Record<string, unknown>)[segment as string];
+    }
+    if (target === null || typeof target !== "object") {
+      return { ok: false, error: first.error };
+    }
+    const record = target as Record<string, unknown>;
+    for (const key of keys) {
+      if (key in record) {
+        delete record[key];
+        strippedKeys.push(key);
+      }
+    }
+  }
+  if (strippedKeys.length === 0) {
+    return { ok: false, error: first.error };
+  }
+  const retry = schema.safeParse(clone);
+  if (retry.success) {
+    return { ok: true, value: retry.data, strippedKeys };
+  }
+  return { ok: false, error: retry.error };
+}
 
 export const zcodeSessionEventsResultSchema = z
   .object({

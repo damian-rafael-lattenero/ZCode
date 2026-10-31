@@ -135,6 +135,7 @@ import {
   zcodeSessionSubagentsResultSchema,
   zcodeSessionMessagesResultSchema,
   zcodeSessionEventSchema,
+  safeParseStrippingUnrecognizedKeys,
   zcodeSessionSendResultSchema,
   zcodeSessionRequestRuntimePreferencesParamsSchema,
   zcodeSessionRuntimePreferencesResultSchema,
@@ -2228,24 +2229,53 @@ export function createZCodeAgentService(
           if (parsed.success) {
             handleSessionEvent(workspace, parsed.data);
           } else {
-            const rawParams =
-              typeof message.params === "object" && message.params !== null
-                ? (message.params as Record<string, unknown>)
-                : {};
-            logger.warn(
-              typeof rawParams.traceId === "string" ? rawParams.traceId : undefined,
-              "丢弃无效 ZCode Protocol session event",
-              {
-                eventId: rawParams.eventId,
-                issues: parsed.error.issues.map((issue) => ({
-                  code: issue.code,
-                  message: issue.message,
-                  path: issue.path.join("."),
-                })),
-                sessionId: rawParams.sessionId,
-                type: rawParams.type,
-              },
+            // [fork 2026-10-30] CLI 比 app 新时，strict 校验会把携带未知 payload 字段的
+            // live 事件整条丢弃 —— agentic 回合的 tool.updated 全部命中，bot-channel-continuous
+            // 连续流成段静默（实测 2026-10-20 起每天数百-数千条丢弃）。对 unrecognized_keys
+            // 类失败做一次剥键重试：未审计字段留在网关外（不穿透 renderer），事件继续流动；
+            // 剥了什么键永远留 warn 审计。其余校验失败维持丢弃。
+            const tolerated = safeParseStrippingUnrecognizedKeys(
+              zcodeSessionEventSchema,
+              message.params,
             );
+            if (tolerated.ok) {
+              if (tolerated.strippedKeys.length > 0) {
+                const rawParams =
+                  typeof message.params === "object" && message.params !== null
+                    ? (message.params as Record<string, unknown>)
+                    : {};
+                logger.warn(
+                  typeof rawParams.traceId === "string" ? rawParams.traceId : undefined,
+                  "session/event 携带未识别 payload 字段，已剥除后投递（请审计并补协议 schema）",
+                  {
+                    eventId: rawParams.eventId,
+                    sessionId: rawParams.sessionId,
+                    type: rawParams.type,
+                    strippedKeys: tolerated.strippedKeys,
+                  },
+                );
+              }
+              handleSessionEvent(workspace, tolerated.value);
+            } else {
+              const rawParams =
+                typeof message.params === "object" && message.params !== null
+                  ? (message.params as Record<string, unknown>)
+                  : {};
+              logger.warn(
+                typeof rawParams.traceId === "string" ? rawParams.traceId : undefined,
+                "丢弃无效 ZCode Protocol session event",
+                {
+                  eventId: rawParams.eventId,
+                  issues: parsed.error.issues.map((issue) => ({
+                    code: issue.code,
+                    message: issue.message,
+                    path: issue.path.join("."),
+                  })),
+                  sessionId: rawParams.sessionId,
+                  type: rawParams.type,
+                },
+              );
+            }
           }
           return;
         }

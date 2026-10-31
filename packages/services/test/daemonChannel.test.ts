@@ -950,4 +950,200 @@ describe("daemon local channel (B3a)", () => {
     expect(taskService.sendPrompt).not.toHaveBeenCalled();
     client.destroy();
   });
+
+  it("a respond frame routes to respondPermission with the event's option (the loop closes)", async () => {
+    await startChannel();
+    const client = await connectAndHandshake();
+    client.send({
+      type: "respond",
+      id: "rs1",
+      taskId: "task-1",
+      requestId: "perm_req_42",
+      kind: "permission",
+      optionId: "allow",
+      response: { decision: "allow" },
+      messageId: "tg-1000",
+    } as never);
+    const result = await client.waitFor(
+      (message) => message.type === "respond_result" && message.id === "rs1",
+    );
+    // the SAME service API the desktop UI calls, with the EXACT ids
+    expect(taskService.respondPermission).toHaveBeenCalledWith(
+      expect.objectContaining({
+        taskId: "task-1",
+        requestId: "perm_req_42",
+        optionId: "allow",
+        response: { decision: "allow" },
+      }),
+    );
+    expect(result).toMatchObject({
+      type: "respond_result",
+      id: "rs1",
+      taskId: "task-1",
+      requestId: "perm_req_42",
+      kind: "permission",
+      ok: true,
+    });
+    client.destroy();
+  });
+
+  it("a permission respond WITHOUT the option's response derives {decision} from the optionId", async () => {
+    await startChannel();
+    const client = await connectAndHandshake();
+    client.send({
+      type: "respond",
+      id: "rs2",
+      taskId: "task-1",
+      requestId: "perm_req_43",
+      kind: "permission",
+      optionId: "deny",
+      messageId: "tg-1001",
+    } as never);
+    await client.waitFor((message) => message.type === "respond_result" && message.id === "rs2");
+    expect(taskService.respondPermission).toHaveBeenCalledWith(
+      expect.objectContaining({
+        requestId: "perm_req_43",
+        optionId: "deny",
+        response: { decision: "deny" },
+      }),
+    );
+    client.destroy();
+  });
+
+  it("a respond elicitation frame routes to respondElicitation with action + content", async () => {
+    await startChannel();
+    const client = await connectAndHandshake();
+    const content = { answers: { "¿Seguimos?": "Sí" }, answer: "Sí" };
+    client.send({
+      type: "respond",
+      id: "rs3",
+      taskId: "task-1",
+      requestId: "elicit_7",
+      kind: "elicitation",
+      action: "accept",
+      content,
+      messageId: "tg-1002",
+    } as never);
+    const result = await client.waitFor(
+      (message) => message.type === "respond_result" && message.id === "rs3",
+    );
+    expect(taskService.respondElicitation).toHaveBeenCalledWith(
+      expect.objectContaining({
+        taskId: "task-1",
+        requestId: "elicit_7",
+        action: "accept",
+        content,
+      }),
+    );
+    expect(result).toMatchObject({ type: "respond_result", ok: true, kind: "elicitation" });
+    client.destroy();
+  });
+
+  it("a respond plan frame rides the elicitation door (ExitPlanMode) and defaults to accept", async () => {
+    await startChannel();
+    const client = await connectAndHandshake();
+    client.send({
+      type: "respond",
+      id: "rs4",
+      taskId: "task-1",
+      requestId: "plan_req_9",
+      kind: "plan",
+      messageId: "tg-1003",
+    } as never);
+    await client.waitFor((message) => message.type === "respond_result" && message.id === "rs4");
+    expect(taskService.respondElicitation).toHaveBeenCalledWith(
+      expect.objectContaining({ requestId: "plan_req_9", action: "accept" }),
+    );
+    client.destroy();
+  });
+
+  it("an unknown requestId fails HONESTLY: the CLI's error travels, never a fake ok", async () => {
+    await startChannel();
+    const client = await connectAndHandshake();
+    (taskService.respondPermission as ReturnType<typeof vi.fn>).mockImplementationOnce(
+      async () => {
+        throw new Error("interaction not found: perm_gone");
+      },
+    );
+    client.send({
+      type: "respond",
+      id: "rs5",
+      taskId: "task-1",
+      requestId: "perm_gone",
+      kind: "permission",
+      optionId: "allow",
+      messageId: "tg-1004",
+    } as never);
+    const error = await client.waitFor(
+      (message) => message.type === "error" && message.id === "rs5",
+    );
+    expect(error).toMatchObject({ type: "error", code: "internal" });
+    expect((error as { message?: string }).message).toContain("perm_gone");
+    // NO respond_result ok after a failure: the tap edits the message with the error
+    expect(
+      (await Promise.race([
+        client.waitFor((message) => message.type === "respond_result" && message.id === "rs5"),
+        new Promise((resolve) => setTimeout(resolve, 150)),
+      ])) as unknown,
+    ).not.toMatchObject({ type: "respond_result", ok: true });
+    client.destroy();
+  });
+
+  it("a duplicated respond (same messageId) does NOT re-resolve the interaction (the inbound dedupe law)", async () => {
+    await startChannel();
+    const client = await connectAndHandshake();
+    client.send({
+      type: "respond",
+      id: "rs6",
+      taskId: "task-1",
+      requestId: "perm_44",
+      kind: "permission",
+      optionId: "allow",
+      messageId: "tg-1005",
+    } as never);
+    await client.waitFor((message) => message.type === "respond_result" && message.id === "rs6");
+    client.send({
+      type: "respond",
+      id: "rs7",
+      taskId: "task-1",
+      requestId: "perm_44",
+      kind: "permission",
+      optionId: "allow",
+      messageId: "tg-1005",
+    } as never);
+    const duplicate = await client.waitFor(
+      (message) => message.type === "respond_result" && message.id === "rs7",
+    );
+    expect(duplicate).toMatchObject({ type: "respond_result", ok: true });
+    expect(taskService.respondPermission).toHaveBeenCalledTimes(1);
+    client.destroy();
+  });
+
+  it("a respond missing its kind's payload answers bad_request (permission needs optionId, plan needs action)", async () => {
+    await startChannel();
+    const client = await connectAndHandshake();
+    client.send({
+      type: "respond",
+      id: "rs8",
+      taskId: "task-1",
+      requestId: "perm_45",
+      kind: "permission",
+      messageId: "tg-1006",
+    } as never);
+    const bad1 = await client.waitFor((message) => message.type === "error" && message.id === "rs8");
+    expect(bad1).toMatchObject({ type: "error", code: "bad_request" });
+    expect(taskService.respondPermission).not.toHaveBeenCalled();
+    client.send({
+      type: "respond",
+      id: "rs9",
+      taskId: "task-1",
+      requestId: "elicit_8",
+      kind: "elicitation",
+      messageId: "tg-1007",
+    } as never);
+    const bad2 = await client.waitFor((message) => message.type === "error" && message.id === "rs9");
+    expect(bad2).toMatchObject({ type: "error", code: "bad_request" });
+    expect(taskService.respondElicitation).not.toHaveBeenCalled();
+    client.destroy();
+  });
 });

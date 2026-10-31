@@ -34,6 +34,7 @@ import {
   type BotInboundMessage,
   type BotOutboundMessage,
   type ZCodeAccountAccess,
+  type ZCodePermissionResponse,
   type ZCodeStreamEvent,
   type DaemonChannelClientMessage,
   type DaemonChannelContextWindowResult,
@@ -220,6 +221,9 @@ export function createDaemonLocalChannel(
   const daemonBotIdCache = { id: DAEMON_CHANNEL_DEFAULT_BOT_ID, enabled: true };
   // Dedupe de inbound por messageId, con la misma ventana que el offset de Telegram.
   const recentInboundByMessageId = new Map<string, number>();
+  // Dedupe de respond por messageId (la misma ley — aditivo 30/10, un retry
+  // del daemon tras perder el ACK no re-resuelve la interacción).
+  const recentRespondByMessageId = new Map<string, number>();
   const capabilities = [
     "inbound",
     "stream",
@@ -236,6 +240,7 @@ export function createDaemonLocalChannel(
     "control:stop",
     "control:stopAll",
     "control:compact",
+    "respond",
   ];
 
   function send(socket: Socket, message: DaemonChannelServerMessage): boolean {
@@ -636,6 +641,117 @@ export function createDaemonLocalChannel(
       });
   }
 
+  /**
+   * La RESPUESTA del dueño (aditivo 30/10/2026): el loop se cierra. La frame
+   * `respond` enruta al MISMO API que el desktop UI llama para la task del
+   * evento — respondPermission (optionId + la response de la opción del
+   * evento, o el {decision} derivado cuando el cliente no la lleva) /
+   * respondElicitation (action + content; kind «plan» es la aprobación de
+   * ExitPlanMode por la MISMA puerta elicitation — el CLI interaction-broker
+   * mapea action accept/decline). El requestId del evento ES el
+   * interactionId del broker (misma fuente de registro).
+   *
+   * Dedupe por messageId: la MISMA ley del inbound — un retry del daemon
+   * tras perder el ACK NO re-resuelve la interacción. El ACK es HONESTO:
+   * respond_result ok=true SOLO tras el ACK del v4 command; el fallo
+   * (interactionId desconocido, interacción ya resuelta, task sin target —
+   * el turno selló y los botones quedaron huérfanos) viaja COMO ERROR y el
+   * cliente edita el mensaje de la pregunta con la verdad: nunca un ok
+   * mentiroso, nunca un tap silencioso.
+   */
+  function handleRespondRequest(
+    connection: DaemonConnection,
+    message: Extract<DaemonChannelClientMessage, { type: "respond" }>,
+  ): void {
+    if (message.kind === "permission" && !message.optionId) {
+      sendError(connection, connection.socket, {
+        type: "error",
+        id: message.id,
+        code: "bad_request",
+        message: "respond permission requires optionId",
+      });
+      return;
+    }
+    if (message.kind === "elicitation" && !message.action) {
+      sendError(connection, connection.socket, {
+        type: "error",
+        id: message.id,
+        code: "bad_request",
+        message: "respond elicitation requires action",
+      });
+      return;
+    }
+    if (message.messageId) {
+      const key = `respond:${daemonBotIdCache.id}:${message.messageId}`;
+      const seenAt = recentRespondByMessageId.get(key);
+      const current = now();
+      if (seenAt !== undefined && current - seenAt < DAEMON_CHANNEL_INBOUND_DEDUPE_TTL_MS) {
+        recentRespondByMessageId.set(key, current);
+        send(connection.socket, {
+          type: "respond_result",
+          id: message.id,
+          taskId: message.taskId,
+          requestId: message.requestId,
+          kind: message.kind,
+          ok: true,
+        });
+        return;
+      }
+      recentRespondByMessageId.set(key, current);
+      if (recentRespondByMessageId.size > 512) {
+        const cutoff = current - DAEMON_CHANNEL_INBOUND_DEDUPE_TTL_MS;
+        for (const [entryKey, at] of recentRespondByMessageId) {
+          if (at < cutoff) recentRespondByMessageId.delete(entryKey);
+        }
+      }
+    }
+    const answer: Promise<boolean> =
+      message.kind === "permission"
+        ? deps.zcodeTaskService.respondPermission({
+            taskId: message.taskId,
+            requestId: message.requestId,
+            optionId: message.optionId as string,
+            response:
+              message.response ??
+              // La regla del propio host (permissionResolvedPayloadToStreamEvents):
+              // deny → deny, cualquier otra cosa → allow.
+              { decision: message.optionId === "deny" ? "deny" : "allow" },
+          })
+        : deps.zcodeTaskService.respondElicitation({
+            taskId: message.taskId,
+            requestId: message.requestId,
+            action: message.action ?? "accept",
+            ...(message.content ? { content: message.content } : {}),
+          });
+    void answer
+      .then((ok) => {
+        send(connection.socket, {
+          type: "respond_result",
+          id: message.id,
+          taskId: message.taskId,
+          requestId: message.requestId,
+          kind: message.kind,
+          ok,
+        });
+      })
+      .catch((error: unknown) => {
+        logger.warn(
+          undefined,
+          `respond ${message.kind} task=${message.taskId} request=${message.requestId} failed: ${
+            error instanceof Error ? error.message : String(error)
+          }`,
+        );
+        sendError(connection, connection.socket, {
+          type: "error",
+          id: message.id,
+          code: "internal",
+          message: `respond ${message.kind} ${message.requestId} failed: ${
+            error instanceof Error ? error.message : String(error)
+          }`,
+        });
+      });
+  }
+
   function handleSubscribe(
     connection: DaemonConnection,
     message: Extract<DaemonChannelClientMessage, { type: "subscribe" }>,
@@ -724,6 +840,9 @@ export function createDaemonLocalChannel(
     switch (message?.type) {
       case "inbound":
         handleInboundRequest(connection, message);
+        return;
+      case "respond":
+        handleRespondRequest(connection, message);
         return;
       case "subscribe":
         handleSubscribe(connection, message);

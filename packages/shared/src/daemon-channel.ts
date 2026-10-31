@@ -7,6 +7,7 @@
  * lectores viejos los ignoran; romper compat exige bump de DAEMON_CHANNEL_PROTOCOL_VERSION.
  */
 import type { ZCodeStreamEvent } from "./zcode-task-types-core.js";
+import type { ZCodePermissionResponse } from "./zcode-protocol-legacy-types.js";
 
 export const DAEMON_CHANNEL_PROTOCOL_VERSION = 1;
 
@@ -217,13 +218,48 @@ export interface DaemonChannelPingRequest {
   id: string;
 }
 
+/**
+ * La RESPUESTA del dueño a una pregunta pendiente (aditivo 30/10/2026): el
+ * loop se cierra — la permission_request / elicitation_request que llegó por
+ * el stream se contesta DESDE EL TELÉFONO con esta frame, enrutada al MISMO
+ * taskId del evento (respondPermission / respondElicitation del task service
+ * — los mismos métodos que el desktop UI llama; el requestId del evento ES el
+ * interactionId del broker v4). kind «plan» es la aprobación de
+ * ExitPlanMode: viaja como elicitation con action accept/decline.
+ */
+export interface DaemonChannelRespondRequest {
+  type: "respond";
+  id: string;
+  /** La task dueña de la interacción (el taskId del evento de la pregunta). */
+  taskId: string;
+  /** El requestId del evento — interactionId en el CLI interaction-broker. */
+  requestId: string;
+  kind: "permission" | "elicitation" | "plan";
+  /** permission: el optionId de la opción elegida (la opción del evento). */
+  optionId?: string;
+  /**
+   * permission: la `response` de la opción del evento, devuelta tal cual
+   * (decision + extras). Ausente → el host deriva {decision} del optionId
+   * (deny → deny, cualquier otra cosa → allow — la MISMA regla de
+   * permissionResolvedPayloadToStreamEvents).
+   */
+  response?: ZCodePermissionResponse;
+  /** elicitation/plan: accept | decline | cancel (plan sin action → accept). */
+  action?: "accept" | "decline" | "cancel";
+  /** elicitation: el content {answers, answer_0, answer} (buildBotElicitationContent's shape). */
+  content?: Record<string, unknown>;
+  /** Id estable del tap origen — la MISMA ley de dedupe del inbound. */
+  messageId?: string;
+}
+
 export type DaemonChannelClientMessage =
   | DaemonChannelHelloRequest
   | DaemonChannelInboundRequest
   | DaemonChannelSubscribeRequest
   | DaemonChannelUnsubscribeRequest
   | DaemonChannelQueryRequest
-  | DaemonChannelPingRequest;
+  | DaemonChannelPingRequest
+  | DaemonChannelRespondRequest;
 
 // ---- servidor → cliente ------------------------------------------------------
 
@@ -256,6 +292,21 @@ export interface DaemonChannelInboundResult {
   /** Duplicado por messageId: ok=true con replies vacías. */
   duplicate?: boolean;
   replies: DaemonChannelReply[];
+}
+
+/**
+ * El ACK honesto de un respond (aditivo 30/10/2026): la respuesta LLEGÓ al
+ * task service (ok=true) o falló (ok=false + error — el tap edita el mensaje
+ * de la pregunta con la verdad; un respond duplicado de una interacción ya
+ * resuelta falla en el CLI y el error viaja, nunca un ok mentiroso).
+ */
+export interface DaemonChannelRespondResult {
+  type: "respond_result";
+  id: string;
+  taskId: string;
+  requestId: string;
+  kind: string;
+  ok: boolean;
 }
 
 export interface DaemonChannelSubscribed {
@@ -383,6 +434,7 @@ export interface DaemonChannelBye {
 export type DaemonChannelServerMessage =
   | DaemonChannelHelloOk
   | DaemonChannelInboundResult
+  | DaemonChannelRespondResult
   | DaemonChannelSubscribed
   | DaemonChannelUnsubscribed
   | DaemonChannelQueryResult

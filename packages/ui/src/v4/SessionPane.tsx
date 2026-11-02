@@ -2994,7 +2994,6 @@ export function SessionPane({
       sessionId && !compactForRemoteControl
         ? {
             value: "diff",
-            label: "/diff",
             description: "Abrir el panel Diff Ask (instantáneo, sin turno del modelo)",
             keywords: ["diff", "diffask", "diff ask", "cambios", "git"],
             run: () => void openDiffAskPanel(),

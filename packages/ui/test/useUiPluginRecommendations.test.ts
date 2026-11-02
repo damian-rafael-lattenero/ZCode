@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { act, cleanup, renderHook } from "@testing-library/react";
+import { act, cleanup, renderHook } from "./fork-testing";
 import { afterEach, expect, it, vi } from "vitest";
 import { useUiPluginRecommendations } from "@/plugin-ui/adapters/useUiPluginRecommendations.js";
 

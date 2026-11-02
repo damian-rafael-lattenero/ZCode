@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 
 import { createElement } from "react";
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor } from "./fork-testing";
 import { afterEach, describe, expect, it } from "vitest";
 import { ToolLayout } from "@/ToolCallBlocks/ToolLayout.js";
 import { ZCodeIntlProvider } from "@/i18n/IntlProvider.js";

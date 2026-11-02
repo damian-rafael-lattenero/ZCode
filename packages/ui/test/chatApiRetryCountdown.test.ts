@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 
 import { createElement } from "react";
-import { cleanup, render, screen, act } from "@testing-library/react";
+import { cleanup, render, screen, act } from "./fork-testing";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { ZCodeApiRetryStatus } from "@zcode/shared";
 import type { ApiRetryState } from "@zcode/shared";

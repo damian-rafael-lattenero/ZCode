@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 
 import { createElement } from "react";
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor } from "./fork-testing";
 import { afterEach, describe, expect, it } from "vitest";
 import type { ReasoningRow } from "@zcode/shared/zcode-protocol-v4";
 import { TID_CHAT_REASONING_TRIGGER } from "@zcode/shared/test-ids";

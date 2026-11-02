@@ -1,7 +1,7 @@
 /** @vitest-environment jsdom */
 
 import { createElement, type ReactNode } from "react";
-import { cleanup, fireEvent, render, screen, act } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, act } from "./fork-testing";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { GitRepositorySummary } from "@zcode/shared";
 

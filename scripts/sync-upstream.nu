@@ -38,8 +38,8 @@ def main []: nothing -> nothing {
     print "[fork] merging upstream/main into damian..."
     ^git merge upstream/main
 
-    print "[fork] gates: unit tests (plugin-ui recommendations) + typecheck..."
-    ^$MISE exec -- pnpm exec vitest run packages/ui/test/useUiPluginRecommendations.test.ts packages/ui/test/useRecommendedUiPlugins.test.ts
+    print "[fork] gates: the fork test suite (vitest.fork.config.ts) + typecheck..."
+    ^$MISE exec -- pnpm exec vitest run -c vitest.fork.config.ts
     ^$MISE run typecheck
 
     let merged_version = (^git show upstream/main:package.json | from json | get version)

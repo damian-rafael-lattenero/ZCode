@@ -7,10 +7,18 @@
  *               los eventos V4 crudos que renderiza el desktop, sin replay.
  *   queries   → listTasks/taskList/meta/snapshot/usage/quota/botStatus/modelSelection
  *   control   → stop / stopAll / compact / setModelSelection (V4 & compañía)
+ *   respond   → el dueño responde permission/elicitation/plan desde el teléfono
+ *   steer     → el dueño redirige un turno RUNNING con texto guía
  * Auth: token en ~/.zcode/daemon-local.token (0600, rota en cada arranque del
  * host); hello obligatorio en la primera línea. El socket también es 0600.
  * Spec completa: docs/fork/DAEMON-CHANNEL.md.
+ *
+ * oxlint-disable eslint(max-lines) -- el canal ES la superficie completa del
+ * protocolo (frame loop, auth, queries, control, respond, steer) partido en
+ * handlers cohesive; extraerlo a archivos hermanos rompería la lectura lineal
+ * de un único flujo de mensajes. Igual que botsService.ts / node.ts.
  */
+/* oxlint-disable eslint(max-lines) */
 import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
 import { chmod, mkdir, rm, unlink, writeFile } from "node:fs/promises";
 import { connect, createServer, type Server, type Socket } from "node:net";
@@ -34,7 +42,6 @@ import {
   type BotInboundMessage,
   type BotOutboundMessage,
   type ZCodeAccountAccess,
-  type ZCodePermissionResponse,
   type ZCodeStreamEvent,
   type DaemonChannelClientMessage,
   type DaemonChannelContextWindowResult,

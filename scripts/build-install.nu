@@ -37,6 +37,13 @@ def build-bundle [repo: string]: nothing -> string {
     cd $repo
     print "[fork] node/pnpm via mise..."
     ^$MISE install
+    # node_modules FRESCO SIEMPRE (2/11: el sync v3.17.1 cambió pnpm-lock.yaml
+    # y el bundle compiló contra node_modules del 23/10 — el CLI resolvió el
+    # zod v4 hoisteado en vez del v3 del lockfile y el tsc explotó en 40
+    # archivos). frozen-lockfile: si package.json y lock no coinciden, grita —
+    # el gate correcto para un build.
+    print "[fork] pnpm install --frozen-lockfile (node_modules contra el lock)..."
+    ^$MISE exec -- node scripts/mise-run.mjs pnpm install --frozen-lockfile
     print "[fork] bundle:desktop (ZCODE_ENV=production, no signing)..."
     with-env {
         ZCODE_ENV: "production"

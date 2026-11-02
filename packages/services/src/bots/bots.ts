@@ -229,6 +229,18 @@ export interface IBotsService {
   /** 在 automation prompt 派发前订阅终态，并把结果回推到创建它的 Bot 会话。 */
   watchAutomationRun(params: BotAutomationRunWatchParams): Promise<void>;
   handleInboundMessage(message: BotInboundMessage): Promise<BotOutboundMessage[]>;
+  /**
+   * EL BIND ATÓMICO del canal daemon (2/11): apunta el contexto del bot a la
+   * task con la MISMA ley del comando /task — la frontera de proyecto/
+   * fixed-cwd y el veredicto taskRunning incluidos (el núcleo compartido con
+   * task.set). El inbound con bindTaskId lo usa ANTES de entregar el texto;
+   * si el bind falla, el refusal viaja como única reply del inbound_result y
+   * el texto NO se entrega.
+   */
+  bindTaskForDaemonChannel(
+    message: BotInboundMessage,
+    taskId: string,
+  ): Promise<{ ok: true } | { ok: false; refusals: BotOutboundMessage[] }>;
   /** Lee la selección de modelo (plan/modelo/effort) del contexto del bot. */
   getBotModelSelection(params: {
     botId: string;

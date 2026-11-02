@@ -212,12 +212,14 @@ describe("daemon local channel (B3a)", () => {
     });
     const helloOk = await client.waitFor((message) => message.type === "hello_ok");
     expect(helloOk).toMatchObject({ type: "hello_ok", protocolVersion: 1 });
-    // Capacidades nuevas del /plan y del /context_window (aditivas, protocolo v1).
+    // Capacidades nuevas del /plan y del /context_window (aditivas, protocolo v1),
+    // y el bind atómico (2/11).
     expect((helloOk as { capabilities: string[] }).capabilities).toEqual(
       expect.arrayContaining([
         "queries:modelSelection",
         "control:setModelSelection",
         "queries:contextWindow",
+        "bind",
       ]),
     );
     return client;
@@ -760,6 +762,89 @@ describe("daemon local channel (B3a)", () => {
     );
     expect(taskService.handleInboundMessage ?? null).toBeNull(); // the fake has no such fn — the real check is sendPrompt above
     expect(result).toMatchObject({ type: "inbound_result", id: "ord1", duplicate: false });
+    client.destroy();
+  });
+
+  it("an inbound WITH bindTaskId binds with the /task law and then delivers the text (the atomic bind)", async () => {
+    await startChannel();
+    const client = await connectAndHandshake();
+    const inboundSpy = vi.spyOn(botsService, "handleInboundMessage");
+    (taskService.listTasks as ReturnType<typeof vi.fn>).mockResolvedValue([
+      {
+        taskId: "task-bind",
+        title: "Bind target",
+        workspacePath: "/tmp/workspace",
+        workspaceIdentity: "remote:server:test-owner:/tmp/workspace",
+        provider: "glm",
+        updatedAt: 1,
+      },
+    ]);
+    client.send({
+      type: "inbound",
+      id: "bind-ok",
+      text: "seguí por acá",
+      messageId: "tg-903",
+      bindTaskId: "task-bind",
+    } as never);
+    const result = await client.waitFor(
+      (message) => message.type === "inbound_result" && message.id === "bind-ok",
+    );
+    expect(result.type).toBe("inbound_result");
+    // el texto voló por el routing de siempre DESPUÉS del bind
+    expect(inboundSpy).toHaveBeenCalledWith(expect.objectContaining({ text: "seguí por acá" }));
+    // el contexto quedó apuntado a la task (la ley task.set completa)
+    await vi.waitFor(() =>
+      expect(botsService.getBotStates()).resolves.toEqual(
+        expect.arrayContaining([expect.objectContaining({ activeTaskId: "task-bind" })]),
+      ),
+    );
+    client.destroy();
+  });
+
+  it("a bindTaskId that misses the workspace boundary refuses by name and the text never flies", async () => {
+    await startChannel();
+    const client = await connectAndHandshake();
+    const inboundSpy = vi.spyOn(botsService, "handleInboundMessage");
+    client.send({
+      type: "inbound",
+      id: "bind-miss",
+      text: "no debe llegar",
+      messageId: "tg-902",
+      bindTaskId: "sess_inexistente",
+    } as never);
+    const result = await client.waitFor(
+      (message) => message.type === "inbound_result" && message.id === "bind-miss",
+    );
+    expect(result).toMatchObject({ type: "inbound_result", id: "bind-miss", duplicate: false });
+    if (result.type !== "inbound_result") return;
+    expect(result.replies).toHaveLength(1);
+    // el locale del fixture es zh-CN; el daemon real defaultea en-US — la
+    // ley es el REFUSAL ÚNICO (el veredicto del /task), no su idioma
+    expect(JSON.stringify(result.replies[0])).toMatch(/task not found|未找到任务/i);
+    expect(inboundSpy).not.toHaveBeenCalled();
+    client.destroy();
+  });
+
+  it("the ORDER wins: taskId + bindTaskId together flies straight to the session without binding", async () => {
+    await startChannel();
+    const client = await connectAndHandshake();
+    const inboundSpy = vi.spyOn(botsService, "handleInboundMessage");
+    client.send({
+      type: "inbound",
+      id: "ord-bind",
+      text: "la orden manda",
+      messageId: "tg-904",
+      taskId: "sess_subagent_agent_419b5d75",
+      bindTaskId: "task-bind",
+    } as never);
+    const result = await client.waitFor(
+      (message) => message.type === "inbound_result" && message.id === "ord-bind",
+    );
+    expect(taskService.sendPrompt).toHaveBeenCalledWith(
+      expect.objectContaining({ taskId: "sess_subagent_agent_419b5d75" }),
+    );
+    expect(inboundSpy).not.toHaveBeenCalled();
+    expect(result).toMatchObject({ type: "inbound_result", id: "ord-bind" });
     client.destroy();
   });
 

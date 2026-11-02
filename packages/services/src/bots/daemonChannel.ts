@@ -233,6 +233,10 @@ export function createDaemonLocalChannel(
   const recentRespondByMessageId = new Map<string, number>();
   const capabilities = [
     "inbound",
+    // EL BIND ATÓMICO (aditivo, 2/11): inbound.bindTaskId — el contexto se
+    // apunta con la ley del /task y el texto vuela después; el refusal viaja
+    // en las replies del inbound_result.
+    "bind",
     "stream",
     "queries:listTasks",
     "queries:taskList",
@@ -590,6 +594,51 @@ export function createDaemonLocalChannel(
         ...(message.messageId ? { providerMessageId: message.messageId } : {}),
       },
     };
+    // EL BIND ATÓMICO (aditivo, 2/11): con bindTaskId el contexto del bot se
+    // apunta PRIMERO a esa task (bindTaskForDaemonChannel — la ley completa
+    // del /task: frontera de proyecto/fixed-cwd + veredicto taskRunning) y el
+    // texto vuela DESPUÉS por el routing de siempre. El refusal viaja como
+    // ÚNICA reply del inbound_result («taskRunning» / «Task not found») — el
+    // veredicto que el sendInboundAwait del bot ya sabe leer; el texto NO se
+    // entrega si el bind falla. La orden (taskId) gana si vinieran los dos.
+    if (message.bindTaskId && !message.taskId) {
+      void deps.botsService
+        .bindTaskForDaemonChannel(inbound, message.bindTaskId)
+        .then(async (bind) => {
+          if (!bind.ok) {
+            send(connection.socket, {
+              type: "inbound_result",
+              id: message.id,
+              duplicate: false,
+              replies: bind.refusals.map(toWireReply),
+            });
+            return;
+          }
+          const replies = await deps.botsService.handleInboundMessage(inbound);
+          send(connection.socket, {
+            type: "inbound_result",
+            id: message.id,
+            replies: replies.map(toWireReply),
+          });
+        })
+        .catch((error: unknown) => {
+          logger.warn(
+            undefined,
+            `bind inbound failed messageId=${message.messageId ?? ""}: ${
+              error instanceof Error ? error.message : String(error)
+            }`,
+          );
+          sendError(connection, connection.socket, {
+            type: "error",
+            id: message.id,
+            code: "internal",
+            message: `bind to ${message.bindTaskId} failed: ${
+              error instanceof Error ? error.message : String(error)
+            }`,
+          });
+        });
+      return;
+    }
     // LA ORDEN DIRIGIDA (aditivo, 30/10): con taskId el texto va DIRECTO a
     // esa sesión (sendPrompt) — la orden del dueño a un subagente attachado;
     // su respuesta vuelve por el stream de la sesión, que la carta attachada

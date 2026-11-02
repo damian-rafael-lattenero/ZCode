@@ -75,6 +75,17 @@ export interface DaemonChannelInboundRequest {
    * routing de siempre (la conversación bindeada).
    */
   taskId?: string;
+  /**
+   * EL BIND ATÓMICO (aditivo, 2/11): presente → el contexto del bot se
+   * apunta PRIMERO a esa task (la MISMA ley del comando /task — la
+   * frontera de proyecto/fixed-cwd y el veredicto taskRunning incluidos)
+   * y el texto vuela después por el routing de siempre. El refusal viaja
+   * como única reply del inbound_result («taskRunning» / «Task not
+   * found») — el mismo veredicto que el sendInboundAwait del bot ya sabe
+   * leer; el texto NO se entrega si el bind falla. Incompatible con
+   * taskId (la orden gana); los lectores viejos lo ignoran.
+   */
+  bindTaskId?: string;
 }
 
 export interface DaemonChannelSubscribeRequest {

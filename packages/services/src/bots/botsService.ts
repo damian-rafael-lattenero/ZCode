@@ -8045,6 +8045,49 @@ export function createBotsService(
     );
   }
 
+  /**
+   * EL NÚCLEO DEL BIND (2/11): re-apunta el contexto a una task con la ley
+   * COMPLETA del comando /task — la frontera de proyecto/fixed-cwd
+   * (resolveTaskSelectionEntry: la snapshot no saltea los límites), el
+   * veredicto taskRunning (un /task durante un turno vivo desincronizaría
+   * el stream del bot) y la resincronización de grupos. Lo comparten el
+   * caso task.set y el canal daemon (bindTaskId atómico del inbound).
+   */
+  async function bindTaskToContext(params: {
+    message: BotInboundMessage;
+    context: BotContextState;
+    user: BotConfig;
+    locale: Locale | undefined;
+    taskId: string;
+  }): Promise<
+    { ok: true; context: BotContextState } | { ok: false; refusals: BotOutboundMessage[] }
+  > {
+    const { message, context, user, locale, taskId } = params;
+    const taskEntry = await resolveTaskSelectionEntry(message, context, user, taskId);
+    if (!taskEntry) {
+      return { ok: false, refusals: [createOutbound(message.actor, msg(locale, "taskMissing"))] };
+    }
+    const { task } = taskEntry;
+    const blockReason =
+      context.activeTaskId !== task.taskId ? await getContextTaskBlockReason(context) : null;
+    if (blockReason) {
+      // Bugfix: 运行中的旧 task 已经建立了第三方 stream 订阅。
+      // 如果此时允许 /task 改写 activeTaskId，后续输入会落到新 task，
+      // 但旧 task 输出仍会继续回到同一 bot 会话，用户会误以为消息串线。
+      return { ok: false, refusals: [createOutbound(message.actor, msg(locale, blockReason))] };
+    }
+    const nextContext = {
+      ...context,
+      mode: "task" as const,
+      activeTaskId: task.taskId,
+    } satisfies BotContextState;
+    await writeContext(nextContext);
+    if (context.activeTaskId !== nextContext.activeTaskId) stopGroupSynchronization(context);
+    await restoreGroupSynchronization(nextContext);
+    pendingTaskSelectionsByContext.delete(getActorContextKey(message.actor));
+    return { ok: true, context: nextContext };
+  }
+
   async function getContextTaskBlockReason(
     context: BotContextState,
   ): Promise<
@@ -8823,6 +8866,29 @@ export function createBotsService(
       await reconcilePrivateSynchronization(contextKey);
     },
     watchAutomationRun,
+    /**
+     * EL BIND ATÓMICO del canal daemon (2/11): apunta el contexto del bot a
+     * la task con la MISMA ley del comando /task (frontera de proyecto +
+     * veredicto taskRunning, el núcleo [bindTaskToContext]); el inbound con
+     * bindTaskId lo usa ANTES de entregar el texto — si el bind falla, el
+     * refusal son las outbound de siempre y el texto NO vuela.
+     */
+    async bindTaskForDaemonChannel(
+      message: BotInboundMessage,
+      taskId: string,
+    ): Promise<{ ok: true } | { ok: false; refusals: BotOutboundMessage[] }> {
+      const auth = await withAuthorizedContext(message, "task");
+      if (!auth.ok) return { ok: false, refusals: auth.reply };
+      const bind = await bindTaskToContext({
+        message,
+        context: auth.context,
+        user: auth.user,
+        locale: auth.locale,
+        taskId,
+      });
+      if (!bind.ok) return bind;
+      return { ok: true };
+    },
     async handleInboundMessage(message: BotInboundMessage) {
       if (shutdownPromise) return [];
       if (message.senderType === "app") {
@@ -9626,35 +9692,15 @@ export function createBotsService(
             if (!auth.ok) return auth.reply;
             if (message.actor.threadId)
               return createStatusReply(message.actor, auth.context, auth.locale);
-            const taskEntry = await resolveTaskSelectionEntry(
+            const bind = await bindTaskToContext({
               message,
-              auth.context,
-              auth.user,
-              command.value,
-            );
-            if (!taskEntry) return [createOutbound(message.actor, msg(auth.locale, "taskMissing"))];
-            const { task } = taskEntry;
-            const blockReason =
-              auth.context.activeTaskId !== task.taskId
-                ? await getContextTaskBlockReason(auth.context)
-                : null;
-            if (blockReason) {
-              // Bugfix: 运行中的旧 task 已经建立了第三方 stream 订阅。
-              // 如果此时允许 /task 改写 activeTaskId，后续输入会落到新 task，
-              // 但旧 task 输出仍会继续回到同一 bot 会话，用户会误以为消息串线。
-              return [createOutbound(message.actor, msg(auth.locale, blockReason))];
-            }
-            const nextContext = {
-              ...auth.context,
-              mode: "task",
-              activeTaskId: task.taskId,
-            } satisfies BotContextState;
-            await writeContext(nextContext);
-            if (auth.context.activeTaskId !== nextContext.activeTaskId)
-              stopGroupSynchronization(auth.context);
-            await restoreGroupSynchronization(nextContext);
-            pendingTaskSelectionsByContext.delete(getActorContextKey(message.actor));
-            return createStatusReply(message.actor, nextContext, auth.locale);
+              context: auth.context,
+              user: auth.user,
+              locale: auth.locale,
+              taskId: command.value,
+            });
+            if (!bind.ok) return bind.refusals;
+            return createStatusReply(message.actor, bind.context, auth.locale);
           }
           case "reply.list": {
             const auth = await withAuthorizedContext(message, "reply");

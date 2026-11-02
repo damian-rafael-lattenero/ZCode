@@ -9,6 +9,7 @@ import {
   type RefObject,
 } from "react";
 import {
+  zcodeProviderRuntimeHeadersErrorCode,
   type ZCodeApiRetryStatus,
   type ZCodeConfigOption,
   type ZCodeConfigSelectValue,
@@ -202,6 +203,8 @@ const API_RETRY_REASON_MESSAGE_IDS: Record<string, string> = {
   "fault.network.sseStalled": "chat.apiRetryStatus.stalled",
   "fault.network.sseDisconnected": "chat.apiRetryStatus.network",
   "fault.network.unreachable": "chat.apiRetryStatus.network",
+  // (upstream v3.17.1) 配置读取失败在模型请求之前，不是链路故障——单独文案。
+  [zcodeProviderRuntimeHeadersErrorCode.configNetwork]: "chat.configReadRetryStatus",
 };
 
 export function apiRetryStatusMessageId(reason: string | null | undefined): string {
@@ -233,7 +236,15 @@ export function ChatApiRetryStatus({
     // (FORK·B2) 文案按 reason 区分网关 502 / 限流 / 流恢复。
     const formatter = new Intl.NumberFormat(locale);
     return intl.formatMessage(
-      { id: apiRetryStatusMessageId(apiRetry.reason) },
+      {
+        id: apiRetryStatusMessageId(
+          // (upstream v3.17.1) configNetwork 的失败在读配置阶段，reason 还没有语义，
+          // 用它自己的码走上面表的 chat.configReadRetryStatus；其余保持 fork 的按因文案。
+          apiRetry.error === zcodeProviderRuntimeHeadersErrorCode.configNetwork
+            ? zcodeProviderRuntimeHeadersErrorCode.configNetwork
+            : apiRetry.reason,
+        ),
+      },
       {
         attempt: formatter.format(apiRetry.attempt),
         maxRetries: formatter.format(apiRetry.maxRetries),

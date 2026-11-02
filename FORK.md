@@ -177,6 +177,7 @@ so LaunchServices does not see two `dev.zcode.app` bundles).
 
 | Tag | Upstream version | Installed | Notes |
 | --- | --- | --- | --- |
+| `damian-v3.16.2-20261102` | 3.16.2 (`upstream/main` 2026-10-20) | 2026-11-02 | Built from HEAD `bac786e5`. The fork's own script surface is typed Nushell (`build-install`, `verify-deploy`, `bootstrap-diff-ask`, `sync-upstream`, `lib/fork.nu`; `--when-quit` is a launchd job instead of a Python detach). Ships Diff Ask 0.9.20 (Nushell highlighting + composer draft survival). Full automaton cutover `--real`: quit → build/swap → reopen → verify PASS → retire Python, rc=0. |
 | `damian-v3.16.2-20261031` | 3.16.2 (`upstream/main` 2026-10-20) | 2026-10-31 | Retroactive tag for the build from HEAD `7ae1a972`: the daemon-local channel complete (respond, steer, plan/modelSelection, contextWindow, quota, stream_keepalive, subagent agentId) and the live Kotlin bot. The ledger caught up two days later. |
 | `damian-v3.16.2-20261025f` | 3.16.2 (`upstream/main` 2026-10-20) | 2026-10-25 | Olas 3-7: highspeed transient retry, 15 min model backoff, `nextAttemptAtMs`, usage-limit wait-until-reset, honest labels, deterministic `2^n` retry curve. Superseded by `20261031`. |
 | `damian-v3.16.2-20261024` | 3.16.2 (`upstream/main` 2026-10-20) | 2026-10-24 | Verbosity modes (Summary/Normal/Verbose) + retroactive expand-all switch. Replaced wave-2 build (model:/diff, 23/10, untagged). |

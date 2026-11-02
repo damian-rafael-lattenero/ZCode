@@ -20,9 +20,11 @@ repo**, not downloaded from Z.ai. Updates arrive only through the ritual below.
   diagnóstico de cada una).
 
 Sistema en una línea: la app del fork sobrevive a la red inestable de z.ai
-y publica hechos (sidecars, eventos, countdowns); el bot de Telegram
-(`~/.zcode/hooks/zcode_bot/`) los lee y convierte la Mac en controlable
-desde el teléfono — la frontera entre ambos son archivos JSONL, no APIs.
+y publica hechos (sidecars, eventos, countdowns); el bot de Telegram vivo
+es el daemon Kotlin (`~/.zcode/bot-daemon`), que habla el canal
+daemon-local del fork y es el único dueño de getUpdates. El bot Python
+(`~/.zcode/hooks/zcode_bot/`) quedó retirado el 30/10 como referencia de
+paridad y rollback. La frontera sigue siendo archivos JSONL, no APIs.
 
 ## Why a fork
 

@@ -3,7 +3,15 @@
 > Este documento es el mapa maestro. El runbook operativo vive en
 > [`FORK.md`](../../FORK.md) (raíz del repo) y la estrategia de testing en
 > [`TESTING.md`](./TESTING.md). Todo lo acá descrito es el estado real al
-> 2026-10-28, verificado contra código y logs — no aspiracional.
+> 2026-11-02, verificado contra código y logs — no aspiracional.
+>
+> **Actualización 2026-11-02:** el bot Python descrito en §1/§2/§4 está
+> **retirado** desde el 30/10. El bot vivo es el daemon Kotlin de
+> `zcode-bot-kotlin` (`~/.zcode/bot-daemon`, LaunchAgent
+> `com.zcode.bot-daemon`): habla el canal daemon-local del fork y es el
+> único dueño de getUpdates. El repo `bot` queda como referencia de paridad
+> y puerta de rollback. Las secciones del bot Python se conservan como
+> historia del diseño y de la migración.
 
 ## 1. Qué es este sistema (en 60 segundos)
 

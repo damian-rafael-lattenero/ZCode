@@ -250,17 +250,17 @@ sí.
 ## 5. Deploy
 
 El pipeline del repo (`pnpm typecheck` + `pnpm lint` + vitest afectados) y el
-deploy estándar del fork. **No correr `build-install.sh` desde el agente**
+deploy estándar del fork. **No correr `build-install.nu` desde el agente**
 (reinicia la app que Damian está usando). Comando para cuando Damian pueda:
 
 ```
 cd /Users/lattenero/Projects/ZCode && git pull --ff-only origin damian && \
   pnpm typecheck && pnpm lint && \
   npx vitest run packages/services/test/daemonChannel.test.ts && \
-  scripts/build-install.sh --yes   # Damian hace ⌘Q cuando le avise
+  scripts/build-install.nu --yes   # Damian hace ⌘Q cuando le avise
 ```
 
-Verificación post-swap (`scripts/verify-deploy.sh` PASS) + handshake manual:
+Verificación post-swap (`scripts/verify-deploy.nu` PASS) + handshake manual:
 
 ```
 TOKEN=$(cat ~/.zcode/daemon-local.token)

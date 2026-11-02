@@ -14,7 +14,7 @@ repo**, not downloaded from Z.ai. Updates arrive only through the ritual below.
 - **[docs/fork/TESTING.md](docs/fork/TESTING.md)** — suites con duraciones
   **medidas**, el pipeline de verificación por cambio, las grietas conocidas
   (typecheck raíz no cubre `apps/`, oxfmt no cubre `apps/`, baseline fallido
-  de `runner.test.ts`), y cómo se testea el deploy (`verify-deploy.sh`).
+  de `runner.test.ts`), y cómo se testea el deploy (`verify-deploy.nu`).
 - **Este archivo (FORK.md)** — runbook operativo: ritual de sync/deploy,
   rollback, ledger de builds y el historial de olas (cronológico, con el
   diagnóstico de cada una).
@@ -46,7 +46,7 @@ Oct 2026); instead the change lives in source, as a normal git commit.
 | Límites de uso z.ai | `08d05f36` | `next_flush_time` → esperar al reset (tope 24h) en vez de morir |
 | Workflows siempre disponibles | `2ac70c51` | El gateway ya no puede apagar los planes; Skill tolera `prefijo:nombre` |
 | Telemetría viva para el bot | `1e4f7413`, `4b46d692`, `d4f231bc` | Sidecars live-io: CoT en vivo + tool-args componiéndose |
-| Deploy verificado | `f6659e93`, `40f0c958`, `d1c0b9f5` | Runbook, `verify-deploy.sh` con markers, build-install `--yes/--when-quit/--zip` |
+| Deploy verificado | `f6659e93`, `40f0c958`, `d1c0b9f5` | Runbook, `verify-deploy.nu` con markers, build-install `--yes/--when-quit/--zip` |
 
 Detalle histórico (los primeros cambios):
 
@@ -58,8 +58,8 @@ Detalle histórico (los primeros cambios):
 | `[fork]` | `packages/ui/src/v4/SessionPane.tsx`, `packages/ui/src/SlashCommandPlugin.tsx` | **Client-side `/diff`**: an app-layer slash command that opens the Diff Ask panel instantly with NO model turn. App commands now take precedence over same-name CLI catalog entries (so the client-side /diff eclipses the CLI one). Requires a live session. |
 | `[fork]` | `packages/ui/test/useUiPluginRecommendations.test.ts`, `packages/ui/test/v4ConversationStatusPanelGitReview.test.ts`, `packages/ui/test/forkCommandModel.test.ts` | Expectations/new tests for the fork behavior. |
 | `[fork]` | `apps/zcode-cli/packages/adapters/src/model/runner-debug.ts` (+ `tests/live-cot-tap.test.ts`) | **F81b — tool-arg streaming in the sidecar**: `tool_input_delta` accumulates into `toolName`/`toolChars`/`toolTail` (8k tail; `tool_input_start` names the tool and resets per composition). While the model composes an Edit, the desktop header shows the line count growing (20→42→100) — the Telegram bot mirrors that header from the sidecar. Schema-additive. |
-| `[fork]` | `scripts/build-install.sh` | **Unattended + armed modes**: `--yes` (no smoke window/prompt — a closed stdin killed the script at the read), `--when-quit` (detached waiter in its OWN session swaps+reopens+announces on Telegram the moment the app quits), `--zip <path>` (install without rebuilding). |
-| `[fork]` | `scripts/sync-upstream.sh`, `scripts/build-install.sh`, `scripts/bootstrap-diff-ask.sh`, `FORK.md` | This runbook. `build-install.sh` also ensures the Diff Ask plugin is installed (see "Diff Ask plugin" below). |
+| `[fork]` | `scripts/build-install.nu` | **Unattended + armed modes**: `--yes` (no smoke window/prompt — a closed stdin killed the script at the read), `--when-quit` (detached waiter in its OWN session swaps+reopens+announces on Telegram the moment the app quits), `--zip <path>` (install without rebuilding). |
+| `[fork]` | `scripts/sync-upstream.nu`, `scripts/build-install.nu`, `scripts/bootstrap-diff-ask.nu`, `FORK.md` | This runbook. `build-install.nu` also ensures the Diff Ask plugin is installed (see "Diff Ask plugin" below). |
 | `[fork]` | `apps/zcode-cli/packages/adapters/src/model/runner-debug.ts`, `runner-stream.ts` (+ `tests/live-cot-tap.test.ts`) | **Live CoT sidecar**: mid-request reasoning/text flushed to `live-io-<session>.jsonl` next to the model-io rollout (first flush at once, then ≤1/s, tails capped 3k/800, rewritten per request, removed when the full record lands). File-based watchers (the Telegram bot) read thinking WHILE it happens instead of per completed request. The canonical `model-io-*.jsonl` is untouched. |
 
 Every modified upstream file carries a `FORK CHANGE` notice at the top (Apache-2.0 §4).
@@ -80,11 +80,17 @@ pushes the source.
 
 ```bash
 cd ~/Projects/ZCode
-scripts/sync-upstream.sh      # fetch + merge upstream/main into damian + gates
-scripts/build-install.sh      # bundle (ZCODE_ENV=production, unsigned) + swap /Applications/ZCode.app
+./scripts/sync-upstream.nu     # fetch + merge upstream/main into damian + gates
+./scripts/build-install.nu     # bundle (ZCODE_ENV=production, unsigned) + swap /Applications/ZCode.app
 git push origin damian
 git tag damian-v<version>-<yyyymmdd> && git push origin --tags
 ```
+
+All of the fork's own script surface is typed Nushell (`.nu`) since
+2026-11-02: the shebang pins `~/.local/bin/nu-nightly`, and
+`nu-check --debug <file>` is the parse gate. The upstream scripts under
+`scripts/` that ship with zai-org (release, CDN, Docker e2e) stay bash on
+purpose: migrating them would diverge from upstream on every sync.
 
 Merge conflicts, if any, will be in the `[fork]` files above — resolve by
 re-applying the small change. If upstream reworks the recommendations pipeline,
@@ -108,7 +114,7 @@ Cada feature sigue SIEMPRE el mismo pipeline, en este orden:
 4. **Swap** con semántica de rename (`mv` a `.prev` + `ditto` + `codesign
    --sign -`): la app corriendo sigue viva hasta el ⌘Q.
 5. **⌘Q + reabrir** (lo hace Damian; nunca matar procesos zcode desde el bot).
-6. **Verificar**: `scripts/verify-deploy.sh` — chequea que el bundle del app
+6. **Verificar**: `scripts/verify-deploy.nu` — chequea que el bundle del app
    Y el repo dist tienen los markers de cada ola, que no hay apps ZCode extra
    en /Applications, y que la app corriendo arrancó después del swap.
 
@@ -132,13 +138,13 @@ files, so plugin releases don't need an app rebuild.
   id** (`dev-zcode-diff-ask-5098ef5a`, from that repo's `marketplace.json`
   `name`), which is why the id hardcoded in the fork stays valid across
   sources — don't rename it there.
-- `scripts/bootstrap-diff-ask.sh` — ensure marketplace + install, idempotent:
+- `scripts/bootstrap-diff-ask.nu` — ensure marketplace + install, idempotent:
   local checkout when `~/Projects/zcode-diff-ask` exists (or
   `$ZCODE_DIFF_ASK_REPO`), GitHub shorthand otherwise. `marketplace add`
   re-binds an existing marketplace to the given source. Run by
-  `build-install.sh`; standalone for plugin-only updates (restart ZCode after).
+  `build-install.nu`; standalone for plugin-only updates (restart ZCode after).
 - Plugin-only iteration (no app rebuild): `npm run build` + version bump in the
-  plugin repo + commit + push, then `bash scripts/bootstrap-diff-ask.sh`.
+  plugin repo + commit + push, then `./scripts/bootstrap-diff-ask.nu`.
 - Gotcha (2026-10-24): the marketplace scan validates EVERYTHING inside the
   source directory (`.gitignore` is ignored) — keep heavy files (e.g. the old
   341 MB asar backup, now at `~/zcode-official-backup/zcode-diff-ask-tools-backup/`)
@@ -321,7 +327,7 @@ Diagnóstico del "no impactó" del 25/10: sí había impactado (agente dist +
 bundle + renderer verificados frescos); lo que se vio fue un stream recovery
 (sin countdown por diseño, antes indistinguible) y/o apps viejas en
 /Applications confundiendo al Dock. Acciones: borradas `ZCode.prev.app` y
-`ZCode-3.16.2-patched.bak`; nuevo `scripts/verify-deploy.sh` (sección "Deploy
+`ZCode-3.16.2-patched.bak`; nuevo `scripts/verify-deploy.nu` (sección "Deploy
 de features"); documentada la mina de resolución del agent (monorepo dist
 antes que el bundle). Tests: 5 shared (reason passthrough ×3, stream recovery,
 fallback) + 5 UI (mapping puro ×2, render server_error/stream_recovery/fallback).

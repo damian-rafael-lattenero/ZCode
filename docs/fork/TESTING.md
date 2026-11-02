@@ -67,7 +67,7 @@ cubren los contratos que el bot consume (sidecars, curvas, estados).
    fallos de build (pasó el 25/10). Los builds van con `> log 2>&1; echo
    "EXIT:$?" >> log` y se verifica el `EXIT:` real.
 
-## 4. El deploy también se testea (`scripts/verify-deploy.sh`)
+## 4. El deploy también se testea (`scripts/verify-deploy.nu`)
 
 Gate post-swap, corre en <2 s:
 

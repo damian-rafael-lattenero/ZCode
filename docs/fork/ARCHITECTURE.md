@@ -161,7 +161,7 @@ cero acoplamiento de proceso, sobrevive reinicios, debuggable a mano.
 
 ### 4.10 Deploys verificables o no son deploys
 `40f0c958`: cada ola deja un *marker* (string literal a prueba de
-minificación) en el bundle; `scripts/verify-deploy.sh` chequea bundle del
+minificación) en el bundle; `scripts/verify-deploy.nu` chequea bundle del
 app + dist del repo + asar del UI + proceso corriendo. La mina documentada:
 cuando el workspace ES este monorepo, el agente resuelve desde
 `apps/zcode-cli/packages/cli/dist/zcode.cjs` **antes** que desde el bundle
@@ -178,7 +178,7 @@ del app — un swap sin bundle deja el dist viejo y "el deploy no impactó".
 | `7c33c912` `model:` frontmatter | los prompts del teléfono pueden fijar modelo por turno |
 | `f85a67f6` curva determinista | el countdown del bot coincide con la realidad (2^n exactos) |
 | `2ac70c51` workflow alwaysOn | los planes del teléfono nunca pierden las herramientas por un 502 del gateway |
-| `d1c0b9f5` announce de Telegram | el propio `build-install.sh` anuncia el swap en el chat |
+| `d1c0b9f5` announce de Telegram | el propio `build-install.nu` anuncia el swap en el chat |
 
 El bot NO depende del fork para existir (degrada a "sin cajitas/sin
 countdown"), pero el fork es lo que lo hace **útil**: sin sidecars, el bot
@@ -201,10 +201,10 @@ sidecar queda para el modo headless y el post-mortem.
 
 - **Fork de fuente, nunca patch del binario.** El asar-patching rompió
   silenciosamente las updates de Squirrel (oct 2026). Todo cambio es un
-  commit normal; las updates llegan solo por `sync-upstream.sh`.
+  commit normal; las updates llegan solo por `sync-upstream.nu`.
 - **El agente del workspace puede ser el dist del repo** (orden de
   resolución: env → monorepo dist → bundle del app). Documentado y gateado
-  por `verify-deploy.sh`; el pipeline de bundle regenera ambos.
+  por `verify-deploy.nu`; el pipeline de bundle regenera ambos.
 - **Fail-open local / fail-closed de red**: invertimos el default de
   upstream para funciones locales (Ola 8) pero mantuvimos fail-closed para
   esperar al proveedor sin dato cierto (`next_flush_time` ausente ⇒ no
@@ -220,8 +220,8 @@ sidecar queda para el modo headless y el post-mortem.
 
 | Tarea | Comando / gesto |
 | --- | --- |
-| ¿Estoy en el build nuevo? | `scripts/verify-deploy.sh` → PASS |
-| Deploy de un cambio | implementar → tests → commit `[fork]` → push `--no-verify` → `scripts/build-install.sh --yes` (o bundle manual + swap) → ⌘Q → verify |
+| ¿Estoy en el build nuevo? | `scripts/verify-deploy.nu` → PASS |
+| Deploy de un cambio | implementar → tests → commit `[fork]` → push `--no-verify` → `scripts/build-install.nu --yes` (o bundle manual + swap) → ⌘Q → verify |
 | Diagnóstico de fallos de red | `~/.zcode/cli/log/zcode-YYYY-MM-DD.jsonl`: `model.network.failed` / `model.network.retry_scheduled` (los `delayMs` deben ser potencias de 2) |
 | Emergency restart del stack | `/nuclear` desde Telegram (nunca kill desde el bot headless — mata su propio host) |
 | Logs del bot | `~/.zcode/hooks/logs/` (958 días de rotación) |

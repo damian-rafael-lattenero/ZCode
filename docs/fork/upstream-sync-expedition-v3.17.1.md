@@ -322,3 +322,15 @@ Every tool invocation, in session order (full outputs live in the raw archive):
     59	**`shell`** `git diff 3c5b2276..upstream/main -- '**/tsconfig*.json'`
     60	**`shell`** `git show upstream/main:packages/ui/tsconfig.json && git show upstream/main:packages/services/tsconfig.json && git show upstream/main:packages/shared/tsconfig.json && git show upstream/main:packages/desktop/tsconfig.e2e.json`
     61	**`shell`** `git show upstream/main:packages/shared/tsconfig.testing.json`
+
+---
+
+## Decision record — Grupo 2 test doctrine
+
+**2026-11-02: Opción A1 confirmed by the owner.**
+
+When the merge executes:
+- Keep all **17 fork test files** + `packages/services/test/botsService.fixtures.ts` (required by `daemonChannel.test.ts`).
+- Accept upstream's retirement of the ~1.800 retired App tests; `vitest.config.ts` and `scripts/engineering-test-files.json` stay **100% identical to upstream**.
+- Create `vitest.fork.config.ts` covering exactly the fork's tests; point `scripts/sync-upstream.nu` (line 42) at it.
+- Migrate the 5 DOM tests (`chatApiRetryCountdown`, `reasoningExpandDefault`, `toolLayoutDefaultOpen`, `useUiPluginRecommendations`, `v4ConversationStatusPanelGitReview`) from `@testing-library/react` to a local `createRoot` (react-dom/client) + `act` helper on jsdom — `packages/ui/package.json` and `pnpm-lock.yaml` stay upstream-identical, zero lockfile conflicts in future syncs.

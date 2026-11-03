@@ -12,6 +12,7 @@ import { sessionMgmtHandlers } from "./session-mgmt.js";
 import { selectionSideSessionHandlers } from "./selection-side-session.js";
 import { assistantFeedbackHandlers } from "./assistant-feedback.js";
 import { highspeedMetricsHandlers } from "./highspeed-metrics.js";
+import { subagentMessageHandlers } from "./subagent-message.js";
 
 export const NATIVE_HANDLERS = {
   ...sessionFlowHandlers,
@@ -25,6 +26,8 @@ export const NATIVE_HANDLERS = {
   ...fileRewindHandlers,
   ...assistantFeedbackHandlers,
   ...highspeedMetricsHandlers,
+  // [fork] A4 — the subagent message door (owner session → child agentId).
+  ...subagentMessageHandlers,
 } as const;
 
 export type NativeCommandType = keyof typeof NATIVE_HANDLERS;

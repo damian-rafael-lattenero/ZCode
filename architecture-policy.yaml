@@ -1188,6 +1188,13 @@ exceptions:
       - packages/services/src/bots/daemonChannel.ts
       - packages/services/src/bots/daemonChannelModelSelection.ts
     reason: "[fork] B3a (ADR-022): the daemon-local channel contract lives in shared (wire types consumed by the Kotlin client as the normative shapes) and the unix-socket server lives beside the bots channel runtimes in services; both are additive fork files, boundaries and owners of the surrounding packages are unchanged. daemonChannelModelSelection.ts keeps the /plan (model selection) handler beside the channel server while staying under the per-file line gate."
+  - id: fork-a4-subagent-session-new-files
+    rule: unmanaged-new-file
+    paths:
+      - packages/shared/src/subagent-session.ts
+      - packages/services/src/zcode-agent/subagentSessionRouting.ts
+      - apps/zcode-cli/packages/bootstrap/src/zcode-protocol-v4/commands/handlers/subagent-message.ts
+    reason: "[fork] A4: the subagent child-session convention (sess_subagent_<agentId>) is parsed in shared so the host, the task-service adapter and the CLI agree on one prefix; the owner resolution lives in services beside the task-service adapter (it only reads the sessions-index reconcile RPC); the native v4 handler is a sibling of the other command groups and stays under the per-file line gate. All three are additive fork files — package boundaries and owners are unchanged."
   - id: session-features-attribution-header-edit
     rule: unmanaged-new-file
     paths: [apps/zcode-cli/packages/adapters/src/model/runner-attribution.ts]

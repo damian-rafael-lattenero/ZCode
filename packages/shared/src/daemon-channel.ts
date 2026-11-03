@@ -115,8 +115,7 @@ export interface DaemonChannelTaskListQuery {
 }
 
 export type DaemonChannelQuery =
-  | { kind: "listTasks"; workspacePath: string; workspaceIdentity?: string }
-  | DaemonChannelTaskListQuery
+  | { kind: "listTasks"; workspacePath: string; workspaceIdentity?: string }  | DaemonChannelTaskListQuery
   | { kind: "activeTaskIds"; workspacePath: string; workspaceIdentity?: string }
   | {
       kind: "taskMeta";
@@ -188,11 +187,36 @@ export type DaemonChannelQuery =
       expectedRevision?: number;
     }
   | {
+      /**
+       * setMode (aditivo, 2/11 — el /mode del bot: plan 🗺 / yolo 🔓).
+       * Cambia el MODO de colaboración de la conversación por el MISMO camino
+       * del switch de la UI (v4 switchCollaborationMode, con convergencia de
+       * revisión). Un modo fuera de `DAEMON_CHANNEL_MODES` o una task
+       * desconocida se rechazan honestos (error, nunca un downgrade silencioso).
+       */
+      kind: "setMode";
+      taskId: string;
+      /** Solo los modos que el usuario puede cambiar (mismo set que la UI). */
+      mode: (typeof DAEMON_CHANNEL_MODES)[number];
+      workspacePath?: string;
+      workspaceIdentity?: string;
+    }
+  | {
       kind: "contextWindow";
       taskId: string;
       workspacePath?: string;
       workspaceIdentity?: string;
     };
+
+/**
+ * Los modos que un usuario puede cambiar desde la UI (subconjunto de
+ * `ZCodeTaskMode`; `auto` y los alias legacy no son conmutables). El bot los
+ * expone como plan 🗺 / yolo 🔓; el resto queda para paridad con el switch
+ * del desktop.
+ */
+export const DAEMON_CHANNEL_MODES = ["build", "edit", "plan", "yolo", "guarded"] as const;
+
+export type DaemonChannelMode = (typeof DAEMON_CHANNEL_MODES)[number];
 
 /**
  * Resultado de `contextWindow` (el medidor de contexto REAL de la

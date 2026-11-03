@@ -5,6 +5,7 @@ import {
   parseModelSelectionValue,
 } from "@zcode/contracts";
 import type { SubagentRunOptions } from "@zcode/contracts";
+import type { SubagentSendMessageResult, TraceContext } from "@zcode/contracts";
 import { inheritPermissionMode } from "@zcode/contracts";
 import {
   defaultScheduler,
@@ -1018,6 +1019,41 @@ async function validateSubagentComputerUseConfiguration(
       recoverable: true,
     },
   );
+}
+
+/**
+ * [fork] A4 — deliver a message to a local subagent through THIS runtime's
+ * task registry. The v4 command `sendSubagentMessage` reaches it via the app
+ * facade; the model's SendMessage tool reaches the same port from a tool
+ * context. Same registry, same delivery semantics, two doors.
+ *
+ * The parentToolCallId has no tool call behind a protocol order; a stable
+ * synthetic id keeps the port's required field honest (it is metadata only —
+ * the child receives the message text).
+ */
+export async function sendSubagentMessage(
+  this: AgentRuntimeInternal,
+  input: {
+    to: string;
+    message: string;
+    summary?: string;
+    traceContext?: TraceContext;
+  },
+): Promise<SubagentSendMessageResult> {
+  const port = this.subagentPort;
+  if (!port?.sendMessage) {
+    throw new Error("subagent messaging is unavailable for this session runtime");
+  }
+  return port.sendMessage({
+    sessionId: this.sessionId,
+    parentToolCallId: `protocol:subagent-message:${this.sessionId}`,
+    to: input.to,
+    ...(input.summary ? { summary: input.summary } : {}),
+    message: input.message,
+    workingDirectory: this.workingDirectory,
+    workspaceRoot: this.workspaceRoot,
+    trace: input.traceContext ?? this.rootTraceContext,
+  });
 }
 
 export function isUniqueOfficialSkillRequest(

@@ -267,6 +267,23 @@ export const commandPayloadSchemas = {
   pauseGoal: z.object({}),
   resumeGoal: z.object({}),
   cancelBackgroundWork: z.object({ workId: z.string() }),
+  // [fork] A4 — sendSubagentMessage: deliver a message INTO a local subagent
+  // through its owner's runtime task registry (the same door the model's
+  // SendMessage tool uses). Envelope sessionId = the OWNER (parent) session:
+  // a running child has no session record of its own (addressing it directly
+  // is rejected by design — `proto.sessionNotFound` / `guard.subagentReadOnly`),
+  // and the parent record is the only live owner of the child's registry entry.
+  // `agentId` is the harness id from the Agent/Task launch ACK (the child
+  // session is `sess_subagent_<agentId>`). Delivery follows the CLI's own
+  // SendMessage semantics: a running child is steered/queued, a terminal child
+  // resumes in the background. Rejection → fault.command.subagentMessageRejected.*.
+  sendSubagentMessage: z
+    .object({
+      agentId: z.string().min(1),
+      text: z.string().min(1),
+      summary: z.string().min(1).optional(),
+    })
+    .strict(),
   // cancel & resume：恢复一个已取消 / 被进程死亡
   // 打断的 dwf run。workId ≡ runId（与 cancelBackgroundWork 同一个身份等式）；`name` 可选，
   // 喂恢复后完成通知的主题（重启后原 CreateWorkflow 工具 input 不可得）。刻意不携

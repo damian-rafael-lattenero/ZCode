@@ -213,13 +213,14 @@ describe("daemon local channel (B3a)", () => {
     const helloOk = await client.waitFor((message) => message.type === "hello_ok");
     expect(helloOk).toMatchObject({ type: "hello_ok", protocolVersion: 1 });
     // Capacidades nuevas del /plan y del /context_window (aditivas, protocolo v1),
-    // y el bind atómico (2/11).
+    // el bind atómico (2/11) y los subagentes dirigibles (A4, 2/11).
     expect((helloOk as { capabilities: string[] }).capabilities).toEqual(
       expect.arrayContaining([
         "queries:modelSelection",
         "control:setModelSelection",
         "queries:contextWindow",
         "bind",
+        "subagents",
       ]),
     );
     return client;
@@ -470,6 +471,46 @@ describe("daemon local channel (B3a)", () => {
       (message) => message.type === "error" && message.id === "q4",
     );
     expect(unknown).toMatchObject({ type: "error", code: "unknown_query" });
+    client.destroy();
+  });
+
+  it("setMode (A4) switches the conversation mode through the task service", async () => {
+    await startChannel();
+    const client = await connectAndHandshake();
+    const sendQuery = (id: string, query: unknown) =>
+      client.send({ type: "query", id, query } as never);
+    const queryResult = (id: string) =>
+      client.waitFor((message) => message.type === "query_result" && message.id === id);
+
+    sendQuery("m1", { kind: "setMode", taskId: "task-9", mode: "plan" });
+    const planned = await queryResult("m1");
+    expect(planned).toMatchObject({
+      type: "query_result",
+      result: { taskId: "task-9", mode: "plan" },
+    });
+    expect(taskService.setMode).toHaveBeenCalledWith({ taskId: "task-9", mode: "plan" });
+
+    sendQuery("m2", { kind: "setMode", taskId: "task-9", mode: "yolo" });
+    await queryResult("m2");
+    expect(taskService.setMode).toHaveBeenLastCalledWith({ taskId: "task-9", mode: "yolo" });
+    client.destroy();
+  });
+
+  it("setMode (A4) rejects an unknown mode as bad_request — never a silent downgrade", async () => {
+    await startChannel();
+    const client = await connectAndHandshake();
+    client.send({
+      type: "query",
+      id: "m1",
+      query: { kind: "setMode", taskId: "task-9", mode: "turbo" },
+    } as never);
+    const error = await client.waitFor(
+      (message) => message.type === "error" && message.id === "m1",
+    );
+    expect(error).toMatchObject({ type: "error", code: "bad_request" });
+    expect((error as { message?: string }).message).toContain("build, edit, plan, yolo, guarded");
+    // El fallback histórico del adapter (modo desconocido → build) NUNCA corre.
+    expect(taskService.setMode).not.toHaveBeenCalled();
     client.destroy();
   });
 

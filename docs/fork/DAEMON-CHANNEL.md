@@ -210,6 +210,20 @@ del mapa); y un `tool_input_delta` ya trae muestreo ~1 s del agente.
 | `stop {taskId, workspacePath?, runId?}` | `stopGeneration` — el MISMO V4 stop del botón de la UI (owner/lease/stale-run protection del lado servicio) | `/stop` |
 | `stopAll {workspacePath?}` | `listActiveTaskIds` × `stopGeneration` | primera mitad de `/nuclear` |
 | `compact {taskId, instructions?, expectedRevision?}` | `compactSession` | `/compact` |
+| `setMode {taskId, mode}` | `setMode` → v4 `switchCollaborationMode` (misma convergencia de revisión que el switch de la UI) | `/mode`: `mode` ∈ `build\|edit\|plan\|yolo\|guarded` (`DAEMON_CHANNEL_MODES`); un modo desconocido se rechaza `bad_request` — jamás un downgrade silencioso a build |
+
+**Subagentes dirigibles (A4, aditivo 2/11).** `inbound`/`steer` con
+`taskId = sess_subagent_<agentId>` y `stop` con ese mismo taskId dejan de
+rebotar con `proto.sessionNotFound`: el fork parsea la convención
+(`packages/shared/src/subagent-session.ts`), resuelve la sesión DUEÑA por la
+fila persistida del child (`parentSessionId` en el reconcile de
+sessions-index) y entrega por el registro runtime del dueño —
+`sendSubagentMessage` para la orden (running → steer/queue, terminal →
+resume en background: el MISMO port del tool SendMessage) y
+`cancelBackgroundWork` para el ⏹️ (workId ≡ agentId; `not_running` =
+no-op honesto). Un child no resoluble se rechaza con
+`ZCODE_SUBAGENT_SESSION_UNRESOLVED` — **jamás** cae a la conversación del
+padre. Cap anunciada: `subagents`. Detalle: `docs/fork-interface-map.md` §2.
 
 `stop`/`stopAll` interrumpen el turno VISIBLE — el que muestra la pantalla.
 La otra mitad de `/nuclear` (reiniciar el stack del bot, LaunchAgents, etc.)

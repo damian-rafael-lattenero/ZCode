@@ -1628,6 +1628,13 @@ export function createConversationV4Gateway(
             createdAt: session.time.created,
             updatedAt: session.time.updated,
             ...(session.lastOutcome ? { lastOutcome: session.lastOutcome } : {}),
+            // [fork] A4 — persisted lineage on the read that already proves the row
+            // exists. A running subagent has no session record (proto.sessionNotFound
+            // by design), so its persisted `parent_id` + taskType are the only
+            // non-invasive way for the host to resolve an order's owner. Additive:
+            // absent when the row has no parent.
+            ...(session.parentID ? { parentSessionId: String(session.parentID) } : {}),
+            ...(session.taskType ? { taskType: session.taskType } : {}),
           };
         }),
       );

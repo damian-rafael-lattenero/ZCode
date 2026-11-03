@@ -78,6 +78,7 @@ import {
 } from "./steering.js";
 import { discardPersistedPendingSteerInputs } from "./steering.js";
 import { createDefaultSubagentPort } from "./subagent.js";
+import { sendSubagentMessage } from "./subagent.js";
 import { ensureContextInitialized, getSkillCatalog } from "./context.js";
 import { createContextBuilderFromSnapshot } from "./context.js";
 import { loadProjectMemoryRoot } from "./context.js";
@@ -281,6 +282,8 @@ export function installAgentRuntimeMethods(ctor: AgentRuntimeConstructor): void 
   proto.discardHeldPendingInputById = discardHeldPendingInputById;
   proto.clearAllPendingInputs = clearAllPendingInputs;
   proto.createDefaultSubagentPort = createDefaultSubagentPort;
+  // [fork] A4 — the protocol door into a local subagent's registry.
+  proto.sendSubagentMessage = sendSubagentMessage;
   proto.ensureContextInitialized = ensureContextInitialized;
   proto.getSkillCatalog = getSkillCatalog;
   proto.createContextBuilderFromSnapshot = createContextBuilderFromSnapshot;

@@ -54,6 +54,7 @@ type SessionFacade = Pick<
   ZCodeApp,
   | "readBackgroundBashOutput"
   | "cancelBackgroundTask"
+  | "sendSubagentMessage"
   | "clearTarget"
   | "close"
   | "callMcpToolForUi"
@@ -552,6 +553,16 @@ export function createSessionFacade(deps: CreateSessionFacadeDeps): SessionFacad
     cancelBackgroundTask: async (taskId, options) =>
       deps.runtime.cancelBackgroundTask(taskId, {
         traceContext: options?.traceContext ?? deps.traceContext,
+      }),
+    // [fork] A4 — the protocol door to a local subagent. The runtime owns the
+    // registry the message must enter; the facade only borrows this session's
+    // trace context (same policy as cancelBackgroundTask above).
+    sendSubagentMessage: async (input) =>
+      deps.runtime.sendSubagentMessage({
+        to: input.to,
+        message: input.message,
+        ...(input.summary ? { summary: input.summary } : {}),
+        traceContext: input.traceContext ?? deps.traceContext,
       }),
     disconnectMcpServer: async (name) => {
       if (!deps.mcpPort) return undefined;

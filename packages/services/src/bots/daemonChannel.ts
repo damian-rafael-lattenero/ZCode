@@ -237,6 +237,12 @@ export function createDaemonLocalChannel(
     // apunta con la ley del /task y el texto vuela después; el refusal viaja
     // en las replies del inbound_result.
     "bind",
+    // SUBAGENTES DIRIGIBLES (aditivo, 2/11): inbound/steer con
+    // taskId = sess_subagent_<agentId> entregan la orden al subagente VIVO
+    // (por el runtime de su sesión dueña — el MISMO door del tool SendMessage)
+    // y la query stop con ese taskId detiene ESE subagente, no al padre. Un
+    // child no resoluble se rechaza honesto: jamás cae al padre.
+    "subagents",
     "stream",
     "queries:listTasks",
     "queries:taskList",

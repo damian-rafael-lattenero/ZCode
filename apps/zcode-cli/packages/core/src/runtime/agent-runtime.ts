@@ -53,6 +53,7 @@ import type {
   DynamicWorkflowRunPort,
   ModelCatalogPort,
   SubagentPort,
+  SubagentSendMessageResult,
   ToolArtifactStorePort,
   ToolCallId,
   TraceContext,
@@ -760,6 +761,13 @@ export interface AgentRuntime {
     taskId: string,
     options?: { traceContext?: TraceContext },
   ): Promise<BackgroundTaskCancelResult>;
+  /** [fork] A4 — deliver a message into a local subagent (owner runtime's registry). */
+  sendSubagentMessage(input: {
+    to: string;
+    message: string;
+    summary?: string;
+    traceContext?: TraceContext;
+  }): Promise<SubagentSendMessageResult>;
   stopBackgroundTask(
     taskId: string,
     options: RuntimeBackgroundStopOptions,

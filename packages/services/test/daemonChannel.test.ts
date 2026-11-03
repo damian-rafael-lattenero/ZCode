@@ -213,13 +213,14 @@ describe("daemon local channel (B3a)", () => {
     const helloOk = await client.waitFor((message) => message.type === "hello_ok");
     expect(helloOk).toMatchObject({ type: "hello_ok", protocolVersion: 1 });
     // Capacidades nuevas del /plan y del /context_window (aditivas, protocolo v1),
-    // y el bind atómico (2/11).
+    // el bind atómico (2/11) y los subagentes dirigibles (A4, 2/11).
     expect((helloOk as { capabilities: string[] }).capabilities).toEqual(
       expect.arrayContaining([
         "queries:modelSelection",
         "control:setModelSelection",
         "queries:contextWindow",
         "bind",
+        "subagents",
       ]),
     );
     return client;

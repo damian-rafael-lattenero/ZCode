@@ -219,6 +219,7 @@ export type {
   McpPort,
   McpServerConfig,
   SubagentPort,
+  SubagentSendMessageResult,
   SubagentTaskSnapshot,
   ToolArtifactStorePort,
   ToolCallId,

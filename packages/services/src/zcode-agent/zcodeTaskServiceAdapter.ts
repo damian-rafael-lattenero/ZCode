@@ -1,4 +1,6 @@
 import { isAuxiliarySessionKind } from "@zcode/shared";
+// [fork] A4 — subagent child-session convention (sess_subagent_<agentId>).
+import { subagentAgentIdFromSessionId } from "@zcode/shared";
 import { createBotTopicAdmission } from "#src/zcode-agent/botTopicAdmission.js";
 import {
   readBotGroupRuntimeSnapshot,
@@ -158,7 +160,12 @@ import {
   assertV4CommandAckOk,
   createHostCommandEnvelope,
   sendHostCasCommandV4,
+  ZCodeV4CommandRejectedError,
 } from "./zcodeV4HostCommand.js";
+import {
+  resolveSubagentOwner,
+  subagentSessionUnresolvedError,
+} from "./subagentSessionRouting.js";
 import {
   getLegacyDeletedTaskSessionSnapshotPath,
   getLegacyTaskSessionSnapshotPath,
@@ -504,6 +511,131 @@ export function createZCodeTaskServiceAdapter(
         workspaceKey: resolveWorkspaceKey(target),
         workspacePath: target.workspacePath,
       });
+      throw error;
+    }
+  }
+
+  /**
+   * [fork] A4 — owner resolution for a `sess_subagent_<agentId>` target.
+   * The child session id needs no translation (it IS the store id); what must
+   * be resolved is the OWNER: a running child has no v4 session record, and
+   * the persisted `parent_id` is the only fork-wide link. Null is honest —
+   * callers reject instead of falling through to a parent conversation.
+   */
+  async function resolveSubagentOwnerFor(
+    target: TaskTarget,
+    agentId: string,
+    childSessionId: string,
+  ): Promise<Awaited<ReturnType<typeof resolveSubagentOwner>>> {
+    const reconcile = options.zcodeAgentService.reconcileSessionsIndexV4;
+    if (!reconcile) return null;
+    return resolveSubagentOwner({
+      agentId,
+      childSessionId,
+      workspacePath: target.workspacePath,
+      workspaceIdentity: target.workspaceIdentity,
+      reconcile: (ownerInput) =>
+        reconcile.call(options.zcodeAgentService, {
+          workspacePath: ownerInput.workspacePath,
+          ...(ownerInput.workspaceIdentity
+            ? { workspaceIdentity: ownerInput.workspaceIdentity }
+            : {}),
+          sessionIds: ownerInput.sessionIds,
+        }),
+    });
+  }
+
+  /**
+   * [fork] A4 — an ORDER to a subagent, delivered through the additive
+   * `sendSubagentMessage` v4 command against the OWNER session. The CLI
+   * forwards it to the same `subagentPort.sendMessage` the model's
+   * SendMessage tool uses (running child → steered/queued, terminal child →
+   * background resume). The ACK is only ok when the port accepted it.
+   */
+  async function sendSubagentOrder(params: {
+    target: TaskTarget;
+    agentId: string;
+    childSessionId: string;
+    traceId: TraceId;
+    content: string;
+    clientId?: string;
+  }): Promise<void> {
+    const resolution = await resolveSubagentOwnerFor(
+      params.target,
+      params.agentId,
+      params.childSessionId,
+    );
+    if (!resolution) {
+      throw subagentSessionUnresolvedError(params.childSessionId, params.agentId);
+    }
+    const ack = await options.zcodeAgentService.sendConversationCommandV4({
+      workspacePath: params.target.workspacePath,
+      workspaceIdentity: params.target.workspaceIdentity,
+      envelope: createHostCommandEnvelope({
+        type: "sendSubagentMessage",
+        payload: { agentId: params.agentId, text: params.content },
+        sessionId: resolution.parentSessionId,
+        commandId: params.traceId,
+        ...(params.clientId ? { clientId: params.clientId } : {}),
+      }),
+    });
+    assertV4CommandAckOk(
+      "sendSubagentMessage",
+      ack,
+      `subagent=${params.childSessionId} owner=${resolution.parentSessionId}`,
+    );
+    logger.info(params.traceId, "ZCode task facade subagent order ACK", {
+      agentId: params.agentId,
+      childSessionId: params.childSessionId,
+      ownerSessionId: resolution.parentSessionId,
+    });
+  }
+
+  /**
+   * [fork] A4 — stop a subagent through the owner's background-work cancel
+   * (`cancelBackgroundWork`, workId ≡ agentId). `not_running` is an honest
+   * no-op (the child already finished); anything else propagates.
+   */
+  async function stopSubagentRun(params: {
+    target: TaskTarget;
+    agentId: string;
+    childSessionId: string;
+  }): Promise<void> {
+    const resolution = await resolveSubagentOwnerFor(
+      params.target,
+      params.agentId,
+      params.childSessionId,
+    );
+    if (!resolution) {
+      throw subagentSessionUnresolvedError(params.childSessionId, params.agentId);
+    }
+    const ack = await options.zcodeAgentService.sendConversationCommandV4({
+      workspacePath: params.target.workspacePath,
+      workspaceIdentity: params.target.workspaceIdentity,
+      envelope: createHostCommandEnvelope({
+        type: "cancelBackgroundWork",
+        payload: { workId: params.agentId },
+        sessionId: resolution.parentSessionId,
+      }),
+    });
+    try {
+      assertV4CommandAckOk(
+        "cancelBackgroundWork",
+        ack,
+        `subagent=${params.childSessionId} owner=${resolution.parentSessionId}`,
+      );
+    } catch (error) {
+      if (
+        error instanceof ZCodeV4CommandRejectedError &&
+        error.ack.reasonCode === "fault.command.backgroundWorkCancelRejected.not_running"
+      ) {
+        logger.info(undefined, "ZCode task facade subagent stop: child already terminal", {
+          agentId: params.agentId,
+          childSessionId: params.childSessionId,
+          ownerSessionId: resolution.parentSessionId,
+        });
+        return;
+      }
       throw error;
     }
   }
@@ -2085,6 +2217,26 @@ export function createZCodeTaskServiceAdapter(
     },
 
     async sendPrompt(params): Promise<void> {
+      // [fork] A4 — an ORDER to a subagent: `sess_subagent_<agentId>` is a
+      // child session, and a child is reachable ONLY through its owner's
+      // runtime task registry (running children own no session record; input
+      // admission keeps them read-only). Resolve the owner, then deliver the
+      // text via the additive `sendSubagentMessage` command — the same port
+      // the model's SendMessage tool uses (running → steer/queue, terminal →
+      // background resume). Unresolvable → honest error, never the parent.
+      const subagentAgentId = subagentAgentIdFromSessionId(params.taskId);
+      if (subagentAgentId) {
+        const storedTarget = getTaskTarget(params.taskId);
+        await sendSubagentOrder({
+          target: storedTarget,
+          agentId: subagentAgentId,
+          childSessionId: params.taskId,
+          traceId: params.traceId,
+          content: params.content,
+          clientId: params.clientId,
+        });
+        return;
+      }
       const storedTarget = getTaskTarget(params.taskId);
       const target = {
         ...storedTarget,
@@ -2236,6 +2388,27 @@ export function createZCodeTaskServiceAdapter(
             workspaceIdentity: params.workspaceIdentity,
           }
         : getTaskTarget(params.taskId);
+      // [fork] A4 — stopping a SUBAGENT (`sess_subagent_<agentId>`) is the
+      // same gap as an order: the child has no v4 session record, so a plain
+      // v4 `stop` rejects with `proto.sessionNotFound`. The supported door is
+      // the owner's background-work cancel (`cancelBackgroundWork`, workId ≡
+      // agentId) — exactly what the desktop's background panel uses.
+      const subagentAgentId = subagentAgentIdFromSessionId(params.taskId);
+      if (subagentAgentId) {
+        await stopSubagentRun({
+          target,
+          agentId: subagentAgentId,
+          childSessionId: params.taskId,
+        });
+        logger.info(params.runId, "ZCode task facade stopGeneration ACK (subagent)", {
+          durationMs: Date.now() - startedAt,
+          agentId: subagentAgentId,
+          taskId: params.taskId,
+          workspaceKey: resolveWorkspaceKey(target),
+          workspacePath: target.workspacePath,
+        });
+        return;
+      }
       logger.info(params.runId, "ZCode task facade stopGeneration 开始", {
         hasRunId: Boolean(params.runId),
         taskId: params.taskId,

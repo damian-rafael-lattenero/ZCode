@@ -23,6 +23,7 @@ import type {
   ImageProcessorPort,
   InputDelivery,
   InputHistoryEntry,
+  SubagentSendMessageResult,
   InputHistoryKind,
   InputHistoryStorePort,
   LoggerFactory,
@@ -506,6 +507,21 @@ export interface ZCodeApp {
     taskId: string,
     options?: { traceContext?: TraceContext },
   ): Promise<BackgroundTaskCancelResult>;
+  /**
+   * [fork] A4 — deliver a message INTO a local subagent through this session's
+   * runtime task registry (the same `subagentPort.sendMessage` the model's
+   * SendMessage tool uses: running child → steered/queued, terminal child →
+   * resumed in the background). Optional capability: runtimes without a
+   * subagent port reject with capabilityUnsupported. The child itself is
+   * addressed by its harness agentId — a child session has no record of its
+   * own, so the OWNER session is the one that can carry the message.
+   */
+  sendSubagentMessage?(input: {
+    to: string;
+    message: string;
+    summary?: string;
+    traceContext?: TraceContext;
+  }): Promise<SubagentSendMessageResult>;
   /**
    * workflow run 的事件日志分页（详情页审计面）。可选能力：dwf journal 不可用时 run service
    * 整个不构造，此方法随之缺席，网关据此回结构化的能力不支持错误而不是空页——

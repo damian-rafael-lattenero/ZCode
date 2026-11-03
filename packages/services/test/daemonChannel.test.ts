@@ -160,6 +160,15 @@ describe("daemon local channel (B3a)", () => {
       subscription: null,
       quota: null,
     })),
+    // [fork] A5 — el plano de regalos (resets otorgados y su gasto).
+    getCodingPlanResetStatus: vi.fn(async () => ({
+      availableFiveHourResets: [{ expireAt: 1_793_700_000_000 }],
+      availableWeekResets: [],
+      latestFiveHourResetHistory: null,
+      latestWeekResetHistory: null,
+      hasUnreadHistory: false,
+    })),
+    useCodingPlanReset: vi.fn(async () => ({ used: true as const })),
   };
 
   async function startChannel(overrides?: {
@@ -167,6 +176,8 @@ describe("daemon local channel (B3a)", () => {
     config?: unknown;
     modelSelectionService?: unknown;
     modelSelectionDefault?: unknown;
+    codingPlanSubscriptionService?: unknown;
+    marketingTouchService?: unknown;
     streamKeepaliveIntervalMs?: number;
   }) {
     const repo = overrides?.config ?? f.createMemoryRepo(f.baseConfig);
@@ -178,6 +189,8 @@ describe("daemon local channel (B3a)", () => {
       botsService,
       zcodeTaskService: taskService,
       usageStatsService: usageService,
+      codingPlanSubscriptionService: overrides?.codingPlanSubscriptionService as never,
+      marketingTouchService: overrides?.marketingTouchService as never,
       modelSelectionService: overrides?.modelSelectionService as never,
       modelSelectionDefault: overrides?.modelSelectionDefault as never,
       dataRootDir: () => dataDir,
@@ -1323,6 +1336,166 @@ describe("daemon local channel (B3a)", () => {
     const bad2 = await client.waitFor((message) => message.type === "error" && message.id === "rs9");
     expect(bad2).toMatchObject({ type: "error", code: "bad_request" });
     expect(taskService.respondElicitation).not.toHaveBeenCalled();
+    client.destroy();
+  });
+
+  // [fork] A5 — los regalos del coding plan (3/11).
+
+  it("codingPlanGifts reads both planes through the conversation's provider and the marketing banner", async () => {
+    const marketingTouchService = {
+      query: vi.fn(async () => ({
+        serverTime: 1,
+        language: "en-US",
+        rejectedCount: 0,
+        scope: "scope-1",
+        deliveries: [
+          {
+            resource_position: "banner",
+            campaign_id: "camp-1",
+            priority: 1,
+            banner: {
+              background: {
+                type: "image",
+                image: { default: { src: "https://x/y.png", sha256: "a".repeat(64) } },
+              },
+              buttons: [
+                {
+                  text: { format: "plaintext", content: "Claim" },
+                  action: { type: "claim_zcode_plan", args: { plan_id: "global-build" } },
+                },
+              ],
+            },
+          },
+        ],
+      })),
+    };
+    const subscription = {
+      getManualClaimPlanPreviews: vi.fn(async () => ({
+        serverTime: 1_700_000_000_000,
+        plans: [
+          {
+            planId: "global-build",
+            name: "ZCODE GLOBAL BUILD",
+            description: "",
+            priority: 1,
+            entitlements: [
+              {
+                entitlementId: "ent-1",
+                showName: "GLM-5.3-Flash",
+                meter: "token",
+                unitType: "token",
+                capabilities: ["model:GLM-5.3-Flash"],
+                grantUnits: 300_000_000,
+                period: "one_time",
+                priority: 1,
+              },
+            ],
+          },
+        ],
+      })),
+      claimManualPlan: vi.fn(),
+    };
+    await startChannel({ codingPlanSubscriptionService: subscription, marketingTouchService });
+    const client = await connectAndHandshake();
+    const sendQuery = (id: string, query: unknown) =>
+      client.send({ type: "query", id, query } as never);
+    const queryResult = (id: string) =>
+      client.waitFor((message) => message.type === "query_result" && message.id === id);
+    (taskService.getTaskModelSelection as ReturnType<typeof vi.fn>).mockResolvedValue({
+      providerId: "account:zai-individual-coding-plan",
+      modelId: "GLM-5.3-Flash",
+    });
+    sendQuery("qg1", { kind: "codingPlanGifts", taskId: "task-7" });
+    const gifts = await queryResult("qg1");
+    expect(gifts).toMatchObject({
+      result: {
+        reset: {
+          fiveHour: [{ expireAt: 1_793_700_000_000 }],
+          week: [],
+        },
+        claimable: {
+          plans: [
+            {
+              planId: "global-build",
+              entitlements: [{ grantUnits: 300_000_000, showName: "GLM-5.3-Flash" }],
+            },
+          ],
+        },
+        offers: [{ planId: "global-build", label: "Claim", campaignId: "camp-1" }],
+      },
+    });
+    // the reset plane resolves the SAME account access the quota path uses
+    expect(usageService.getCodingPlanResetStatus).toHaveBeenCalledWith({
+      preferredProviderId: "account:zai-individual-coding-plan",
+      accountAccess: { type: "zhipu-account", family: "zai", planKind: "individual-coding-plan" },
+    });
+    client.destroy();
+  });
+
+  it("codingPlanGifts degrades per plane: a dead reset does not kill the claimable offer", async () => {
+    const subscription = {
+      getManualClaimPlanPreviews: vi.fn(async () => ({ plans: [] })),
+      claimManualPlan: vi.fn(),
+    };
+    await startChannel({ codingPlanSubscriptionService: subscription });
+    const client = await connectAndHandshake();
+    const sendQuery = (id: string, query: unknown) =>
+      client.send({ type: "query", id, query } as never);
+    const queryResult = (id: string) =>
+      client.waitFor((message) => message.type === "query_result" && message.id === id);
+    // no coding-plan provider in the selection and no registry → not_configured
+    (taskService.getTaskModelSelection as ReturnType<typeof vi.fn>).mockResolvedValue({
+      providerId: "opencode-go-chat",
+      modelId: "deepseek-v4.1-flash",
+    });
+    sendQuery("qg2", { kind: "codingPlanGifts", taskId: "task-7" });
+    const gifts = await queryResult("qg2");
+    expect(gifts).toMatchObject({
+      result: { reset: null, claimable: { plans: [] }, unavailable: { reset: "not_configured" } },
+    });
+    client.destroy();
+  });
+
+  it("claimCodingPlan returns the service verdict and refuses an empty planId at the edge", async () => {
+    const subscription = {
+      getManualClaimPlanPreviews: vi.fn(),
+      claimManualPlan: vi.fn(async () => ({
+        success: false,
+        code: 1003,
+        message: "campaign ended",
+      })),
+    };
+    await startChannel({ codingPlanSubscriptionService: subscription });
+    const client = await connectAndHandshake();
+    const sendQuery = (id: string, query: unknown) =>
+      client.send({ type: "query", id, query } as never);
+    sendQuery("qc1", { kind: "claimCodingPlan", planId: "   " });
+    const bad = await client.waitFor((message) => message.type === "error" && message.id === "qc1");
+    expect(bad).toMatchObject({ type: "error", code: "bad_request" });
+    expect(subscription.claimManualPlan).not.toHaveBeenCalled();
+    sendQuery("qc2", { kind: "claimCodingPlan", planId: "global-build" });
+    const claim = await client.waitFor(
+      (message) => message.type === "query_result" && message.id === "qc2",
+    );
+    expect(claim).toMatchObject({ result: { success: false, code: 1003 } });
+    expect(subscription.claimManualPlan).toHaveBeenCalledWith({ planId: "global-build" });
+    client.destroy();
+  });
+
+  it("useCodingPlanReset validates the type and key at the edge before touching the account", async () => {
+    await startChannel();
+    const client = await connectAndHandshake();
+    const sendQuery = (id: string, query: unknown) =>
+      client.send({ type: "query", id, query } as never);
+    sendQuery("qr1", { kind: "useCodingPlanReset", resetType: "MONTH", idempotencyKey: "k1" });
+    expect(
+      await client.waitFor((message) => message.type === "error" && message.id === "qr1"),
+    ).toMatchObject({ code: "bad_request" });
+    sendQuery("qr2", { kind: "useCodingPlanReset", resetType: "WEEK", idempotencyKey: "" });
+    expect(
+      await client.waitFor((message) => message.type === "error" && message.id === "qr2"),
+    ).toMatchObject({ code: "bad_request" });
+    expect(usageService.useCodingPlanReset).not.toHaveBeenCalled();
     client.destroy();
   });
 });

@@ -45,6 +45,7 @@ import {
   type ZCodeAccountAccess,
   type ZCodeStreamEvent,
   type DaemonChannelClientMessage,
+  type DaemonChannelCodingPlanGiftsResult,
   type DaemonChannelContextWindowResult,
   type DaemonChannelError,
   type DaemonChannelQuery,
@@ -55,6 +56,8 @@ import type { IZCodeTaskService } from "../session/zcodeTaskService.js";
 import { createDaemonChannelModelSelectionHandler } from "./daemonChannelModelSelection.js";
 import type { DaemonChannelModelSelectionDeps } from "./daemonChannelModelSelection.js";
 import type { IUsageStatsService } from "../usage-stats/usageStats.js";
+import type { ICodingPlanSubscriptionService } from "../coding-plan-subscription/codingPlanSubscription.js";
+import type { IMarketingTouchService } from "../marketing-touch/marketingTouch.js";
 import type { ServiceLogger } from "../logger/serviceLogger.js";
 import { createServiceLogger } from "../logger/serviceLogger.js";
 import { getZCodeDataRootDir } from "../paths.js";
@@ -65,7 +68,17 @@ export const DAEMON_CHANNEL_DISABLE_ENV = "ZCODE_DAEMON_LOCAL_CHANNEL";
 export interface DaemonLocalChannelDeps {
   botsService: IBotsService;
   zcodeTaskService: IZCodeTaskService;
-  usageStatsService?: Pick<IUsageStatsService, "getEntitlementSnapshot">;
+  usageStatsService?: Pick<
+    IUsageStatsService,
+    "getEntitlementSnapshot" | "getCodingPlanResetStatus" | "useCodingPlanReset"
+  >;
+  /** [fork] El plano de ofertas reclamables (preview) — aditivo 3/11 (A5). */
+  codingPlanSubscriptionService?: Pick<
+    ICodingPlanSubscriptionService,
+    "getManualClaimPlanPreviews" | "claimManualPlan"
+  >;
+  /** [fork] Las ofertas del banner de marketing (claim_zcode_plan) — aditivo 3/11. */
+  marketingTouchService?: Pick<IMarketingTouchService, "query">;
   /** Vista del registry de planes/modelos y default global (para el /plan del bot). */
   modelSelectionService?: DaemonChannelModelSelectionDeps["modelSelectionService"];
   modelSelectionDefault?: DaemonChannelModelSelectionDeps["modelSelectionDefault"];
@@ -140,6 +153,44 @@ function tokensMatch(expected: string, received: string): boolean {
   return timingSafeEqual(sha256(expected), sha256(received));
 }
 
+/** [fork] A5 — el error del plano de resets → una razón ESTABLE (nunca el msg crudo). */
+function resetUnavailableReason(
+  error: unknown,
+): "not_authenticated" | "not_configured" | "request_failed" {
+  const message = error instanceof Error ? error.message : String(error);
+  if (message.includes("account_access_required") || message.includes("not_configured")) {
+    return "not_configured";
+  }
+  if (message.includes("jwt_required") || message.includes("not_authenticated")) {
+    return "not_authenticated";
+  }
+  const status =
+    typeof error === "object" && error !== null && "status" in error
+      ? (error as { status?: unknown }).status
+      : undefined;
+  if (status === 401 || status === 403) return "not_authenticated";
+  return "request_failed";
+}
+
+/** [fork] A5 — el error del preview de ofertas → una razón ESTABLE. */
+function claimUnavailableReason(error: unknown): "not_authenticated" | "request_failed" {
+  const message = error instanceof Error ? error.message : String(error);
+  if (
+    message.includes("not_authenticated") ||
+    message.includes("jwt") ||
+    message.includes("unauthorized") ||
+    message.includes("login")
+  ) {
+    return "not_authenticated";
+  }
+  const status =
+    typeof error === "object" && error !== null && "status" in error
+      ? (error as { status?: unknown }).status
+      : undefined;
+  if (status === 401 || status === 403) return "not_authenticated";
+  return "request_failed";
+}
+
 function toWireReply(message: BotOutboundMessage) {
   return {
     text: message.text,
@@ -166,6 +217,11 @@ const KNOWN_QUERY_KINDS = new Set([
   "contextWindow",
   // [fork] A4 — el /mode del bot (plan 🗺 / yolo 🔓).
   "setMode",
+  // [fork] A5 — los regalos del coding plan: leerlos, GASTAR un reset y
+  // RECLAMAR una oferta.
+  "codingPlanGifts",
+  "useCodingPlanReset",
+  "claimCodingPlan",
 ]);
 
 function buildDaemonBotConfig(existing?: BotConfig): BotConfig {
@@ -258,6 +314,11 @@ export function createDaemonLocalChannel(
     "queries:contextWindow",
     "control:setModelSelection",
     "control:setMode",
+    // A5 (aditivo 3/11): el 🎁 del /quota — leer el plano de regalos y
+    // gastar UN reset otorgado (irreversible, idempotency-keyed).
+    "queries:codingPlanGifts",
+    "control:useCodingPlanReset",
+    "control:claimCodingPlan",
     "control:stop",
     "control:stopAll",
     "control:compact",
@@ -390,6 +451,127 @@ export function createDaemonLocalChannel(
     };
   }
 
+  /**
+   * [fork] A5 — la cuenta del coding plan para los regalos. El reset exige
+   * `preferredProviderId` + accountAccess; la conversación del bot puede
+   * estar en OTRO proveedor (p. ej. OpenCode), así que se prueban en orden:
+   * la selección de la conversación, el default de la app y el registry.
+   * Solo planes de coding plan reales (Start Plan queda afuera: no tiene
+   * resets). Null → el host dice not_configured (honesto, nunca adivina).
+   */
+  async function codingPlanProviderIdFor(taskId?: string): Promise<string | null> {
+    const candidates: string[] = [];
+    if (taskId) {
+      const selection = await deps.zcodeTaskService
+        .getTaskModelSelection({ taskId })
+        .catch(() => null);
+      if (selection?.providerId) candidates.push(selection.providerId);
+    }
+    const configured = await deps.modelSelectionDefault?.read().catch(() => undefined);
+    if (configured?.providerId) candidates.push(configured.providerId);
+    const view = await deps.modelSelectionService?.getView().catch(() => undefined);
+    if (view) candidates.push(...view.providers.map((provider) => provider.providerId));
+    return (
+      candidates.find(
+        (providerId) =>
+          isCodingPlanModelProviderId(providerId) && !isStartPlanModelProviderId(providerId),
+      ) ?? null
+    );
+  }
+
+  /** [fork] A5 — el plano de regalos: dos lecturas independientes, una caída no mata la otra. */
+  async function readCodingPlanGifts(taskId?: string): Promise<DaemonChannelCodingPlanGiftsResult> {
+    const usage = deps.usageStatsService;
+    const subscription = deps.codingPlanSubscriptionService;
+    const providerId = await codingPlanProviderIdFor(taskId);
+    const hint = providerId ? accountAccessHintFor(providerId) : null;
+    const resetPromise =
+      usage?.getCodingPlanResetStatus && providerId && hint
+        ? usage.getCodingPlanResetStatus({ preferredProviderId: providerId, accountAccess: hint })
+        : Promise.reject(new Error("coding_plan_reset_account_access_required"));
+    const claimPromise = subscription
+      ? subscription.getManualClaimPlanPreviews()
+      : Promise.reject(new Error("coding_plan_claim_preview_unavailable"));
+    const offersPromise = readMarketingOffers();
+    const [reset, claim, offers] = await Promise.allSettled([
+      resetPromise,
+      claimPromise,
+      offersPromise,
+    ]);
+    const unavailable: NonNullable<DaemonChannelCodingPlanGiftsResult["unavailable"]> = {};
+    const result: DaemonChannelCodingPlanGiftsResult = { reset: null, claimable: null };
+    if (reset.status === "fulfilled") {
+      result.reset = {
+        fiveHour: reset.value.availableFiveHourResets.map((item) => ({ expireAt: item.expireAt })),
+        week: reset.value.availableWeekResets.map((item) => ({ expireAt: item.expireAt })),
+        latestFiveHourUsedAt: reset.value.latestFiveHourResetHistory?.usedAt ?? null,
+        latestWeekUsedAt: reset.value.latestWeekResetHistory?.usedAt ?? null,
+        hasUnreadHistory: reset.value.hasUnreadHistory,
+      };
+    } else {
+      unavailable.reset = resetUnavailableReason(reset.reason);
+    }
+    if (claim.status === "fulfilled") {
+      result.claimable = {
+        ...(claim.value.serverTime !== undefined ? { serverTime: claim.value.serverTime } : {}),
+        plans: claim.value.plans.map((plan) => ({
+          planId: plan.planId,
+          name: plan.name,
+          description: plan.description,
+          priority: plan.priority,
+          entitlements: plan.entitlements.map((entitlement) => ({
+            entitlementId: entitlement.entitlementId,
+            showName: entitlement.showName,
+            meter: entitlement.meter,
+            unitType: entitlement.unitType,
+            capabilities: [...entitlement.capabilities],
+            grantUnits: entitlement.grantUnits,
+            period: entitlement.period,
+            ...(entitlement.effectiveAt !== undefined
+              ? { effectiveAt: entitlement.effectiveAt }
+              : {}),
+          })),
+        })),
+      };
+    } else {
+      unavailable.claimable = claimUnavailableReason(claim.reason);
+    }
+    if (offers.status === "fulfilled" && offers.value.length > 0) {
+      result.offers = offers.value;
+    }
+    if (Object.keys(unavailable).length > 0) result.unavailable = unavailable;
+    return result;
+  }
+
+  /**
+   * [fork] A5 — las ofertas del banner de marketing con acción
+   * «claim_zcode_plan» (la MISMA superficie del botón «Claim» de la app).
+   * Solo se lee cuando el cliente ya pidió regalos (/quota): sin servicio o
+   * sin banner, silencio — nunca un error de cara al dueño.
+   */
+  async function readMarketingOffers(): Promise<
+    Array<{ planId: string; label: string; campaignId: string }>
+  > {
+    const service = deps.marketingTouchService;
+    if (!service) return [];
+    const snapshot = await service.query({ locale: "en-US" });
+    const offers: Array<{ planId: string; label: string; campaignId: string }> = [];
+    for (const delivery of snapshot.deliveries) {
+      const buttons =
+        delivery.resource_position === "banner" ? delivery.banner.buttons : delivery.popup.buttons;
+      for (const button of buttons) {
+        if (button.action.type !== "claim_zcode_plan") continue;
+        offers.push({
+          planId: button.action.args.plan_id,
+          label: button.text.content.trim(),
+          campaignId: delivery.campaign_id,
+        });
+        break;
+      }
+    }
+    return offers;
+  }
+
   async function runQuery(query: DaemonChannelQuery): Promise<unknown> {
     const taskService = deps.zcodeTaskService;
     switch (query.kind) {
@@ -465,6 +647,32 @@ export function createDaemonLocalChannel(
               }
             : {}),
         });
+      }
+      case "codingPlanGifts":
+        return readCodingPlanGifts(query.taskId);
+      case "useCodingPlanReset": {
+        const usage = deps.usageStatsService;
+        if (!usage?.useCodingPlanReset) throw new Error("usage stats service is unavailable");
+        const providerId = await codingPlanProviderIdFor(query.taskId);
+        const hint = providerId ? accountAccessHintFor(providerId) : null;
+        if (!providerId || !hint) {
+          throw new Error("coding_plan_reset_account_access_required");
+        }
+        return usage.useCodingPlanReset({
+          preferredProviderId: providerId,
+          accountAccess: hint,
+          resetType: query.resetType,
+          idempotencyKey: query.idempotencyKey.trim(),
+        });
+      }
+      case "claimCodingPlan": {
+        const subscription = deps.codingPlanSubscriptionService;
+        if (!subscription?.claimManualPlan) {
+          throw new Error("coding plan subscription service is unavailable");
+        }
+        // El servicio responde {success, code, message, plan?}: un 401 sin
+        // JWT o un 1001-1005 del server son el veredicto, no una excepción.
+        return subscription.claimManualPlan({ planId: query.planId.trim() });
       }
       case "botStatus": {
         const config = await deps.botsService.getConfig();
@@ -1024,6 +1232,48 @@ export function createDaemonLocalChannel(
             message: `unknown mode: ${JSON.stringify((message.query as { mode?: unknown }).mode)} — expected one of ${DAEMON_CHANNEL_MODES.join(", ")}`,
           });
           return;
+        }
+        // [fork] A5 — useCodingPlanReset valida EN EL BORDE: un resetType
+        // desconocido o una idempotency key inválida se rechazan ANTES de
+        // tocar la cuenta — gastar un reset es irreversible.
+        if (message.query.kind === "useCodingPlanReset") {
+          const candidate = message.query as { resetType?: unknown; idempotencyKey?: unknown };
+          const key =
+            typeof candidate.idempotencyKey === "string" ? candidate.idempotencyKey.trim() : "";
+          if (candidate.resetType !== "FIVE_HOUR" && candidate.resetType !== "WEEK") {
+            sendError(connection, socket, {
+              type: "error",
+              id: message.id,
+              code: "bad_request",
+              message: `unknown resetType: ${JSON.stringify(candidate.resetType)} — expected FIVE_HOUR or WEEK`,
+            });
+            return;
+          }
+          if (key.length === 0 || key.length > 64) {
+            sendError(connection, socket, {
+              type: "error",
+              id: message.id,
+              code: "bad_request",
+              message: "idempotencyKey must be 1..64 chars",
+            });
+            return;
+          }
+        }
+        // [fork] A5 — claimCodingPlan: un planId vacío no viaja al billing.
+        if (message.query.kind === "claimCodingPlan") {
+          const planId =
+            typeof (message.query as { planId?: unknown }).planId === "string"
+              ? (message.query as { planId: string }).planId.trim()
+              : "";
+          if (planId.length === 0 || planId.length > 128) {
+            sendError(connection, socket, {
+              type: "error",
+              id: message.id,
+              code: "bad_request",
+              message: "planId must be 1..128 chars",
+            });
+            return;
+          }
         }
         void runQuery(message.query)
           .then((result) => {

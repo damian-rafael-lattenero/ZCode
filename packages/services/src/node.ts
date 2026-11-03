@@ -3086,6 +3086,8 @@ export function createLocalServices(options: {
       botsService,
       zcodeTaskService,
       usageStatsService: services.getOptional(IUsageStatsService),
+      codingPlanSubscriptionService: services.getOptional(ICodingPlanSubscriptionService),
+      marketingTouchService: services.getOptional(IMarketingTouchService),
       modelSelectionService: services.getOptional(IModelSelectionService),
       modelSelectionDefault: modelSelectionConfiguredDefaultSource,
     });

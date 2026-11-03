@@ -206,6 +206,44 @@ export type DaemonChannelQuery =
       taskId: string;
       workspacePath?: string;
       workspaceIdentity?: string;
+    }
+  | {
+      /**
+       * codingPlanGifts (aditivo, 3/11 — el 🎁 del /quota del bot): LECTURA
+       * de las dos superficies de regalo que ya existen en los services —
+       * los resets de cuota ya otorgados (status) y las ofertas reclamables
+       * (preview). taskId es opcional pero recomendado: de su model selection
+       * sale el accountAccess que resuelve la cuenta real del coding plan;
+       * sin una cuenta de plan, el host prueba el plan de la app y el
+       * registry. NUNCA llama /opportunity (mutación con cupo server-side).
+       */
+      kind: "codingPlanGifts";
+      taskId?: string;
+    }
+  | {
+      /**
+       * useCodingPlanReset (aditivo, 3/11 — el 🎁 con confirmación del bot):
+       * gasta UN reset ya otorgado (POST /coding-plan/reset/use). Es
+       * IRREVERSIBLE y con idempotency key: el cliente manda la key y un
+       * retry del mismo key no consume dos veces. resetType fuera de
+       * FIVE_HOUR|WEEK y keys vacías o >64 se rechazan en el borde.
+       */
+      kind: "useCodingPlanReset";
+      taskId?: string;
+      resetType: "FIVE_HOUR" | "WEEK";
+      idempotencyKey: string;
+    }
+  | {
+      /**
+       * claimCodingPlan (aditivo, 3/11 — «Reclamar» desde el teléfono): el
+       * MISMO `claimManualPlan` del banner de marketing de la app
+       * (POST /zcode-plan/billing/claim). El servicio responde
+       * {success, code, message, plan?} — nunca inventa un éxito: un code
+       * 1001-1005 es el server diciendo «ya no»/«terminó». planId vacío se
+       * rechaza en el borde.
+       */
+      kind: "claimCodingPlan";
+      planId: string;
     };
 
 /**
@@ -240,6 +278,63 @@ export interface DaemonChannelContextWindowResult {
    * expone — el bot la marca con (~). Ausente = servers viejos.
    */
   windowSource?: "model" | "runtime" | "owner_default";
+}
+
+/**
+ * Resultado de `codingPlanGifts` (aditivo, 3/11): las dos superficies de
+ * regalo del coding plan, tal como la app las pinta —
+ *  - `reset`: el pill 🎁 (resets YA otorgados con su expiración, más el
+ *    historial de uso). null = el host no pudo leer el plano (ver
+ *    `unavailable.reset`);
+ *  - `claimable`: el banner «oferta reclamable» (preview con sus
+ *    entitlements). null = no se pudo leer.
+ * Una superficie caída NO mata a la otra. Sin secretos: solo los valores que
+ * la app muestra. `expireAt`/`serverTime` en ms; `effectiveAt` en segundos
+ * Unix (así lo manda el server).
+ */
+export interface DaemonChannelCodingPlanGiftsResult {
+  reset: {
+    fiveHour: Array<{ expireAt: number }>;
+    week: Array<{ expireAt: number }>;
+    latestFiveHourUsedAt: number | null;
+    latestWeekUsedAt: number | null;
+    hasUnreadHistory: boolean;
+  } | null;
+  claimable: {
+    serverTime?: number;
+    plans: Array<{
+      planId: string;
+      name: string;
+      description: string;
+      priority: number;
+      entitlements: Array<{
+        entitlementId: string;
+        showName: string;
+        meter: string;
+        unitType: string;
+        capabilities: string[];
+        grantUnits: number;
+        period: string;
+        effectiveAt?: number;
+      }>;
+    }>;
+  } | null;
+  /** Razón estable por plano caído — nunca el mensaje crudo del server. */
+  unavailable?: {
+    reset?: "not_authenticated" | "not_configured" | "request_failed";
+    claimable?: "not_authenticated" | "request_failed";
+  };
+  /**
+   * Las ofertas del banner de marketing con acción «claim_zcode_plan» (lo
+   * que el dueño VE en la app: «ZCODE GLOBAL BUILD · 300,000,000 tokens ·
+   * Claim»). El plan_id ES el del claim; el label es la copia del botón del
+   * server (texto tal cual). Ausente = el canal no la pudo leer.
+   */
+  offers?: Array<{
+    planId: string;
+    label: string;
+    campaignId: string;
+  }>;
 }
 
 export interface DaemonChannelQueryRequest {

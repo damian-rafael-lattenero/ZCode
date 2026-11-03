@@ -210,6 +210,7 @@ del mapa); y un `tool_input_delta` ya trae muestreo ~1 s del agente.
 | `stop {taskId, workspacePath?, runId?}` | `stopGeneration` — el MISMO V4 stop del botón de la UI (owner/lease/stale-run protection del lado servicio) | `/stop` |
 | `stopAll {workspacePath?}` | `listActiveTaskIds` × `stopGeneration` | primera mitad de `/nuclear` |
 | `compact {taskId, instructions?, expectedRevision?}` | `compactSession` | `/compact` |
+| `setMode {taskId, mode}` | `setMode` → v4 `switchCollaborationMode` (misma convergencia de revisión que el switch de la UI) | `/mode`: `mode` ∈ `build\|edit\|plan\|yolo\|guarded` (`DAEMON_CHANNEL_MODES`); un modo desconocido se rechaza `bad_request` — jamás un downgrade silencioso a build |
 
 **Subagentes dirigibles (A4, aditivo 2/11).** `inbound`/`steer` con
 `taskId = sess_subagent_<agentId>` y `stop` con ese mismo taskId dejan de

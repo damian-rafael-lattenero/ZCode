@@ -37,6 +37,7 @@ object per line, `hello` first, token in `~/.zcode/daemon-local.token`.
 | `quota` | `IUsageStatsService.getEntitlementSnapshot` | `taskId?` selects the conversation's provider (dynamic account access). |
 | `botStatus` | bot config + context | `/status` of the channel. |
 | `modelSelection`, `setModelSelection` | `botsService` model selection | `/plan`; `setModelSelection` writes the conversation/config default. |
+| `setMode` | `zcodeTaskService.setMode` → v4 `switchCollaborationMode` | `/mode`: switches the conversation's collaboration mode. `mode` ∈ `build, edit, plan, yolo, guarded` (the UI-switchable set, `DAEMON_CHANNEL_MODES`); an unknown mode is `bad_request`, never a silent downgrade. Result echoes `{taskId, mode}`. |
 | `contextWindow` | task snapshot `runtime.contextUsage` | Real meter, registry window precedence. |
 | `stop`, `stopAll` | `stopGeneration` | ⏹️. `taskId` may be a subagent id (see 2.1). |
 | `compact` | `compactSession` | `/compact`. |
@@ -46,6 +47,7 @@ object per line, `hello` first, token in `~/.zcode/daemon-local.token`.
 `inbound`, `bind`, `subagents`, `stream`, `queries:*`, `control:*`, `respond`.
 `bind` = `inbound.bindTaskId` (atomic binding + `/task` law). `subagents` =
 `inbound`/`steer`/`stop` accept `sess_subagent_<agentId>` targets (section 2).
+`control:setMode` = the `setMode` query (`/mode`).
 
 ## 2. Subagent child sessions (A4)
 

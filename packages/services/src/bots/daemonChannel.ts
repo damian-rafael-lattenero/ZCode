@@ -29,6 +29,7 @@ import {
   DAEMON_CHANNEL_HANDSHAKE_TIMEOUT_MS,
   DAEMON_CHANNEL_INBOUND_DEDUPE_TTL_MS,
   DAEMON_CHANNEL_MAX_LINE_BYTES,
+  DAEMON_CHANNEL_MODES,
   DAEMON_CHANNEL_PROTOCOL_VERSION,
   DAEMON_CHANNEL_PROVIDER,
   DAEMON_CHANNEL_PROVIDER_USER_ID,
@@ -163,6 +164,8 @@ const KNOWN_QUERY_KINDS = new Set([
   "stopAll",
   "compact",
   "contextWindow",
+  // [fork] A4 — el /mode del bot (plan 🗺 / yolo 🔓).
+  "setMode",
 ]);
 
 function buildDaemonBotConfig(existing?: BotConfig): BotConfig {
@@ -254,6 +257,7 @@ export function createDaemonLocalChannel(
     "queries:modelSelection",
     "queries:contextWindow",
     "control:setModelSelection",
+    "control:setMode",
     "control:stop",
     "control:stopAll",
     "control:compact",
@@ -525,6 +529,16 @@ export function createDaemonLocalChannel(
           workspaceIdentity = workspaceIdentity ?? fallback.workspaceIdentity;
         }
         return contextWindowResult(query.taskId, workspacePath, workspaceIdentity);
+      }
+      case "setMode": {
+        // [fork] A4 — el MODO de colaboración de la conversación (plan/yolo/…)
+        // por el MISMO camino del switch de la UI (el task service valida el
+        // modo contra su vocabulario y usa switchCollaborationMode con
+        // convergencia de revisión). El canal ya rechazó modos desconocidos como
+        // bad_request; una task no cargada explota con el error honesto del
+        // servicio (ZCODE_SESSION_TARGET_NOT_FOUND).
+        await taskService.setMode({ taskId: query.taskId, mode: query.mode });
+        return { taskId: query.taskId, mode: query.mode };
       }
       default: {
         // Exhaustividad: una query nueva del shared sin rama acá es un bug del host.
@@ -991,6 +1005,23 @@ export function createDaemonLocalChannel(
             id: message.id,
             code: "unknown_query",
             message: `unknown query kind: ${message.query.kind}`,
+          });
+          return;
+        }
+        // [fork] A4 — setMode valida el modo EN EL BORDE: el adapter mapea un
+        // modo desconocido a «build» (su fallback histórico), y un /mode con
+        // typo no debe degradar la conversación en silencio.
+        if (
+          message.query.kind === "setMode" &&
+          !(DAEMON_CHANNEL_MODES as readonly string[]).includes(
+            (message.query as { mode?: unknown }).mode as string,
+          )
+        ) {
+          sendError(connection, socket, {
+            type: "error",
+            id: message.id,
+            code: "bad_request",
+            message: `unknown mode: ${JSON.stringify((message.query as { mode?: unknown }).mode)} — expected one of ${DAEMON_CHANNEL_MODES.join(", ")}`,
           });
           return;
         }

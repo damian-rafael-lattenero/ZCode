@@ -8,6 +8,7 @@ import { defineConfig } from "vitest/config";
 const forkTestFiles = [
   "packages/desktop/test/desktopRuntimeEnv.test.ts",
   "packages/services/test/daemonChannel.test.ts",
+  "packages/services/test/modelSelectionPair.test.ts",
   "packages/services/test/forkModelRetrySpawnEnv.test.ts",
   "packages/services/test/highspeedCardService.test.ts",
   "packages/services/test/subagentLaunchAck.test.ts",

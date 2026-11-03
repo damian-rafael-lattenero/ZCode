@@ -220,6 +220,51 @@ function parseBotModelOptionValue(value: string): ModelSelection | undefined {
   return value.trim() ? { providerId: ZCODE_AGENT_PROVIDER, modelId: value.trim() } : undefined;
 }
 
+/**
+ * [fork] El PAR coherente de un set parcial (plan/modelo del canal daemon).
+ * El frame puede traer sólo uno de los dos campos; el merge con el sibling
+ * VIGENTE produce pares que no existen en el catálogo (medido 3/11: plan
+ * `opencode-go-chat` con el modelo `GLM-5.3-Flash` de z.ai → «not selectable»).
+ * El par se resuelve contra la MISMA vista que valida la selección:
+ *  - plan solo: conserva el modelo actual SI el plan destino lo expone; si
+ *    no, toma el primer modelo del plan (el orden del catálogo es del host);
+ *  - modelo solo: el plan que POSEE el modelo, el actual primero;
+ *  - ambos: tal cual, y sólo si el par existe.
+ * `undefined` = el par pedido no existe (el caller dice el rechazo honesto).
+ */
+export function resolveModelPair(
+  view: Pick<ModelSelectionView, "providers">,
+  requested: { plan?: string; model?: string },
+  current: { providerId?: string; modelId?: string } | undefined,
+): { providerId: string; modelId: string } | undefined {
+  const visible = view.providers.filter((provider) => provider.config?.visibility !== "hidden");
+  const providerOf = (id: string) => visible.find((provider) => provider.providerId === id);
+  const has = (providerId: string, modelId: string) =>
+    Boolean(providerOf(providerId)?.models.some((model) => model.modelId === modelId));
+
+  if (requested.plan !== undefined && requested.model !== undefined) {
+    return has(requested.plan, requested.model)
+      ? { providerId: requested.plan, modelId: requested.model }
+      : undefined;
+  }
+  if (requested.plan !== undefined) {
+    const target = providerOf(requested.plan);
+    const first = target?.models[0]?.modelId;
+    if (!target || first === undefined) return undefined;
+    const kept =
+      current?.modelId && has(requested.plan, current.modelId) ? current.modelId : undefined;
+    return { providerId: requested.plan, modelId: kept ?? first };
+  }
+  if (requested.model !== undefined) {
+    const order = [current?.providerId, ...visible.map((provider) => provider.providerId)].filter(
+      (id): id is string => typeof id === "string",
+    );
+    const owner = order.find((id) => has(id, requested.model!));
+    return owner ? { providerId: owner, modelId: requested.model } : undefined;
+  }
+  return undefined;
+}
+
 const BOT_REPLY_GRANULARITY_OPTIONS = [
   {
     id: "assistant_changes",
@@ -8674,22 +8719,25 @@ export function createBotsService(
           const current = await zcodeTaskService
             .getTaskModelSelection({ taskId })
             .catch(() => null);
-          const providerId =
-            params.plan ?? current?.providerId ?? selectionView.preferredSelection?.providerId;
-          const modelId = params.model ?? current?.modelId ?? selectionView.preferredSelection?.modelId;
-          if (!providerId || !modelId) {
-            throw new Error("plan and model are required: this context has no current selection");
-          }
-          const completed = completeNewModelSelection(selectionView, { providerId, modelId });
-          if (!completed) {
+          const pair = resolveModelPair(
+            selectionView,
+            { plan: params.plan, model: params.model },
+            current ?? selectionView.preferredSelection ?? undefined,
+          );
+          if (!pair) {
+            const askedProvider = params.plan ?? current?.providerId ?? "?";
+            const askedModel = params.model ?? current?.modelId ?? "?";
             throw new Error(
-              `model ${providerId}/${modelId} is not selectable from this context`,
+              `model ${askedProvider}/${askedModel} is not selectable from this context`,
             );
           }
+          const completed = completeNewModelSelection(selectionView, pair);
           await zcodeTaskService.setModel({
             taskId,
             traceId,
-            modelSelection: completed,
+            // Un modelo sin escalones declarados se selecciona por identidad:
+            // el completion no inventa un effort que el catálogo no publica.
+            modelSelection: completed ?? pair,
           });
         }
         if (wantsEffort) {
@@ -8717,22 +8765,19 @@ export function createBotsService(
       const draftOptions = await ensureDraftOptions(context);
       let modelSelection = draftOptions.modelSelection;
       if (wantsModel) {
-        const providerId =
-          params.plan ??
-          modelSelection?.providerId ??
-          selectionView.preferredSelection?.providerId;
-        const modelId =
-          params.model ?? modelSelection?.modelId ?? selectionView.preferredSelection?.modelId;
-        if (!providerId || !modelId) {
-          throw new Error("plan and model are required: this context has no current selection");
-        }
-        const completed = completeNewModelSelection(selectionView, { providerId, modelId });
-        if (!completed) {
+        const pair = resolveModelPair(
+          selectionView,
+          { plan: params.plan, model: params.model },
+          modelSelection ?? selectionView.preferredSelection ?? undefined,
+        );
+        if (!pair) {
+          const askedProvider = params.plan ?? modelSelection?.providerId ?? "?";
+          const askedModel = params.model ?? modelSelection?.modelId ?? "?";
           throw new Error(
-            `model ${providerId}/${modelId} is not selectable from this context`,
+            `model ${askedProvider}/${askedModel} is not selectable from this context`,
           );
         }
-        modelSelection = completed;
+        modelSelection = completeNewModelSelection(selectionView, pair) ?? pair;
       }
       if (wantsEffort) {
         if (!modelSelection) {

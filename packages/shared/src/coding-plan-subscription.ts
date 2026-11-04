@@ -166,10 +166,19 @@ export interface ManualClaimPlanClaimEntitlement {
   effectiveAt?: number;
 }
 
+/** 领取失败的机器可读原因；用户文案只能由 UI 在边界本地化，服务层不产出。 */
+export type ManualClaimPlanFailureReason = "verification-unavailable";
+
 export interface ManualClaimPlanClaimResult {
   success: boolean;
   code: number;
   message: string;
+  /**
+   * 窄类型失败原因：服务端返回 3007（要求验证）而本发行版
+   * `requestVerificationInteractionAvailable` 为 false 时出现，表示「不是活动
+   * 没了，是这个构建做不到验证」；UI 据此换诚实文案而不是通用失败。
+   */
+  reason?: ManualClaimPlanFailureReason;
   /** 失败响应中的活动结束时间，用于额度耗尽提示；不得当作已领取权益期限。 */
   failureEndsAt?: number;
   /** 领取接口返回的服务端时间（毫秒），不与其他响应的时间混用。 */

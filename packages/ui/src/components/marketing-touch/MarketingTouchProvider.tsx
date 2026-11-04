@@ -268,6 +268,8 @@ export function MarketingTouchProvider({
             return {
               status: "failure",
               terminal: [1001, 1002, 1003, 1004, 1005].includes(result.code),
+              // 服务端的窄原因原样上抛；文案由 MarketingDialogs 在边界本地化。
+              ...(result.reason ? { reason: result.reason } : {}),
               message: result.message?.trim()
                 ? result.message
                 : intl.formatMessage({ id: "manualClaimPlan.claim.failure.generic" }),

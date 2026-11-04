@@ -728,6 +728,8 @@ const enUS: Record<string, string> = {
   "manualClaimPlan.claim.failure.invalidRequest": "Invalid claim request. Refresh and try again.",
   "manualClaimPlan.claim.failure.loginRequired": "Sign in before claiming this plan.",
   "manualClaimPlan.claim.failure.generic": "Claim failed. Please try again later.",
+  "manualClaimPlan.claim.verificationUnavailable":
+    "This build cannot complete the verification step. Claim the reward in the official ZCode app, then it shows up in Quota.",
   "manualClaimPlan.claim.startUsingUnavailable":
     "Start Plan is not ready yet. Your model settings were not changed; refresh and try again later.",
   "manualClaimPlan.claim.dialog.confirm": "Start using",

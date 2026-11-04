@@ -1183,6 +1183,20 @@ export function createZCodeTaskServiceAdapter(
     getGlobalTaskEmitter(params.taskId).fire(event);
   }
 
+  // [fork] Espejo bot/desktop: emitir el evento (hasta hoy SIN productor)
+  // config_option_update tras cada escritura de configuración. Sin él ni el
+  // bot ni la barra de la desktop se enteran de un cambio que no hicieron
+  // ellas — medido 4/11: el setMode del canal aplicaba y nada avisaba, y el
+  // siguiente send del compositor re-estampaba el estado viejo.
+  function emitConfigOptionUpdate(params: TaskTarget, snapshot: ZCodeSessionStateSnapshot): void {
+    emitTaskEvent(params, {
+      type: "config_option_update",
+      taskId: params.taskId,
+      traceId: generateTraceId(params.taskId),
+      configOptions: settingsToConfigOptions(snapshot.settings),
+    });
+  }
+
   // 委托到 syncer，让 archive/rename/pin/delete 等 task 元数据变更和
   // desktop-continuous 路径（turn.completed 等）走同一条广播通道。
   // 设计修正：reason 必填，发射点必须声明变更类别。
@@ -2989,6 +3003,7 @@ export function createZCodeTaskServiceAdapter(
       await switchCollaborationModeViaProtocol(target, toZCodeMode(params.mode) ?? "build");
       const snapshot = await resumeSnapshot(target);
       await syncTaskIndexSnapshot(snapshot);
+      emitConfigOptionUpdate(target, snapshot);
     },
 
     async setConfigOption(params): Promise<ZCodeConfigOption[]> {
@@ -3031,6 +3046,7 @@ export function createZCodeTaskServiceAdapter(
       }
       const snapshot = await resumeSnapshot(target);
       await syncTaskIndexSnapshot(snapshot);
+      emitConfigOptionUpdate(target, snapshot);
       return settingsToConfigOptions(snapshot.settings);
     },
 
@@ -3049,6 +3065,7 @@ export function createZCodeTaskServiceAdapter(
       });
       const snapshot = await resumeSnapshot(target);
       await syncTaskIndexSnapshot(snapshot);
+      emitConfigOptionUpdate(target, snapshot);
       return settingsToConfigOptions(snapshot.settings);
     },
 
@@ -3089,6 +3106,7 @@ export function createZCodeTaskServiceAdapter(
       }
       const snapshot = await resumeSnapshot(target);
       await syncTaskIndexSnapshot(snapshot);
+      emitConfigOptionUpdate(target, snapshot);
       return settingsToConfigOptions(snapshot.settings);
     },
 

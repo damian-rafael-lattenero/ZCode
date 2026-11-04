@@ -667,6 +667,8 @@ const zhCN: Record<string, string> = {
   "manualClaimPlan.claim.failure.invalidRequest": "领取参数错误，请刷新后重试。",
   "manualClaimPlan.claim.failure.loginRequired": "请先登录后再领取。",
   "manualClaimPlan.claim.failure.generic": "领取失败，请稍后重试。",
+  "manualClaimPlan.claim.verificationUnavailable":
+    "此构建无法完成验证步骤。请在官方 ZCode 应用中领取奖励，领取后会在「额度」中显示。",
   "manualClaimPlan.claim.startUsingUnavailable":
     "Start Plan 当前还不可用，模型设置未改变，请稍后刷新重试。",
   "manualClaimPlan.claim.dialog.confirm": "开始体验",

@@ -238,8 +238,11 @@ export type DaemonChannelQuery =
        * claimCodingPlan (aditivo, 3/11 — «Reclamar» desde el teléfono): el
        * MISMO `claimManualPlan` del banner de marketing de la app
        * (POST /zcode-plan/billing/claim). El servicio responde
-       * {success, code, message, plan?} — nunca inventa un éxito: un code
-       * 1001-1005 es el server diciendo «ya no»/«terminó». planId vacío se
+       * {success, code, message, plan?, reason?} — nunca inventa un éxito: un
+       * code 1001-1005 es el server diciendo «ya no»/«terminó». `reason`
+       * (aditivo 4/11) es el narrow literal `verification-unavailable`: el
+       * server pidió captcha (3007) y este build no puede resolverlo; el bot
+       * lo trata como veredicto final, NO como un reintento. planId vacío se
        * rechaza en el borde.
        */
       kind: "claimCodingPlan";

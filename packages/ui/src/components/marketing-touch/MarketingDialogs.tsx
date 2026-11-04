@@ -16,6 +16,11 @@ export function MarketingDialogs({ controller }: { controller: MarketingTouchCon
   );
   const { locale, intl } = useZCodeIntl();
   const claimError = state.errorAction === "claim_zcode_plan" ? state.error : null;
+  // 服务端要验证而本构建没有验证能力：显示「这个构建做不到」，不把原始失败伪装成通用错误。
+  const claimMessage =
+    claimError && state.errorReason === "verification-unavailable"
+      ? intl.formatMessage({ id: "manualClaimPlan.claim.verificationUnavailable" })
+      : claimError;
   useEffect(() => {
     if (state.error && !claimError) {
       toast(state.error);
@@ -42,7 +47,7 @@ export function MarketingDialogs({ controller }: { controller: MarketingTouchCon
     <>
       {claimError ? (
         <MarketingFailureDialog
-          message={claimError}
+          message={claimMessage ?? claimError}
           title={intl.formatMessage({ id: "manualClaimPlan.claim.failure.title" })}
           acknowledge={intl.formatMessage({ id: "manualClaimPlan.claim.dialog.acknowledge" })}
           onClose={() => controller.clearError()}

@@ -2,6 +2,7 @@ import {
   ApiError,
   readValidatedRequestVerificationConfig,
   requestVerificationClaimHeaders,
+  requestVerificationInteractionAvailable,
   isRequestVerificationMessage,
   type RequestVerificationClientConfig,
 } from "@zcode/shared";
@@ -59,6 +60,7 @@ import type {
   StartPlanPreviewConfig,
   ManualClaimPlanClaimRequest,
   ManualClaimPlanClaimResult,
+  ManualClaimPlanFailureReason,
   ManualClaimPlanPreviewSnapshot,
   ZCodeModelContextBudgetStrategy,
   DynamicWorkflowClientConfig,
@@ -369,11 +371,19 @@ export class BigModelCodingPlanSubscriptionProvider {
     const serverTime = readServerTimeMilliseconds(payload.data?.server_time);
     if (code !== 0 || !payload.data?.plan) {
       const failureEndsAt = payload.data?.plan?.ends_at;
+      // 3007 = 服务端要求验证。绝不在这里提前拒绝领取（未来活动可能不需要验证），
+      // 只在「服务端已经要验证 + 本构建没有验证能力」时把真相标成窄原因；
+      // 文案由 UI 边界本地化，服务层不伪造验证凭证、也不拼用户文案。
+      const failureReason: ManualClaimPlanFailureReason | undefined =
+        code === 3007 && !requestVerificationInteractionAvailable
+          ? "verification-unavailable"
+          : undefined;
       return {
         success: false,
         code,
         // 服务端已完成翻译，顶层 msg 不是用户文案；空值由 UI 本地化兜底。
         message: typeof payload.data?.message === "string" ? payload.data.message : "",
+        ...(failureReason === undefined ? {} : { reason: failureReason }),
         ...(serverTime === undefined ? {} : { serverTime }),
         // 保留既有结果字段兼容其他调用方；营销提示不再据此推导文案。
         ...(Number.isFinite(failureEndsAt) ? { failureEndsAt } : {}),

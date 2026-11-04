@@ -1,6 +1,10 @@
 import { createStore } from "zustand/vanilla";
 import type { IMarketingTouchService } from "@zcode/services";
-import type { MarketingAction, MarketingDelivery } from "@zcode/shared";
+import type {
+  ManualClaimPlanFailureReason,
+  MarketingAction,
+  MarketingDelivery,
+} from "@zcode/shared";
 import type { CloudDialogHero } from "@/components/cloud-content-dialog/cloudContentDialogTypes.js";
 import type { PreparedMarketingHero } from "@/components/marketing-touch/marketingResources.js";
 import { logger } from "@/logger.js";
@@ -23,11 +27,15 @@ export interface MarketingTouchState {
   phase: "idle" | "verifying" | "submitting" | "preparing";
   error: string | null;
   errorAction: MarketingAction["type"] | null;
+  // 失败原因的窄标记（与 error/errorAction 同生命周期）；具体文案在 UI 边界决定。
+  errorReason: ManualClaimPlanFailureReason | null;
 }
 export type MarketingActionResult = {
   status: "success" | "cancelled" | "failure" | "uncertain";
   message?: string;
   terminal?: boolean;
+  /** 业务失败原因（如本构建无法完成验证）；只在失败结果上出现。 */
+  reason?: ManualClaimPlanFailureReason;
 };
 
 // 左下角活动槽位的唯一可见性判断：Banner 与 ConnectedBanner 的渲染守卫共用此谓词，
@@ -65,6 +73,7 @@ export function createMarketingTouchController(options: {
     phase: "idle",
     error: null,
     errorAction: null,
+    errorReason: null,
   }));
   let disposed = false;
   let generation = 0;
@@ -223,7 +232,13 @@ export function createMarketingTouchController(options: {
   }
   async function run(candidate: Candidate, action: MarketingAction) {
     if (disposed || store.getState().pending) return;
-    store.setState({ pending: true, phase: "verifying", error: null, errorAction: null });
+    store.setState({
+      pending: true,
+      phase: "verifying",
+      error: null,
+      errorAction: null,
+      errorReason: null,
+    });
     let completed = false;
     let succeeded = false;
     try {
@@ -239,7 +254,12 @@ export function createMarketingTouchController(options: {
           completed = true;
           invalidatePendingSnapshot();
         }
-        store.setState({ error: result.message ?? null, errorAction: action.type });
+        // 窄原因只用于 UI 选文案；随 error/errorAction 一起清理，不跨失败残留。
+        store.setState({
+          error: result.message ?? null,
+          errorAction: action.type,
+          errorReason: result.reason ?? null,
+        });
         return result;
       }
       completed = action.type !== "copy_text";
@@ -327,7 +347,7 @@ export function createMarketingTouchController(options: {
       if (dialog) return run(dialog, action);
     },
     clearError() {
-      store.setState({ error: null, errorAction: null });
+      store.setState({ error: null, errorAction: null, errorReason: null });
     },
     dispose() {
       disposed = true;

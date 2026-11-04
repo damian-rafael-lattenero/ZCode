@@ -224,7 +224,13 @@ export async function resumeFromStore(
     type: SESSION_ENTRY_EXECUTION_STATE,
   });
   const savedExecution = executionStateSchema.safeParse(executionEntries?.at(-1)?.data);
-  if (savedExecution.success && options?.modeOverride === undefined) {
+  // [fork] 4/11: modeOverride 是从「最后一条 assistant 消息」推导的（server-operations
+  // derivePersistedSessionMode），不是调用方的显式意图。若它压过落盘的
+  // runtime/execution_state，bot/手机设置的 plan 会在一次冷恢复后静默回到
+  // full access（实测）。落盘状态是自己会话每次 applyRuntimeExecutionState 都写的，
+  // 至少与消息一样新——所以有 entry 就以它为准；真正的调用方显式状态
+  // （executionStateOverride）仍在下一行最后生效。
+  if (savedExecution.success) {
     Object.assign(this.config, savedExecution.data);
   }
   // 修复原因：子会话恢复曾沿用落盘的执行状态，父会话从 yolo 改为 build 后，恢复的子会话仍免审批执行命令；

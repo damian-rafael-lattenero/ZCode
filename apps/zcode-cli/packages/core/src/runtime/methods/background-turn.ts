@@ -63,7 +63,6 @@ export function armForegroundTurnDetachment(
   this.runtimeTaskRegistry.register({
     agentId: taskId,
     agentType: "local_turn",
-    command: command.input,
     description: title,
     isBackgrounded: false,
     prompt: command.input,
@@ -73,7 +72,7 @@ export function armForegroundTurnDetachment(
     taskType: "local_turn",
     type: "local_turn",
     turnId,
-  } as RuntimeTaskSnapshot);
+  });
 
   let requested = false;
   let requestResolve!: (accepted: boolean) => void;
@@ -213,10 +212,15 @@ export function backgroundActiveForegroundExecution(
 /**
  * 未收口的 detached turn 是否存在。bootstrap 的 queue auto-drain gate 以此阻塞队首消费
  * （backgroundTurnHoldsQueueDrain）；runtime command drain 亦用它暂停出队。
+ * 只统计已 demote（isBackgrounded）的条目：武装中尚未移交的前台 turn 不占后台事实，
+ * 不能阻塞 drain（否则普通前台轮会永久卡住队列）。
  */
 export function hasUnsettledBackgroundTurn(this: AgentRuntimeInternal): boolean {
   return Object.values(this.runtimeTaskRegistry.all()).some(
-    (task) => task.type === "local_turn" && task.status === "running",
+    (task) =>
+      task.type === "local_turn" &&
+      task.isBackgrounded === true &&
+      task.status === "running",
   );
 }
 
@@ -318,6 +322,9 @@ async function settleDetachedTurn(
     }),
     traceContext,
   });
+  // settlement 释放 drain hold。wake 通知的 enqueue 通常已触发 drain；这里显式补一次，
+  // 覆盖通知被丢弃的路径（shutdown / stale branch），保证 FIFO 不因 hold 释放缺席而停摆。
+  void this.drainRuntimeCommandQueue();
 }
 
 function isDetachedTurnCancellation(handle: DetachedTurnHandle, error: unknown): boolean {

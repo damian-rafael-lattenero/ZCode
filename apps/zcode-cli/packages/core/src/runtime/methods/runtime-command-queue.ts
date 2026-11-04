@@ -12,9 +12,9 @@ import {
   armForegroundTurnDetachment,
   type ArmedForegroundTurnDetachment,
   beginDetachedTurnTracking,
+  hasUnsettledBackgroundTurn,
   releaseArmedForegroundTurnDetachment,
 } from "./background-turn.js";
-import { hasUnsettledBackgroundTurn } from "./background-turn.js";
 import {
   persistBackgroundTaskNotificationBatch,
   shouldSuppressTaskNotificationRuntimeCommand,
@@ -96,7 +96,14 @@ export async function drainRuntimeCommandQueue(this: AgentRuntimeInternal): Prom
     refreshOffPeakWork(this);
   }
 
-  if (this.runtimeCommandQueue.hasPending() && this.foregroundPromotionLease === undefined) {
+  // DT（backgroundTurnHoldsQueueDrain）：hold 活跃时 while 循环是「主动让位」而不是
+  // 排空，hasPending 为真属常态；此时尾递归会无限自我调用（栈爆）。恢复出队由
+  // settleDetachedTurn 在 settlement 后显式触发，这里只让位。
+  if (
+    !hasUnsettledBackgroundTurn.call(this) &&
+    this.runtimeCommandQueue.hasPending() &&
+    this.foregroundPromotionLease === undefined
+  ) {
     await this.drainRuntimeCommandQueue();
     return;
   }

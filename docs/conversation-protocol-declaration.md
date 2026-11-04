@@ -199,7 +199,12 @@ assert:
 
 | 不变量 | 说明 |
 | --- | --- |
-| sameSessionActiveTurnExclusive | 同一个 session 不能同时跑两条 active turn；并发只发生在不同 session 之间 |
+| sameSessionActiveTurnExclusive | 同一个 session 不能同时跑两条 active turn；并发只发生在不同 session 之间。2026-11-04 补充：用户 demote 的 `backgroundTurn` 仍占用该唯一 active turn 名额，admission/guide/queue 路由不变，demotion 不启用第二条并发 turn |
+| backgroundTurnDemotionPreservesExecution | 用户 demote primaryTurn 走 `backgroundTurn` 命令，携带 demote 时投影的 `expectedForegroundExecutionId`；runtime 只在身份匹配时把 turn 从 foreground 归属转移为 background task 归属（复用 runtime task registry），执行本身永不 abort，mismatch 为 noop |
+| backgroundTurnHoldsQueueDrain | 未收口的 `backgroundTurn` 阻塞 queue 自动消费与 `sendQueuedNow` promote barrier；收口（含 backgroundResult wake 结算、失败、取消）后按 FIFO 恢复 |
+| backgroundTurnCompletionIsBackgroundResult | `backgroundTurn` 正常完成必须以 `backgroundResult`（`backgroundSource=turn`）进入 continuation inbox 并 wake 独立 product turn；取消/失败不产生 wake |
+| backgroundTurnDiesOnRestart | CLI restart 丢失 detached turn：不自动恢复、不产生 ghost running 行；已流出的 transcript 内容保留 |
+| stopExcludesBackgroundTurn | stop 的目标集合永远不包含已 demote 的 `backgroundTurn`；`stopTargetKind` 不报告 detached work；其取消只能走 `cancelBackgroundWork` background task control |
 | runningStableAssistantForkAllowed | running 时可以 fork 更早 `completedSuccess` turn 最后一段 completed assistant；当前 streaming/interrupted/failed partial 和中间 assistant 段不能 fork |
 | latestQueryEditPreemptsActiveTurn | 只有最后一轮 real user query 可以 edit；running 时提交 edit 等价先 stop 当前 active work，再从最后一轮 query 重跑 |
 | latestAssistantRetryOnly | 底层 retry capability 仍先锁定当前投影里全时间线最后一条 `assistantText` row，再要求同一 product turn 存在 `origin=realUser` 的 canonical user input；background result/goal continuation/mailbox 等 synthetic 结果轮与更早真实用户轮均不得获得 capability。2026-07-15 产品裁决：桌面、Web 与手机 UI 统一隐藏普通 assistant retry 入口，但保留 `canRetry` 投影、`retryTurn` 命令及门禁，避免把 UI 收口误扩散为协议/恢复语义删除 |
@@ -253,7 +258,7 @@ assert:
 | stableHistoryTargetsPreferMessageId | fork、edit、rewind、file summary 等历史操作优先使用稳定 `messageId` 或 `turnId`，旧数据才 fallback 到 `turnIndex` |
 | timelinePlacementFromProjection | timeline 的位置必须来自 projection 的 `anchorTurnId` / `anchorMessageId` / `placement`，不能用最近 user/assistant 或数组下标推断 |
 | commandIdempotencyRequired | 所有会改变 conversation 的 command 必须有 `commandId`，支持 duplicate ACK，避免重试造成重复消息或重复停止 |
-| stopTargetsObservedForegroundExecution | Stop 必须携带用户点击时投影出的 `foregroundExecutionId`；同一 runtime command 内的 primary turn、goal verifier 与 goal continuation 共享身份。Runtime 只取消身份匹配的当前 execution；旧 execution 已终止并切到无关新 execution 时返回 noop，禁止误停新请求。命中 execution 后，本地 active work 的取消不能依赖 provider promise 是否遵守 abort；provider 的迟到结果只能被丢弃，不能延迟 UI/runtime 收口或复活旧 work |
+| stopTargetsObservedForegroundExecution | Stop 必须携带用户点击时投影出的 `foregroundExecutionId`；同一 runtime command 内的 primary turn、goal verifier 与 goal continuation 共享身份。Runtime 只取消身份匹配的当前 execution；旧 execution 已终止并切到无关新 execution 时返回 noop，禁止误停新请求。命中 execution 后，本地 active work 的取消不能依赖 provider promise 是否遵守 abort；provider 的迟到结果只能被丢弃，不能延迟 UI/runtime 收口或复活旧 work。该身份守卫同样约束 `backgroundTurn` demote 命令：demote 只转移匹配 execution 的归属，身份不匹配为 noop |
 | trustedDeliveryBoundary | desktop（含 SSH/WSL/Docker）固定 continuous，mobile/Web remote 固定 replayable；client 不能伪造 profile |
 | subscriptionOwnedByConnection | subscription 和 buffer 按 connection 隔离，frame 只发给 owning attachment；慢手机不能影响桌面 |
 

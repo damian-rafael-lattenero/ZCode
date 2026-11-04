@@ -300,7 +300,7 @@ session/
 
 | Completion-blocking Active Work | 含义 | 完成门槛 |
 | --- | --- | --- |
-| `primaryTurn` | 当前用户输入触发的主 assistant turn、模型流、工具调用或阻塞请求 | 收到正常完成、失败收口或 stop 中断收口 |
+| `primaryTurn` | 当前用户输入触发的主 assistant turn、模型流、工具调用或阻塞请求；2026-11-04 起可被用户主动 demote 为 `backgroundTurn`（见下表），demote 后不再参与 completion gate | 收到正常完成、失败收口、stop 中断收口，或被用户 demote 转入 background |
 | `foregroundSubagent` | 主 turn 派生且需要在当前 assistant 回合内汇总的子 agent、child request | foreground 子 agent 完成、失败或被 stop 终止 |
 | `compact` | manual compact 或 auto compact 的压缩请求和 pendingAction 前置维护 | compact 完成、noop、失败或被 stop 终止 |
 | `goalVerifier` | goal target 的达成验证请求 | verifier 返回 pass/notSatisfied、failed 或被 stop 终止 |
@@ -311,18 +311,20 @@ session/
 | --- | --- | --- |
 | `backgroundBash` | 主 turn 派生但声明为后台运行的 bash/process work | 不阻塞 `sessionEnded`；完成后产生 background result |
 | `backgroundSubagent` | 主 turn 派生但声明为后台运行的 subagent | 不阻塞 `sessionEnded`；完成后产生 background result |
+| `backgroundTurn` | 用户主动 demote 的原 primary turn；模型流/工具执行不中断（2026-11-04 owner 裁决，取代 BG-P03 剪枝） | 不阻塞 `sessionEnded`；完成后产生 background result（wake 独立 product turn）；取消/失败不产生 wake |
 | `backgroundResultContinuation` | background result 回到 main session 后触发的后续输入 | 进入 `continuation-inbox`；可启动新的 foreground run 或在 busy/held 状态下排队 |
 
 `BackgroundTaskStarted/Updated/Completed` 必须携带 runtime 已裁决的
-`taskKind: "bash" | "subagent"`；`toolName` 只保留工具来源和旧事件兼容用途，不再作为新
+`taskKind: "bash" | "subagent" | "turn"`（`"turn"` 仅来自 primaryTurn 的用户 demotion，
+demotion 复用同一事件族，不新增事件名）；`toolName` 只保留工具来源和旧事件兼容用途，不再作为新
 projection 的产品分类权威。兼容旧事件时必须通过同一个 legacy resolver 识别
 `Agent`、`Task`、`subagent` 等历史别名，禁止 reducer、service 和 UI 各自维护字符串判断。
 `backgroundWorks[].kind`、取消能力和 UI 图标均从这一 canonical fact materialize，保证
 desktop continuous 与 web replayable snapshot 的终态分类一致。
 
-`completed(success)` 和 `completed(interrupted)` 都要求 completion-blocking `activeWork=empty`。如果 `assistantComplete` 到达时还有 foreground subagent、compact、goal verifier、goal continuation 或未收口 turn-steer，session 仍然是 busy，不能进入 completed，也不能开放 completed-only 操作。background bash/subagent 不参与这个 completion gate；它们仍归属父 session，但只通过 `hasBackgroundWork`、background drawer 或 continuation inbox 暴露。
+`completed(success)` 和 `completed(interrupted)` 都要求 completion-blocking `activeWork=empty`。如果 `assistantComplete` 到达时还有 foreground subagent、compact、goal verifier、goal continuation 或未收口 turn-steer，session 仍然是 busy，不能进入 completed，也不能开放 completed-only 操作。background bash/subagent/backgroundTurn 不参与这个 completion gate；它们仍归属父 session，但只通过 `hasBackgroundWork`、background drawer 或 continuation inbox 暴露。
 
-background result 回到 main 后，provider 视角可以用 `role=user` 作为下一轮输入，但产品/协议层必须保留 `origin=backgroundResult`、`backgroundSource=bash|subagent`、`humanAuthored=false` 等价信息。它不是用户手写 query，不能自动继承 edit user query 或普通 retry 的入口语义；如果它已经 materialize 成 fork 点之前的可见 transcript，则按普通稳定历史参与 fork，否则 pending background result 不复制给 fork child。
+background result 回到 main 后，provider 视角可以用 `role=user` 作为下一轮输入，但产品/协议层必须保留 `origin=backgroundResult`、`backgroundSource=bash|subagent|turn`、`humanAuthored=false` 等价信息。它不是用户手写 query，不能自动继承 edit user query 或普通 retry 的入口语义；如果它已经 materialize 成 fork 点之前的可见 transcript，则按普通稳定历史参与 fork，否则 pending background result 不复制给 fork child。
 
 普通 retry 必须先锁定全时间线最新一条 `assistantText`，再检查同一个 product turn 是否有 `origin=realUser` 的 canonical user input。background result、goal continuation、mailbox 等 model-only/synthetic turn 即使成为最新 assistant，也不显示普通 retry；此时更早由真实用户触发的 assistant 也不能重新获得 retry。下一次真实用户输入完成新的 assistant turn 后，retry 才转移到这个新的最新 turn。
 
@@ -405,7 +407,7 @@ UI
 
 停止按钮不应该在 `assistant -> compact -> goalVerifier -> goalContinuation` 这类 active work 交接中闪烁。只要 `canStop=true` 或 `stopState=stopping`，UI 就保留同一个停止按钮；`stopTargetKind` 变化只能更新 tooltip/辅助说明，不能让按钮先消失再出现。
 
-`stop` 本身仍是 session 级用户动作。点击 stop 后，CLI/agent runtime 根据当前 completion-blocking active work 精确执行：assistant 输出中止 assistant/tool/foreground subagent，compact 中止 compact，goal verifier 中止 verifier，goal continuation 中止 continuation。仅有 background work pending 时，session 主停止按钮不应继续显示；background bash/subagent 的取消走 background task control，不改变 `sessionEnded`。若 goal target 处于 `active`，任意 foreground stop 都必须把 target 置为非 active 的暂停态，后续只有显式 resume 才能重新激活。
+`stop` 本身仍是 session 级用户动作。点击 stop 后，CLI/agent runtime 根据当前 completion-blocking active work 精确执行：assistant 输出中止 assistant/tool/foreground subagent，compact 中止 compact，goal verifier 中止 verifier，goal continuation 中止 continuation。仅有 background work pending 时，session 主停止按钮不应继续显示；background bash/subagent 的取消走 background task control，不改变 `sessionEnded`。stop 的目标集合永远不包含已 demote 的 `backgroundTurn`（`stopExcludesBackgroundTurn`）：detached turn 的取消只能走 background task control。若 goal target 处于 `active`，任意 foreground stop 都必须把 target 置为非 active 的暂停态，后续只有显式 resume 才能重新激活。
 
 ### Stop Priority
 
@@ -418,7 +420,7 @@ UI
 | `running + activeWork.kind=goalVerifier + stop` | 终止当前 verifier；本次 verifier 归为 `failed(cancelled)`，不能再触发 pass/notSatisfied 后续动作 |
 | `running + sendQueuedNow` | 等价于先执行最高优先级 `stop`，等 completion-blocking active work 清空后再消费被点 queue item；`activeWork.kind=compact + sendQueuedNow` 仍按操作锁 reject；`activeWork.kind=goalVerifier + sendQueuedNow` 允许走 stop barrier 后 drain |
 | `stop requested + late terminal event` | 迟到的 foreground subagent/compact/verifier/assistant 完成事件只能收口被 stop 的旧 work，不能把 session 重新置为 success，不能覆盖新一轮 active input |
-| `backgroundWork only + stop` | 主停止按钮不可用；若用户从 background drawer 取消，走 background task cancel，不等同于 session stop |
+| `backgroundWork only + stop` | 主停止按钮不可用；若用户从 background drawer/Task Island 取消，走 background task cancel，不等同于 session stop；`backgroundTurn` 同样不在 stop 目标集合内（`stopExcludesBackgroundTurn`） |
 
 `stop` 不是普通 queue item，不能排队等待。实现上可以存在短暂 `stopRequested` 标记或 UI “stopping” 展示，但它不是独立产品 phase；最终只有 completion-blocking active work 清空后的 `completed(interrupted)`、明确失败后的 `error`，或后续重新开始的新 active turn。
 
@@ -436,6 +438,8 @@ queue 表示未来用户意图，不属于已完成历史。所有来自桌面�
 例如：`running + sendText` 可入队为 deferred `sendText`；`running + sendGoalCommand` 可入队为 deferred `sendGoalCommand`；`running + sendCompactCommand/clickCompact` 必须 reject，不能因为 `/compact` 也是 slash command 就进入 queue。未来新增 command 时，也必须先在 rule table 中声明它在各状态下是 `allow`、`enqueue` 还是 `reject`，不能自动继承 `/goal` 的入队语义。
 
 edit、compact、fork 不应改写 queue 内容；fork 新 session 不复制父 queue。queue 真正消费时，才按消费时 session 的最新上下文、模型、思考深度执行。
+
+未收口的 `backgroundTurn` 阻塞 queue 自动消费（`backgroundTurnHoldsQueueDrain`）：auto-drain 武装状态保持不变，但队首不启动，直到 detached turn 收口（正常完成的 backgroundResult wake 结算、失败或取消）之后才按 FIFO 恢复消费。同一规则约束 `sendQueuedNow` 的 promote barrier。这与 `incompleteGoalBlocksQueueDrain` 的 guard 形状一致：demote 不改变 queue 内容与顺序，只延迟消费点。
 
 `editQueueItem` 原地修改权威 item，保留 ID、位置、attachments、client 和来源 command。`sendQueuedNow` 采用 `reserve -> stop barrier -> start/promote -> remove`：只有启动成功才移除；timeout 或失败释放 reservation，原 item 原位保留；连续点击或跨端竞争只能有一个 reservation owner。
 
@@ -680,7 +684,7 @@ fork 目标只定义在 assistant message/turn 上。edit 目标只定义在 use
 | `foregroundSubagentStarted` | runtime/tool | `running`，primary turn 派生 foreground 子 agent |
 | `foregroundSubagentComplete` | runtime/tool | `running`，对应 foreground subagent active work 收口 |
 | `foregroundSubagentFailed` | runtime/tool | `running`，对应 foreground subagent active work 失败或被 stop 终止 |
-| `backgroundWorkStarted` | runtime/tool | background bash/subagent 启动；不阻塞 `sessionEnded` |
+| `backgroundWorkStarted` | runtime/tool | background bash/subagent 启动，或 primaryTurn 被用户 demote（`taskKind=turn`）；不阻塞 `sessionEnded` |
 | `backgroundWorkComplete` | runtime/tool | background bash/subagent 完成；产生 background result 或 no-op |
 | `backgroundWorkFailed` | runtime/tool | background bash/subagent 失败或被 background cancel |
 | `backgroundResultQueued` | runtime/tool | background result 已进入 continuation inbox 或 deferred queue |
@@ -708,10 +712,14 @@ fork 目标只定义在 assistant message/turn 上。edit 目标只定义在 use
 
 | Invariant ID | 说明 | 当前状态 |
 | --- | --- | --- |
-| `sameSessionActiveTurnExclusive` | 同一个 session 不能同时跑两条 active turn；同 session 后续输入必须通过 queue、turn-steer 或明确 stop/drain 规则处理 | accepted |
+| `sameSessionActiveTurnExclusive` | 同一个 session 不能同时跑两条 active turn；同 session 后续输入必须通过 queue、turn-steer 或明确 stop/drain 规则处理。2026-11-04 补充：demote 后的 `backgroundTurn` 仍占用该唯一 active turn 名额（admission/guide/queue 路由不变），demotion 不启用第二条并发 turn | accepted |
+| `backgroundTurnDemotionPreservesExecution` | demotion 永不 abort 当前 turn；`backgroundTurn` 命令必须携带 demote 时投影的 `expectedForegroundExecutionId`，runtime 只在身份匹配时转移归属，mismatch 为 noop，禁止误伤新 execution | accepted |
+| `backgroundTurnHoldsQueueDrain` | queue 自动消费（含 `sendQueuedNow` 的 promote barrier）被未收口的 `backgroundTurn` 阻塞；收口（含 backgroundResult wake 结算）后按 FIFO 恢复 | accepted |
+| `backgroundTurnCompletionIsBackgroundResult` | `backgroundTurn` 正常完成必须以 `backgroundResult` 进入 continuation inbox 并 wake 独立 product turn；取消/失败不产生 wake | accepted |
+| `backgroundTurnDiesOnRestart` | CLI restart 丢失 detached turn：不自动恢复、不产生 ghost running 行；已流出的 transcript 内容保留 | accepted |
 | `sessionCompletionRequiresNoForegroundWork` | `completed(success/interrupted)` 必须要求 primary turn、foreground subagent、compact、goal verifier、goal continuation、turn-steer 全部收口；background work 不参与 completion gate | accepted |
 | `foregroundSubagentKeepsSessionBusy` | assistant stream 或主 turn 局部完成后，只要仍有归属当前 session 的 foreground subagent 在运行，session 就不能进入 completed | accepted |
-| `backgroundWorkDoesNotBlockSessionEnd` | background bash/subagent 运行时，session 仍可在 foreground work 清空后进入 completed，并开放 completed-only 操作 | accepted |
+| `backgroundWorkDoesNotBlockSessionEnd` | background bash/subagent/`backgroundTurn` 运行时，session 仍可在 foreground work 清空后进入 completed，并开放 completed-only 操作 | accepted |
 | `sessionEndedDrivesImmediateStart` | 只有 `sessionEnded=true` 的 completed 上下文才能让 composer 普通输入立即成为下一轮 active turn；`sessionEnded=false` 时必须命中 queue、guide、reject 或 stop/drain guard | accepted |
 | `runtimeFactsAreAuthoritative` | `sessionEnded`、`canStop`、`stopState`、`stopTargetKind` 必须来自 CLI/runtime facts 或 host/service 的规范化投影；UI 不能只靠本地 message stream、timeline 或 `streaming` 状态猜测 | accepted |
 | `persistentConversationFactsAreAuthoritative` | message、part、session metadata 与 goal 是持久权威；live/cold 必须先归一为同一 canonical facts，再生成 projection | accepted |
@@ -738,7 +746,7 @@ fork 目标只定义在 assistant message/turn 上。edit 目标只定义在 use
 | `latestAssistantRetryOnly` | 底层 capability 先锁定当前投影里全时间线最后一条 `assistantText` row，再要求同一 product turn 存在 `origin=realUser` 的 canonical user input；background result/goal continuation/mailbox 等 synthetic turn 和更早真实用户轮均不得获得 capability。产品 UI 在桌面、Web、手机端统一隐藏普通 assistant retry 入口，`canRetry` / `retryTurn` 仅为协议兼容继续保留 | accepted |
 | `retryPreservesFullIntent` | retry 从 canonical cause 恢复 input kind、text、attachments、goal intent、delivery/fallback 与来源 cause，禁止仅从可见文本重建 | accepted |
 | `goalInputUsesUnifiedEditTarget` | `goalSet` lifecycle 不产 marker；用户 goal input 产 canonical visible real-user row，并与 text query 共用 `editUserQuery` target；重发仍是 `sendGoalCommand` | accepted |
-| `stopHighestPriorityCancelsForegroundWork` | stop 是最高优先级；必须终止当前 session 的 primary turn、foreground subagent、compact、goal verifier、goal continuation 和未确认 turn-steer | accepted |
+| `stopHighestPriorityCancelsForegroundWork` | stop 是最高优先级；必须终止当前 session 的 primary turn、foreground subagent、compact、goal verifier、goal continuation 和未确认 turn-steer；已 demote 的 `backgroundTurn` 不属于 stop 目标集合（取消走 background task control） | accepted |
 | `stopEndsAsInterruptedCompleted` | stop 终止所有 completion-blocking active work 后进入 `completed(interrupted)`，没有 paused 产品态 | accepted |
 | `stopKeepsQueueAndDisablesAutoDrain` | stop 后 queue 保留，`autoDrain=false` | accepted |
 | `lateTerminalEventsAfterStopDoNotRevive` | stop 之后迟到的 assistant/foreground subagent/compact/verifier 终态不能把旧 work 改回 success，也不能覆盖新一轮 active input | accepted |
@@ -748,7 +756,7 @@ fork 目标只定义在 assistant message/turn 上。edit 目标只定义在 use
 | `forkDoesNotCopyQueue` | fork 新 session 不复制父 queue；父 queue 保留 | accepted |
 | `forkStableHistoryOnly` | child 只继承 `completedSuccess` turn 最后一段 completed assistant 及之前的稳定历史；父 session 正在 running 不自动禁止 fork，但当前 partial、中间 assistant 和 compact operation lock 不能作为稳定 fork 边界 | accepted |
 | `runningForkDoesNotRewindWorkspace` | running fork 是 conversation-only；不恢复共享 workspace checkpoint，父 session 继续 running；completed/idle 既有 workspace 行为不扩大 | accepted |
-| `forkDoesNotCopyBackgroundWork` | fork 不复制父 session 的 live background bash/subagent、pending background result 或 continuation inbox；只复制已进入 fork 点前 transcript 的 background result | accepted |
+| `forkDoesNotCopyBackgroundWork` | fork 不复制父 session 的 live background bash/subagent/`backgroundTurn`、pending background result 或 continuation inbox；只复制已进入 fork 点前 transcript 的 background result | accepted |
 | `forkInheritsSessionFutureState` | child 继承 fork 点持久化的 provider/model/思考深度和 fork 点之前的 goal 状态，但不继承父 session 后续 config 或 queue | accepted |
 | `forkTimelineIsBoundary` | fork notice 是 turn boundary，不进入 assistant 工作历史折叠 | accepted |
 | `editUserOnly` | 只能 edit latest real-user input（text query 或用户 goal input）；assistant/tool/timeline 不提供 edit | accepted |

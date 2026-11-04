@@ -5584,3 +5584,38 @@ ensureReady/restart/resume 必须被拒，同工作区共享一次启动；两�
 HF / SLR 激活隔离补充：已有远程实例就绪后，仅替换或删除 workspaceIdentity、保持其他字段不变，
 ensureReady/restart 必须拒绝，原实例不关闭且 generation 不变；正确身份继续可用。由 CLI 协议
 回归直接构造矛盾参数覆盖，正常桌面/手机入口继续沿用 HF/SLR E2E，不增加 UI 行为。
+
+## DT. 转入后台（Foreground→Background Turn，2026-11-04 accepted）
+
+owner 2026-11-04 裁决：运行中的 primary turn 可由用户主动转入 background（demote），解除
+completion gate，让用户立即继续其他工作；turn 本身不得中断。该裁决取代 background matrix
+BG-P03 的剪枝（Ctrl+B 类前台转后台控制从 "unsupported product surface" 变为 accepted 产品能力）。
+
+核心语义：
+
+- demotion 走 `backgroundTurn` 命令（携带 `expectedForegroundExecutionId`，复用 stop 的身份守卫；
+  mismatch 为 noop，不误伤新 execution）。demote 永不 abort 模型流/工具执行。
+- demote 后 session 的 foreground-work 清空，进入 `completed(success)`；turn 以 `backgroundTurn`
+  background work 继续运行，Task Island 显示独立行（elapsed + cancel）。
+- 完成后产生 `backgroundResult` wake：独立 product turn（复用
+  `backgroundWakeStartsIndependentProductTurn`），session 再次 busy → completed。
+- backgroundTurn 期间同一 session 的输入路由不变（guide/queue 按 followup mode 正常裁决）；
+  queue 自动消费被 backgroundTurn 阻塞，其收口（含 wake 结算）后按 FIFO 恢复。
+- pending interaction（permission/AskUserQuestion）不阻止 demote：以 pendingInteractions
+  sidecar badge 呈现在任务行；从任何 surface 可 resolve；resolve 后 turn 继续。
+- stop 永不作用于 backgroundTurn；取消走 background task control（`cancelBackgroundWork`）。
+- 生命周期限制（诚实降级）：CLI restart 丢失 detached turn（与 background subagent 同级），
+  不自动恢复、不产生 ghost running 行；transcript 保留已流出的内容。
+
+| ID   | 前置状态                                                           | 用户/系统事件                  | 规则命中                                                       | 期望结果                                                                                                                                                                      | Review   |
+| ---- | ------------------------------------------------------------------ | ------------------------------ | -------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------- |
+| DT01 | `running`，primaryTurn 执行中（模型流或工具），queue=0             | 用户点「转入后台」             | backgroundTurnDemotion                                         | turn 不中断继续执行；session foreground-work 清空进入 `completed(success)`；composer 立即可输入；Task Island 出现 detached 行；sidebar 行以 hasBackgroundWork 保持 active 排序 | accepted |
+| DT02 | `running`，queue>0，autoDrain=true                                 | 用户点「转入后台」             | backgroundTurnDemotion + backgroundTurnHoldsQueueDrain         | queue 原样保留且不消费（detached turn 阻塞 drain）；backgroundTurn 收口（含 wake 结算）后按 FIFO 恢复自动消费                                                                 | accepted |
+| DT03 | `running`，followupMode=guide 且 guide eligible                    | demote 后用户发普通文本        | backgroundTurnSteerUnchanged                                   | 文本照常 guide 进 detached turn（turn-steer），不创建新 foreground run、不降级 queue；ineligible 时按原 guard 回退 queue                                                       | accepted |
+| DT04 | DT01 后                                                            | 用户切到另一 task 并运行       | crossSessionUnlimitedConcurrency                               | 另一 session 正常并发；detached turn 继续运行；sidebar 双行各自展示 active 状态                                                                                               | accepted |
+| DT05 | `running` 且存在 pending interaction（permission/AskUserQuestion） | 用户点「转入后台」             | backgroundTurnDemotion + backgroundTurnPendingInteractionBadge | demote 不被阻止；任务行显示 pending interaction badge（pendingInteractions sidecar）；从任意 surface resolve 后 turn 继续执行                                                | accepted |
+| DT06 | backgroundTurn 执行中                                              | turn 正常完成                  | backgroundTurnCompletionIsBackgroundResult                     | 结果进入 continuation inbox 并以 backgroundResult wake 独立 product turn（无可见 user trigger row）；OS 通知 + unread badge；session busy → completed                         | accepted |
+| DT07 | backgroundTurn 执行中                                              | Task Island 上 cancel          | backgroundTurnCancelViaBackgroundControl                       | turn 经 `cancelBackgroundWork` 取消收口为失败/取消态；无 wake、无 background result；session 保持 completed；retry 资格不变（latestAssistantRetryOnly）                       | accepted |
+| DT08 | session 仅有 detached turn（无其他 foreground work）               | 用户查看/误点主停止按钮        | stopExcludesBackgroundTurn                                     | 主停止按钮不可用（backgroundWork only）；stopTargetKind 不报告 detached turn；stop 请求为 noop，不影响 detached turn                                                           | accepted |
+| DT09 | backgroundTurn 执行中                                              | CLI restart                    | backgroundTurnDiesOnRestart                                    | detached turn 丢失，不自动恢复；session 冷恢复为 completed；transcript 保留已流出内容；无 ghost running 行                                                                     | accepted |
+| DT10 | backgroundTurn 执行中，turn 未完成                                 | 用户 fork 已完成稳定 assistant | forkDoesNotCopyBackgroundWork                                  | child 不复制 detached turn 与 pending result；父 session 的 turn 继续运行                                                                                                     | accepted |

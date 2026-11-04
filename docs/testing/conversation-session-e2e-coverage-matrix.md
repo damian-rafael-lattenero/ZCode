@@ -2164,6 +2164,23 @@ BG13/BG18 增量埋点断言：保留内部工具逐条上报及零 token 断言
 
 2026-10-21 证据补记：BG36 MCS/non-MCS 均通过 `desktop-e2e-20261021-103711-467`。non-MCS 首发此前被草稿换代挡住，现由测试侧按产品提示重发；同一消息含多条 notification 时，每条按自己的标题和标签校验。
 
+## DT（Foreground→Background Turn）覆盖状态
+
+这些 case 对应 [conversation-session-case-catalog.md](../conversation-session-case-catalog.md) 的 `DT` 分组（2026-11-04 owner 裁决，取代 background matrix 的 BG-P03 剪枝）。当前全部为 accepted-but-missing：产品语义已锁定，自动化断言随实现落地补齐。
+
+| Catalog ID | 覆盖状态 | 自动化 | 备注                                                                                  |
+| ---------- | -------- | ------ | ------------------------------------------------------------------------------------- |
+| DT01       | missing  |        | demote 主链路：turn 不中断、session completed、Task Island detached 行、composer 可输入 |
+| DT02       | missing  |        | demote + queue>0：drain 被 detached turn 阻塞，收口后 FIFO 恢复                        |
+| DT03       | missing  |        | demote + guide eligible：文本照常 steer 进 detached turn                               |
+| DT04       | missing  |        | demote 后跨 session 并发不受影响                                                       |
+| DT05       | missing  |        | pending interaction 下 demote：badge 呈现、resolve 后继续                              |
+| DT06       | missing  |        | detached 完成的 backgroundResult wake：独立 product turn + OS 通知 + badge             |
+| DT07       | missing  |        | Task Island cancel：无 wake、session 保持 completed                                    |
+| DT08       | missing  |        | stop 排除 detached turn：按钮不可用、stop noop                                         |
+| DT09       | missing  |        | CLI restart 丢失 detached turn：无 ghost 行、transcript 保留                           |
+| DT10       | missing  |        | fork 不复制 detached turn 与 pending result                                            |
+
 ## ChatLoading Lifecycle 覆盖口径
 
 这些 case 对应 [conversation-session-case-catalog.md](../conversation-session-case-catalog.md) 的 `CHL` 分组。立即显示和 blocker 使用 focused UI test；normal-flow live tail 与滚动权先由组件测试覆盖，并用确定性真实 Markdown 逐行 desktop fixture 做布局验证。手机端复用 shared UI，但 replayable 重连不由 desktop 测试代替。

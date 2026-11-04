@@ -1360,13 +1360,15 @@ function backgroundResultOriginMetaOfMessage(
   const backgroundSource = record.backgroundSource;
   const workId = typeof record.workId === "string" ? record.workId.trim() : "";
   const title = typeof record.title === "string" ? record.title.trim() : "";
-  // 三个取值与 BackgroundResultOriginMeta 保持同步（contracts/src/events/session.events.ts）。
+  // 四个取值与 BackgroundResultOriginMeta 保持同步（contracts/src/events/session.events.ts）。
   // "workflow" 是 workflow run（workId ≡ runId）：漏掉它，workflow 的后台结果轮在冷恢复后会
   // 静默退化成一条无标题 model-only 消息，工具卡→详情页的关联键随之丢失。
+  // "turn" 是用户 demote 的原 primaryTurn 完成（DT 分组，2026-11-04）：漏掉它，同一退化。
   if (
     (backgroundSource !== "bash" &&
       backgroundSource !== "subagent" &&
-      backgroundSource !== "workflow") ||
+      backgroundSource !== "workflow" &&
+      backgroundSource !== "turn") ||
     !workId ||
     !title
   ) {

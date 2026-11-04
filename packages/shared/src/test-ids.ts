@@ -628,6 +628,8 @@ export const TID_V4_ATTACHMENT_UPLOAD_PROGRESS = "v4-attachment-upload-progress"
 export const TID_V4_ATTACHMENT_UPLOAD_RETRY = "v4-attachment-upload-retry";
 /** v4 stop 按钮 */
 export const TID_V4_STOP = "v4-stop";
+/** v4 composer 转入后台按钮（把运行中的 primaryTurn demote 为 backgroundTurn，DT 分组） */
+export const TID_V4_COMPOSER_BACKGROUND_TURN = "v4-composer-background-turn";
 /** v4 assistant 行 fork 按钮（动态后缀为 rowId） */
 export const TID_V4_FORK = "v4-fork";
 /** v4 assistant 行 retry 按钮（动态后缀为 rowId） */

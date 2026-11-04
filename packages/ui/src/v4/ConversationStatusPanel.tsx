@@ -26,6 +26,7 @@ import {
   GoalIcon,
   ListChecksIcon,
   Maximize2Icon,
+  MessageSquareTextIcon,
   Minimize2Icon,
   PauseIcon,
   PlayIcon,
@@ -246,7 +247,8 @@ type StatusSectionKind =
   | "plan"
   | "terminal"
   | "workflow"
-  | "agent";
+  | "agent"
+  | "turn";
 
 const STATUS_SECTION_SCROLL_POLICY = {
   environment: null,
@@ -258,6 +260,7 @@ const STATUS_SECTION_SCROLL_POLICY = {
   // workflow 行定高 56px，列表滚到三行半（196px）：露出的半行告诉人下面还有。
   workflow: "max-h-[12.25rem]",
   agent: "max-h-48",
+  turn: "max-h-48",
 } as const satisfies Record<StatusSectionKind, string | null>;
 
 function StatusSectionHeader({
@@ -1162,6 +1165,135 @@ function BackgroundWorkStatusSection({
   );
 }
 
+/** DT 分组：demote 后的 backgroundTurn 行 —— 与 RunningStatusItem 同形状，但没有终端输出浮层（无 onOpenBackgroundBash），图标用对话语义。 */
+function RunningTurnItem({
+  now,
+  onCancelBackgroundWork,
+  work,
+}: {
+  now: number;
+  onCancelBackgroundWork?: (workId: string) => void;
+  work: BackgroundWorkSummary;
+}) {
+  const { intl } = useZCodeIntl();
+
+  return (
+    <li
+      data-testid={testId(TID_V4_BACKGROUND_WORK_ITEM, work.workId)}
+      data-background-task-kind={work.kind}
+      data-work-id={work.workId}
+      data-work-status={work.status}
+      className="group relative flex min-w-0 items-start gap-2 rounded-lg px-2 py-2 hover:bg-[var(--color-hover)]"
+    >
+      <MessageSquareTextIcon className="pointer-events-none relative z-[1] mt-0.5 size-4 shrink-0 text-[var(--color-foreground-subtle)]" />
+      <div className="pointer-events-none relative z-[1] flex min-w-0 flex-1 flex-col gap-1.5">
+        <p className="line-clamp-2 text-ui-base leading-5 text-[var(--color-foreground)]">
+          {work.title}
+        </p>
+        <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 text-ui-base">
+          <span className="shrink-0 tabular-nums text-[var(--color-foreground-subtle)]">
+            {formatBackgroundTaskElapsedLabel(
+              getBackgroundWorkElapsedMs(work, now),
+              intl.formatMessage,
+            )}
+          </span>
+          {work.cancellable !== false ? (
+            <RunningWorkCancelButton workId={work.workId} onCancel={onCancelBackgroundWork} />
+          ) : null}
+        </div>
+      </div>
+    </li>
+  );
+}
+
+/**
+ * DT 分组（DT01/DT07）：demote 后的 detached turn 在 Task Island 的独立分区。
+ * 取消走 cancelBackgroundWork{workId}（与 bash/subagent/workflow 同一条后台控制路径）；
+ * stop 永不作用于 detached turn，因此这里没有也不需要任何 stop 语义。
+ */
+function TurnStatusSection({
+  onCancelBackgroundWork,
+  onOpenChange,
+  open,
+  separated,
+  title,
+  works,
+}: {
+  onCancelBackgroundWork?: (workId: string) => void;
+  onOpenChange?: (open: boolean) => void;
+  open?: boolean;
+  separated: boolean;
+  title: string;
+  works: readonly BackgroundWorkSummary[];
+}) {
+  const { intl } = useZCodeIntl();
+  const [now, setNow] = useState(() => Date.now());
+  const orderedRunningTurns = useMemo(
+    () => [...works].sort((left, right) => left.startedAt - right.startedAt),
+    [works],
+  );
+
+  useEffect(() => {
+    if (works.length === 0) {
+      return;
+    }
+    const timer = setInterval(() => {
+      setNow(Date.now());
+    }, 1000);
+    return () => clearInterval(timer);
+  }, [works.length]);
+
+  if (works.length === 0) return null;
+
+  const collapsedElapsedLabel = formatDurationUnits(
+    Math.max(1, Math.floor(getLongestRunningWorkElapsedMs(works, now) / 1000)),
+    intl.formatMessage,
+  );
+
+  return (
+    <StatusSection
+      section="turn"
+      defaultOpen={false}
+      open={open}
+      onOpenChange={onOpenChange}
+      separated={separated}
+      title={title}
+      trailing={(isOpen) =>
+        isOpen ? (
+          <span>
+            {intl.formatMessage(
+              {
+                id:
+                  works.length === 1
+                    ? "chat.statusPanel.runningStatusValue"
+                    : "chat.statusPanel.runningStatusValuePlural",
+              },
+              { count: String(works.length) },
+            )}
+          </span>
+        ) : (
+          <>
+            <span className="min-w-0 truncate">{collapsedElapsedLabel}</span>
+            <span className="shrink-0">·</span>
+            <span className="shrink-0">{formatRunningCount(intl.formatMessage, works.length)}</span>
+          </>
+        )
+      }
+    >
+      <ul className="space-y-0">
+        {orderedRunningTurns.map((work) => (
+          <RunningTurnItem
+            key={work.workId}
+            work={work}
+            now={now}
+            onCancelBackgroundWork={onCancelBackgroundWork}
+          />
+        ))}
+      </ul>
+    </StatusSection>
+  );
+}
+
 /**
  * run 行的时长：沿用分区头部的时长单位（formatDurationUnits），但不带「已运行」前缀，且超过
  * 一小时去掉秒——一条跑了一小时的 run 上逐秒跳动的数字只是噪音（`1小时 2分` / `1h 2m`）。
@@ -1810,13 +1942,21 @@ function StatusSummaryRow({
   // 兜底：它排在胶囊最前，自己一个分支（名字 · 灯 · phase），不再是一个计数。
   const hasRunningBash = model.runningBashWorks.length > 0;
   const hasRunningSubagent = model.runningSubagentWorks.length > 0;
-  const runningCount = model.runningBashWorks.length + model.runningSubagentWorks.length;
+  // DT 分组：detached turn 也进这条兜底计数——否则 demote 后（DT01）其他主状态为空时
+  // 胶囊什么都不显示，后台对话在收起态就失明了。
+  const hasRunningTurn = model.runningTurnWorks.length > 0;
+  const runningCount =
+    model.runningBashWorks.length +
+    model.runningSubagentWorks.length +
+    model.runningTurnWorks.length;
   const RunningSummaryIcon =
     hasRunningBash && hasRunningSubagent
       ? ActivityIcon
-      : hasRunningBash
-        ? SquareTerminalIcon
-        : BotIcon;
+      : hasRunningTurn && !hasRunningBash && !hasRunningSubagent
+        ? MessageSquareTextIcon
+        : hasRunningBash
+          ? SquareTerminalIcon
+          : BotIcon;
   const firstLiveRun = model.runningWorkflowRuns[0];
   // 在跑的工作流排在胶囊最前（docs/dynamic-workflow/presentation.md「Other places a run appears」）：
   // 它在跑时就是会话在做的事，而主代理那一轮多半早已结束、todo 只是上一轮的余迹。过去它排在
@@ -2023,6 +2163,8 @@ function ConversationStatusPanelImpl({
   // 已结束目录入口过去渲染在 Agent StatusSection 之后，视觉和 DOM 都被提升成
   // 并列顶层 section。Agent 的运行态和已结束目录属于同一领域，统一由 Agent 折叠分组承载。
   const canRenderAgents = model.runningSubagentWorks.length > 0 || canRenderEndedAgents;
+  // DT 分组：detached turn 的独立分区（DT01）；stop 不覆盖它，取消走后台控制（DT07/DT08）。
+  const canRenderTurns = model.runningTurnWorks.length > 0;
   const handlePanelModeChange = useCallback(
     (value: string) => {
       if (value === "auto") {
@@ -2076,11 +2218,13 @@ function ConversationStatusPanelImpl({
         data-running-background-count={
           model.runningBashWorks.length +
           model.runningSubagentWorks.length +
-          model.runningWorkflowRuns.length
+          model.runningWorkflowRuns.length +
+          model.runningTurnWorks.length
         }
         data-running-terminal-count={model.runningBashWorks.length}
         data-running-agent-count={model.runningSubagentWorks.length}
         data-running-workflow-count={model.runningWorkflowRuns.length}
+        data-running-turn-count={model.runningTurnWorks.length}
         data-ended-workflow-count={endedWorkflowRunCount}
         className={cn(
           "pointer-events-auto relative overflow-hidden rounded-2xl border border-[var(--color-popover-border)] bg-[var(--color-popover)] text-[var(--color-foreground)] shadow-md transition-[border-radius,padding,background-color,box-shadow] duration-300 ease-in-out",
@@ -2207,6 +2351,16 @@ function ConversationStatusPanelImpl({
                 onCancelBackgroundWork={onCancelBackgroundWork}
               />
             ) : null}
+            {canRenderTurns ? (
+              // DT 分组：demote 后的 detached turn。分区排在 Terminals 之后、Workflows 之前
+              // ——它是「会话本体」级的工作，不是终端/智能体那种旁支。
+              <TurnStatusSection
+                title={intl.formatMessage({ id: "chat.statusPanel.turns" })}
+                works={model.runningTurnWorks}
+                separated={canRenderGit || canRenderGoal || canRenderSessionPlans || canRenderPlan || canRenderTerminals}
+                onCancelBackgroundWork={onCancelBackgroundWork}
+              />
+            ) : null}
             {canRenderWorkflows ? (
               <WorkflowStatusSection
                 title={intl.formatMessage({ id: "chat.statusPanel.workflows" })}
@@ -2219,7 +2373,8 @@ function ConversationStatusPanelImpl({
                   canRenderGoal ||
                   canRenderSessionPlans ||
                   canRenderPlan ||
-                  canRenderTerminals
+                  canRenderTerminals ||
+                  canRenderTurns
                 }
                 parentSessionId={parentSessionId}
                 onCancelBackgroundWork={onCancelBackgroundWork}
@@ -2241,6 +2396,7 @@ function ConversationStatusPanelImpl({
                   canRenderSessionPlans ||
                   canRenderPlan ||
                   canRenderTerminals ||
+                  canRenderTurns ||
                   canRenderWorkflows
                 }
                 parentSessionId={parentSessionId}

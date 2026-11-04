@@ -70,7 +70,8 @@ const turnStartedFactSchema = z
     executionKind: z.enum(["agent", "controlOnly"]).optional(),
     inputSource: zcodeSyntheticUserMessageSourceSchema.optional(),
     // `workflow`：dynamic-workflow run 的完成 / 提问通知唤起的独立轮。
-    backgroundSource: z.enum(["bash", "subagent", "workflow"]).optional(),
+    // `turn`：用户 demote 的原 primaryTurn 完成后唤起的独立轮（DT 分组，2026-11-04）。
+    backgroundSource: z.enum(["bash", "subagent", "workflow", "turn"]).optional(),
     automationId: z.string().min(1).optional(),
     offPeakTaskId: z.string().min(1).optional(),
     offPeakRunType: z.enum(["init", "resume"]).optional(),

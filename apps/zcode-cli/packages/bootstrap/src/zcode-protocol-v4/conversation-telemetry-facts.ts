@@ -330,7 +330,8 @@ export class ConversationTelemetryFactNormalizer {
         const backgroundSource =
           payload.backgroundSource === "bash" ||
           payload.backgroundSource === "subagent" ||
-          payload.backgroundSource === "workflow"
+          payload.backgroundSource === "workflow" ||
+          payload.backgroundSource === "turn"
             ? payload.backgroundSource
             : undefined;
         // 用户轮与 background wake 均由 admission 提供 inputId，不混用持久化 messageId。

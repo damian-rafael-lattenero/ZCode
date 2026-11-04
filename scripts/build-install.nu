@@ -66,6 +66,30 @@ def build-bundle [repo: string]: nothing -> string {
     (($zips | first).name)
 }
 
+# EL CIERRE AUTOMÁTICO (4/11, el owner: «eso al ser ejecutado desde un Ghostty
+# separada debería poder cerrar zcode sin necesidad de command q»): exacto — el
+# ⌘Q fue una elección, no un límite. Escalera honesta: osascript quit → ≤15 s
+# → re-quit ×2 (anti-resurrección, la ley de la cutover vieja). Si no murió,
+# FAIL honesto: el zip queda construido y el swap espera.
+def quit-zcode []: nothing -> nothing {
+    if not (zcode-running) { return }
+    announce "🔒 cerrando ZCode para el swap (~15 s)…"
+    for attempt in 1..3 {
+        do -i { ^osascript -e "quit app \"ZCode\"" }
+        mut dead = false
+        for _ in 1..15 {
+            sleep 1sec
+            if not (zcode-running) {
+                $dead = true
+                break
+            }
+        }
+        if $dead { return }
+        print $"[fork] quit intento ($attempt): ZCode sigue viva — reintento…"
+    }
+    fail "[fork]" "ZCode no murió tras 3 intentos — el zip quedó construido; cuando la cierres, instalá con --zip <path>"
+}
+
 def install-zip [repo: string, zip: string, keep_prev: bool]: nothing -> nothing {
     if not (($zip | path type) == "file") {
         fail "[fork]" $"no existe el zip: ($zip)"
@@ -117,6 +141,7 @@ def arm-waiter [repo: string, zip: string, keep_prev: bool]: nothing -> nothing 
 def main [
     --keep-prev        # keep the previous build at /Applications/ZCode.prev.app
     --yes              # unattended: no smoke window, no prompt
+    --quit             # build, then CLOSE ZCode, swap and reopen — the full automatic arc
     --when-quit        # arm a launchd waiter that swaps the moment the app quits
     --zip: string      # install this zip instead of building (pair with --when-quit)
 ]: nothing -> nothing {
@@ -143,6 +168,15 @@ def main [
 
     let built = (build-bundle $repo)
     print $"[fork] built: ($built)"
+
+    if $quit {
+        # EL ARCO AUTOMÁTICO (4/11): el build corrió con la app VIVA (la
+        # sesión del owner siguió trabajando los ~15 min); recién acá se
+        # cierra — el swap son segundos y install-zip reabre y anuncia.
+        quit-zcode
+        install-zip $repo $built $keep_prev
+        return
+    }
 
     if $yes {
         if (zcode-running) {

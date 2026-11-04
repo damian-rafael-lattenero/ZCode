@@ -304,6 +304,18 @@ export function useDraftConfigControl(params: {
           ...(permissionChanged ? { mode: currentMode } : {}),
           ...(planChanged ? { planEnabled: currentPlan } : {}),
         };
+      // [fork] Espejo (4/11): un cliente EXTERNO (el canal del bot) puede cambiar
+      // modo/Plan; el v4 ya emite SessionModeChanged y la proyección actualiza
+      // snapshot.config — pero el draft lo ignoraba, así que el próximo send
+      // re-estampaba el valor viejo y «el estado no se guarda» (medido: plan del
+      // teléfono → full access al primer mensaje de la desktop). Adoptar la
+      // configuración canónica es idempotente: valores iguales no reescriben
+      // nada, el propio submit no produce bucle. Último escritor gana: si el
+      // usuario está eligiendo en el composer y llega un cambio externo, gana
+      // el externo (el espejo que pidió el dueño).
+      if (currentMode !== draft.mode || currentPlan !== (draft.planEnabled ?? false)) {
+        draft = { ...draft, mode: currentMode, planEnabled: currentPlan };
+      }
     }
     if (
       firstSnapshot ||

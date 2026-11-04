@@ -5704,6 +5704,9 @@ const zhCN: Record<string, string> = {
   "chat.summaryPanel.runningBackgroundTasksMiniValuePlural": "{count} 后台",
   "chat.summaryPanel.stopRunningBackgroundTask": "停止运行中的后台任务",
   "chat.summaryPanel.openRunningSubagentSession": "打开子智能体会话",
+  // DT 分组：运行中的 primaryTurn 转入后台（demote）。turn 不中断，完成后以 backgroundResult 独立回流。
+  "chat.composer.backgroundTurn": "转入后台",
+  "chat.composer.backgroundTurn.tooltip": "当前任务转入后台继续执行，输入框立即可用",
   "chat.composer.backgroundWorks.tooltipTerminal": "运行中的终端",
   "chat.composer.backgroundWorks.tooltipAgent": "打开运行中的智能体",
   // workflow 从 bash 拆出后 badge 有三类：

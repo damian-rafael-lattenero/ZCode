@@ -6105,6 +6105,11 @@ const enUS: Record<string, string> = {
   "chat.summaryPanel.runningBackgroundTasksMiniValuePlural": "{count} background",
   "chat.summaryPanel.stopRunningBackgroundTask": "Stop running background task",
   "chat.summaryPanel.openRunningSubagentSession": "Open subagent session",
+  // DT group: demote the running primaryTurn to background. The turn keeps running and
+  // comes back as an independent backgroundResult turn when done.
+  "chat.composer.backgroundTurn": "Send to background",
+  "chat.composer.backgroundTurn.tooltip":
+    "Keep the current task running in the background; you can keep typing right away",
   "chat.composer.backgroundWorks.tooltipTerminal": "Open running terminals",
   "chat.composer.backgroundWorks.tooltipAgent": "Open running agents",
   "chat.composer.backgroundWorks.tooltipWorkflow": "Open running workflows",

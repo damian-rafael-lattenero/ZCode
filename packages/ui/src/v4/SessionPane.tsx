@@ -4910,6 +4910,34 @@ export function SessionPane({
   // 恰好是每次输入都可能重渲染的组件。这里固定 button 版的引用，不动 handleStop 的双入口设计。
   const handleStopFromButton = useCallback(() => handleStop("button"), [handleStop]);
 
+  // DT 分组：把运行中的 primaryTurn demote 为 backgroundTurn。身份守卫与 stop 相同：
+  // expectedForegroundExecutionId 取自 demote 时刻投影的 activeWork，mismatch 由 runtime noop。
+  // 无乐观相位 —— demote 后的 foreground 清空、detached Task Island 行、composer 解锁全部
+  // 等权威投影（control.phase / activeWorks / backgroundWorks）回放（runtimeFactsAreAuthoritative）。
+  const handleBackgroundTurn = useCallback(() => {
+    const current = snapshotRef.current;
+    if (!sessionId) return;
+    const turnWork = current?.control.activeWorks.find((work) => work.kind === "primaryTurn");
+    if (!turnWork) {
+      logger.lifecycle.info("[v4-pane] backgroundTurn 命令被跳过（无可 demote 的 primaryTurn）", {
+        sessionId,
+      });
+      return;
+    }
+    const foregroundExecutionId = turnWork.foregroundExecutionId;
+    logger.lifecycle.info("[v4-pane] backgroundTurn 命令发出", {
+      sessionId,
+      foregroundExecutionId: foregroundExecutionId ?? "",
+    });
+    void dispatchCommand(
+      "backgroundTurn",
+      foregroundExecutionId ? { expectedForegroundExecutionId: foregroundExecutionId } : {},
+      sessionId,
+    ).catch((error) => {
+      logger.lifecycle.warn(`[v4-pane] backgroundTurn 失败: ${String(error)}`);
+    });
+  }, [dispatchCommand, sessionId]);
+
   const handleRetrySubscribe = useCallback(() => {
     if (state.lifecycle?.state !== "faulted") {
       void lease?.store.retry();
@@ -5823,6 +5851,7 @@ export function SessionPane({
       composerRestoreRequest={composerRestoreRequest}
       onComposerRestoreApplied={handleComposerRestoreApplied}
       onStop={handleStopFromButton}
+      onBackgroundTurn={handleBackgroundTurn}
       onSelectModel={handleSelectModel}
       onSelectThought={handleSelectThought}
       onSwitchMode={handleSwitchMode}

@@ -42,9 +42,13 @@ def build-bundle [repo: string]: nothing -> string {
     # zod v4 hoisteado en vez del v3 del lockfile y el tsc explotó en 40
     # archivos). frozen-lockfile: si package.json y lock no coinciden, grita —
     # el gate correcto para un build.
+    # LOS TRAMOS MUDOS AL TELÉFONO (4/11: el owner leyó silencio 15 min en
+    # este tramo — announce en cada fase larga; el announce nunca rompe).
     print "[fork] pnpm install --frozen-lockfile (node_modules contra el lock)..."
+    announce "🚀 deploy fork — pnpm install --frozen-lockfile (tarda minutos)…"
     ^$MISE exec -- node scripts/mise-run.mjs pnpm install --frozen-lockfile
     print "[fork] bundle:desktop (ZCODE_ENV=production, no signing)..."
+    announce "🚀 deploy fork — bundle:desktop (el tramo largo, ~10-15 min)…"
     with-env {
         ZCODE_ENV: "production"
         CSC_IDENTITY_AUTO_DISCOVERY: "false"
@@ -58,6 +62,7 @@ def build-bundle [repo: string]: nothing -> string {
     if ($zips | is-empty) {
         fail "[fork]" "el build no produjo ningún ZCode-*-mac-arm64.zip"
     }
+    announce $"✅ deploy fork — build listo \(($zips | first).name | path basename\)"
     (($zips | first).name)
 }
 

@@ -365,6 +365,49 @@ async function stop(
   return undefined;
 }
 
+/**
+ * backgroundTurn（DT 分组 2026-11-04）：把运行中的 primaryTurn demote 为 backgroundTurn。
+ * 身份守卫与 stop 相同（expectedForegroundExecutionId，mismatch/idle → noop，绝不 abort）；
+ * 只转移归属，前台命令由 runtime 提前 resolve，这里不等收口——完成 wake 走
+ * backgroundResult 独立 product turn（backgroundTurnCompletionIsBackgroundResult）。
+ * 非 CAS 命令：不携 baseRevision，幂等边界由 sourceCommandId（inbox 账本）提供。
+ */
+async function backgroundTurn(
+  host: V4CommandCoreHost,
+  envelope: CommandEnvelope,
+): Promise<CommandResult | undefined> {
+  const record = requireRecord(host, envelope.sessionId);
+  const payload = envelope.payload as CommandPayloadMap["backgroundTurn"];
+  const runtimeDemote = record.app.runtime?.backgroundActiveForegroundExecution?.({
+    expectedForegroundExecutionId: payload.expectedForegroundExecutionId,
+  });
+  host.logger?.info?.("v4 background turn demote inspected", {
+    activeForegroundExecutionId:
+      runtimeDemote?.kind === "demoted"
+        ? runtimeDemote.foregroundExecutionId
+        : runtimeDemote?.kind === "mismatch" || runtimeDemote?.kind === "unsupported"
+          ? runtimeDemote.activeForegroundExecutionId
+          : undefined,
+    event: "v4.background_turn.demote_inspected",
+    expectedForegroundExecutionId: payload.expectedForegroundExecutionId,
+    module: "bootstrap.zcode_protocol_v4.commands",
+    runtimeDemoteKind: runtimeDemote?.kind ?? "unsupported",
+    sessionId: record.app.sessionId,
+  });
+  if (runtimeDemote?.kind === "demoted") {
+    return undefined;
+  }
+  if (runtimeDemote?.kind === "idle" || runtimeDemote?.kind === "mismatch") {
+    // demote 从 renderer 到 host 有异步窗口；turn 可能已收口（idle）或已被下一轮
+    // 顶替（mismatch）。归属转移只 noop，绝不 abort 用户没看到的新执行。
+    throw new V4CommandNoopError("guard.stopTargetChanged");
+  }
+  // 在跑的执行不可移交（compact / verifier / notification 轮），或 runtime 缺方法。
+  throw Object.assign(new Error("fault.command.backgroundTurnUnsupported"), {
+    reasonCode: "fault.command.backgroundTurnUnsupported",
+  });
+}
+
 /** goal-pause barrier 共用件：stop 与 sendQueuedNow（抢占重发）复用，不复制。 */
 export async function pauseActiveGoal(
   host: V4CommandCoreHost,
@@ -438,4 +481,4 @@ export async function preemptActiveTurnAndWait(
   await waitForSessionIdle(record);
 }
 
-export const sessionFlowHandlers = { sendText, stop };
+export const sessionFlowHandlers = { sendText, stop, backgroundTurn };

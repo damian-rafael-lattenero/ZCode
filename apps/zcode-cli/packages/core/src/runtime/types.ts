@@ -579,6 +579,36 @@ export interface ActiveForegroundExecutionState {
   disposeParentAbort: () => void;
   foregroundExecutionId: string;
   preserveQueueAutoDrainOnCancel: boolean;
+  /**
+   * DT（2026-11-04）demote 移交装置。只在可 detach 的前台执行（prompt 命令）上由
+   * runtime-command-queue 安装；`backgroundActiveForegroundExecution` 通过
+   * `request()` 触发归属转移，等待侧（runRuntimeCommand）经 `requested` 感知。
+   */
+  detach?: ForegroundDetachmentState;
+}
+
+/** demote 请求的句柄；request() 同幂次只生效一次（幂等返回首次结果）。 */
+export interface ForegroundDetachmentState {
+  /** runtime registry 里 detached turn 的 workId（≡ BackgroundTask* 事件的 taskId）。 */
+  taskId: string;
+  /** 请求侧调用；false = turn 已先收口（registry 条目已终结/移除），demote 落空。 */
+  request: () => boolean;
+  /** 等待侧 race 用：resolve(true) = 收到 demote 请求。 */
+  requested: Promise<boolean>;
+}
+
+/**
+ * 已 demote turn 的运行期句柄（internal.detachedTurns，turnId 键）。controller 是 demote 前
+ * 前台执行的 AbortController，turn 的 abort scope 仍由它驱动：cancelBackgroundWork 经
+ * stopBackgroundTask(local_turn) abort 它即可取消后台 turn。
+ */
+export interface DetachedTurnHandle {
+  controller: AbortController;
+  foregroundExecutionId: string;
+  taskId: string;
+  turnId: TurnId;
+  /** Task Island 标题（BackgroundTurnDemoted/BackgroundTaskStarted 共用）。 */
+  title: string;
 }
 
 export interface StopActiveForegroundExecutionOptions {
@@ -591,6 +621,24 @@ export type StopActiveForegroundExecutionResult =
   | { kind: "stopped"; foregroundExecutionId: string }
   | { kind: "idle" }
   | { kind: "mismatch"; activeForegroundExecutionId: string };
+
+export interface BackgroundActiveForegroundExecutionOptions {
+  expectedForegroundExecutionId?: string;
+  traceContext?: TraceContext;
+}
+
+/**
+ * backgroundActiveForegroundExecution 的结果：
+ * - demoted：归属已转移，前台命令即将提前 resolve，turn 在后台继续；
+ * - idle：当前没有可 demote 的前台执行（turn 已收口/从未运行）；
+ * - mismatch：expectedForegroundExecutionId 与在跑执行不符 → noop，绝不 abort（同 stop 守卫）；
+ * - unsupported：在跑执行不是可 detach 的 prompt turn（compact/verifier/notification 轮）。
+ */
+export type BackgroundActiveForegroundExecutionResult =
+  | { kind: "demoted"; foregroundExecutionId: string; workId: string }
+  | { kind: "idle" }
+  | { kind: "mismatch"; activeForegroundExecutionId: string }
+  | { kind: "unsupported"; activeForegroundExecutionId: string };
 
 export type ForegroundPromotionLeaseMode = "after-current" | "idle-only";
 

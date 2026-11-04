@@ -160,6 +160,8 @@ export async function appendTurnOutcomeEvent(
     logEvent: string;
     logLabel: string;
     preserveQueueAutoDrainOnCancel?: boolean;
+    /** DT：本 turn 已被 demote 为 backgroundTurn；终态收口不暂停 queue。 */
+    backgroundTurnDetached?: boolean;
     backgroundSubagentResultConsumed?: boolean;
     workflowResultConsumed?: boolean;
     historyRoundCount?: number;
@@ -189,6 +191,7 @@ export async function appendTurnOutcomeEvent(
           ...(params.preserveQueueAutoDrainOnCancel
             ? { preserveQueueAutoDrainOnCancel: true }
             : {}),
+          ...(params.backgroundTurnDetached ? { backgroundTurnDetached: true } : {}),
         },
         traceContext,
       )
@@ -215,6 +218,7 @@ export async function appendTurnOutcomeEvent(
           },
           turnPhase,
           inputId,
+          ...(params.backgroundTurnDetached ? { backgroundTurnDetached: true } : {}),
           ...(params.backgroundSubagentResultConsumed
             ? { backgroundSubagentResultConsumed: true }
             : {}),

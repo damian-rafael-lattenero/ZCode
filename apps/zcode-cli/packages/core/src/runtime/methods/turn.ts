@@ -936,6 +936,8 @@ export async function executeTurnCommand(
               ? { backgroundSubagentResultConsumed: true }
               : {}),
             ...(loopState.workflowResultConsumed ? { workflowResultConsumed: true } : {}),
+            // DT：demote 后的轮在后台收口；投影不因它的终态再动 queue。
+            ...(this.detachedTurns.has(turnId) ? { backgroundTurnDetached: true } : {}),
             cacheStats: this.messageHistory.getCacheStats(),
             inputId: options?.inputId,
           },
@@ -1017,9 +1019,13 @@ export async function executeTurnCommand(
           turnAbortSignal,
           fallbackMessage,
         );
+        // DT：demote 后的轮已被 cancelBackgroundWork 取消时，终态只是 settlement，
+        // 不再等价于用户 Stop：queue 授权位保持原样，FIFO 由 drain hold 的释放恢复。
+        const detachedTurn = this.detachedTurns.has(turnId);
         const preserveQueueAutoDrainOnCancel =
-          coreError.type === CoreErrorType.TurnCancelled &&
-          this.activeForegroundExecution?.preserveQueueAutoDrainOnCancel === true;
+          detachedTurn ||
+          (coreError.type === CoreErrorType.TurnCancelled &&
+            this.activeForegroundExecution?.preserveQueueAutoDrainOnCancel === true);
         const finishedTarget = await this.finishTargetTurnAccounting({
           endedAtMs: Date.now(),
           inputID: targetRunInputID,
@@ -1053,7 +1059,7 @@ export async function executeTurnCommand(
         // 普通 TurnError 只结束当前 turn，不撤销已经 accepted 的 future input。
         // V4 TurnError 投影将队列切成 error-paused，runtime 同步关闭行内 drain，
         // 保留排队输入，等待用户显式继续。
-        if (activeTurn && coreError.type !== CoreErrorType.TurnCancelled) {
+        if (activeTurn && coreError.type !== CoreErrorType.TurnCancelled && !detachedTurn) {
           const pendingInputs = (await this.rebuildProjection()).pendingSteerInputs;
           if (pendingInputs.length > 0) {
             this.queueAutoDrain = false;
@@ -1092,6 +1098,7 @@ export async function executeTurnCommand(
           logEvent: "turn.failed",
           logLabel: "Turn",
           preserveQueueAutoDrainOnCancel,
+          backgroundTurnDetached: detachedTurn,
           backgroundSubagentResultConsumed,
           workflowResultConsumed,
           historyRoundCount: loopState?.historyRoundCount,

@@ -3,11 +3,18 @@ import {
   telemetryInputOrigin,
   TELEMETRY_INPUT_ORIGIN_ATTRIBUTE,
 } from "./input-intent-persistence.js";
-import { traceContextToLogContext } from "../deps.js";
+import { traceContextToLogContext, createTurnId } from "../deps.js";
 import { refreshOffPeakWork } from "../off-peak/runtime.js";
 import type { RuntimeCommand, TaskNotificationRuntimeCommand } from "../command-queue.js";
 import { uuidv7 } from "@zcode/shared";
 import type { AgentRuntimeInternal } from "../internal.js";
+import {
+  armForegroundTurnDetachment,
+  type ArmedForegroundTurnDetachment,
+  beginDetachedTurnTracking,
+  releaseArmedForegroundTurnDetachment,
+} from "./background-turn.js";
+import { hasUnsettledBackgroundTurn } from "./background-turn.js";
 import {
   persistBackgroundTaskNotificationBatch,
   shouldSuppressTaskNotificationRuntimeCommand,
@@ -59,7 +66,12 @@ export async function drainRuntimeCommandQueue(this: AgentRuntimeInternal): Prom
   try {
     let commands: readonly RuntimeCommand[];
     // 将同批后台通知合并到一个模型轮，避免每条通知都单独发起请求。
-    while ((commands = dequeueNextRunnableBatch.call(this)).length > 0) {
+    // DT（backgroundTurnHoldsQueueDrain）：未收口的 detached turn 占用唯一的 active turn
+    // 名额，出队暂停（同一次只能跑一条 turn）；settlement 后由 settleDetachedTurn 重新触发。
+    while (
+      !hasUnsettledBackgroundTurn.call(this) &&
+      (commands = dequeueNextRunnableBatch.call(this)).length > 0
+    ) {
       const firstCommand = commands[0];
       if (!firstCommand) continue;
       noteWorkflowReminderCommandStarted(this, firstCommand);
@@ -235,8 +247,10 @@ async function runRuntimeCommand(
         command.reject(createTurnCancelledError(command.options?.abortSignal?.reason));
         return;
       }
+      let detachment: ArmedForegroundTurnDetachment | undefined;
+      let demoted = false;
       try {
-        const result = await this.executeTurnCommand(
+        const turnPromise = this.executeTurnCommand(
           command.input,
           command.attachments,
           {
@@ -245,12 +259,49 @@ async function runRuntimeCommand(
           },
           command.startReservation,
         );
+        // DT（backgroundTurnDemotionPreservesExecution）：turn 完成与 demote 请求同 race。
+        // demote 命中 → 前台命令提前 resolve、AbortController 父链断开，turn 在后台继续。
+        detachment = armForegroundTurnDetachment.call(this, command, foregroundExecution);
+        demoted = detachment
+          ? await Promise.race([
+              turnPromise.then(() => false as const),
+              detachment.backgroundRequestPromise.then((task) => task !== undefined),
+            ])
+          : false;
+        if (demoted && detachment) {
+          await beginDetachedTurnTracking.call(this, {
+            command,
+            controller: foregroundExecution.controller,
+            detachment,
+            foregroundExecutionId: foregroundExecution.foregroundExecutionId,
+            traceContext: command.traceContext,
+            turnPromise,
+          });
+          const projection = await this.rebuildProjection();
+          command.resolve({
+            response: "",
+            events: [],
+            projection,
+            traceId: command.traceContext.traceId,
+            turnId: command.startReservation?.turnId ?? createTurnId(),
+          });
+          return;
+        }
+        if (detachment) releaseArmedForegroundTurnDetachment.call(this, detachment);
+        const result = await turnPromise;
         const continuationResult = await runPostCommandActiveTargetLoop.call(
           this,
           command,
           foregroundExecution.controller.signal,
         );
         command.resolve(continuationResult ?? result);
+      } catch (error) {
+        // demote 命中后 turn 失败由 beginDetachedTurnTracking 的 settle 链收口；
+        // 这里只清理「race 期间 turn 先失败、detach 未开始」的孤儿武装条目。
+        if (demoted === false && detachment) {
+          releaseArmedForegroundTurnDetachment.call(this, detachment);
+        }
+        throw error;
       } finally {
         this.runtimeCommandQueue.clearCancelPending(command.id);
       }

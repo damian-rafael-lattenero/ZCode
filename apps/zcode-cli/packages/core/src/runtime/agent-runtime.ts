@@ -122,6 +122,9 @@ import type {
   ResumeSessionResult,
   SelectionSideChatCreateOptions,
   StableConversationForkOptions,
+  BackgroundActiveForegroundExecutionOptions,
+  BackgroundActiveForegroundExecutionResult,
+  DetachedTurnHandle,
   StopActiveForegroundExecutionOptions,
   StopActiveForegroundExecutionResult,
   TurnResult,
@@ -254,6 +257,11 @@ export class AgentRuntime {
   private runtimeCommandQueue: RuntimeCommandQueue;
   private runtimeCommandDrainActive = false;
   private activeForegroundExecution?: ActiveForegroundExecutionState;
+  /** DT：已 demote turn 的取消句柄（turnId 键）；重启即丢（backgroundTurnDiesOnRestart）。 */
+  private readonly detachedTurns = new Map<
+    import("@zcode/contracts").TurnId,
+    DetachedTurnHandle
+  >();
   /** sendQueuedNow 的 Core 调度权；只活在当前进程，匹配 runtime command 出队即消费。 */
   private foregroundPromotionLease?: ForegroundPromotionLeaseState;
   private activeTurn?: ActiveTurnSteeringState;
@@ -740,6 +748,16 @@ export interface AgentRuntime {
   stopActiveForegroundExecution(
     options?: StopActiveForegroundExecutionOptions,
   ): StopActiveForegroundExecutionResult;
+  /**
+   * DT：把运行中的 primaryTurn demote 为 backgroundTurn。身份守卫与 stop 相同
+   * （mismatch = noop）；命中后前台命令提前 resolve，turn 不中断继续执行，
+   * 并以 taskKind "turn" 进入 background task registry。
+   */
+  backgroundActiveForegroundExecution(
+    options?: BackgroundActiveForegroundExecutionOptions,
+  ): BackgroundActiveForegroundExecutionResult;
+  /** 未收口的 detached turn 是否存在（queue drain gate 与命令路由的权威事实）。 */
+  hasUnsettledBackgroundTurn(): boolean;
   activatePausedTargetAfterResume(traceContext: TraceContext): Promise<SessionGoal | null>;
   executeTurn(
     input: string,

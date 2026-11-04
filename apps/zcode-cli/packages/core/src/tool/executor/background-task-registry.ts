@@ -223,6 +223,8 @@ function defaultRuntimeTaskDescription(taskType: RuntimeTaskType): string {
       return "Workflow background task";
     case "local_dynamic_workflow":
       return "Dynamic workflow run";
+    case "local_turn":
+      return "Background turn";
     case "local_agent":
       return "Agent background task";
     case "monitor_mcp":

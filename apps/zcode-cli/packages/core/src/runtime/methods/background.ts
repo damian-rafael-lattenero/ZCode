@@ -114,6 +114,10 @@ export async function stopBackgroundTask(
     return stopLocalBashBackgroundTask.call(this, target, traceContext);
   }
 
+  if (target.taskType === "local_turn") {
+    return stopLocalTurnBackgroundTask.call(this, target, options.initiator);
+  }
+
   if (target.taskType === "local_dynamic_workflow") {
     return stopDynamicWorkflowBackgroundTask.call(
       this,
@@ -171,6 +175,44 @@ function unsupportedBackgroundStopResult(
     status: target.currentStatus,
     taskId: target.taskId,
     ...(target.taskType ? { type: target.taskType } : {}),
+  };
+}
+
+/**
+ * DT：detached turn 的取消。turn 的 abort scope 仍由 demote 前的前台 AbortController
+ * 驱动（句柄在 runtime.detachedTurns），abort 后 turn 自行收口：settle 链写 registry
+ * 终态并发 BackgroundTaskCompleted(cancelled)，不产生 wake。
+ */
+async function stopLocalTurnBackgroundTask(
+  this: AgentRuntimeInternal,
+  target: TypedRuntimeBackgroundStopTarget,
+  initiator: RuntimeBackgroundStopOptions["initiator"],
+): Promise<RuntimeBackgroundStopResult> {
+  const turnId = target.registryTask?.turnId;
+  const handle = turnId ? this.detachedTurns.get(turnId) : undefined;
+  if (!handle) {
+    // registry 显示 running 但句柄缺失（重启残留 / 幽灵条目）：如实报 not found，不误杀。
+    return {
+      ok: false,
+      reason: "background_task_not_found",
+      status: "lost",
+      taskId: target.taskId,
+      type: "local_turn",
+    };
+  }
+  if (initiator !== undefined) {
+    this.runtimeTaskRegistry.update(target.taskId, (current) =>
+      isTerminalRuntimeTask(current)
+        ? current
+        : { ...current, stopInitiator: initiator },
+    );
+  }
+  handle.controller.abort(new Error("background turn cancelled"));
+  return {
+    ok: true,
+    status: "cancelled",
+    taskId: target.taskId,
+    type: "local_turn",
   };
 }
 
@@ -298,7 +340,9 @@ export async function cancelRunningRuntimeBackgroundTasks(
   const traceContext = input.traceContext ?? this.rootTraceContext;
   const tasks = Object.values(this.runtimeTaskRegistry.all()).filter(
     (task) =>
-      task.type === "local_bash" && task.isBackgrounded === true && task.status === "running",
+      (task.type === "local_bash" || task.type === "local_turn") &&
+      task.isBackgrounded === true &&
+      task.status === "running",
   );
 
   const results = await Promise.allSettled(
@@ -438,6 +482,8 @@ function runtimeTaskTypeFromBackgroundInfo(
     case "CreateWorkflow":
     case "AmendWorkflow":
       return "local_dynamic_workflow";
+    case "Turn":
+      return "local_turn";
     default:
       return undefined;
   }
@@ -453,6 +499,8 @@ function toolNameFromRuntimeTaskType(type: RuntimeTaskType): string {
       return "Workflow";
     case "local_dynamic_workflow":
       return "CreateWorkflow";
+    case "local_turn":
+      return "Turn";
     case "monitor_mcp":
       return "Monitor";
   }

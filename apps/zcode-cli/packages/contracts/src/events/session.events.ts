@@ -138,6 +138,9 @@ export const SessionEventType = {
   ToolCallResult: "tool_call_result",
   ToolCallError: "tool_call_error",
   ToolBatchComplete: "tool_batch_complete",
+  // DT 分组（2026-11-04）：primaryTurn 被用户 demote 为 backgroundTurn。只转移归属、不中断
+  // 执行；投影据此清空 activeWorks、回收主停止按钮。memory-only（同 BackgroundTask*）。
+  BackgroundTurnDemoted: "background_turn_demoted",
   BackgroundTaskStarted: "background_task_started",
   BackgroundTaskUpdated: "background_task_updated",
   BackgroundTaskCompleted: "background_task_completed",
@@ -649,6 +652,8 @@ export interface TurnCompletePayload {
   workflowResultConsumed?: boolean;
   /** 内部抢占（如 sendQueuedNow）只终止当前 turn，不等价于用户手动 Stop 队列。 */
   preserveQueueAutoDrainOnCancel?: boolean;
+  /** DT：本 turn 已被 demote 为 backgroundTurn；终态收口不暂停 queue（settlement 释放 FIFO）。 */
+  backgroundTurnDetached?: boolean;
 }
 
 export interface TurnErrorPayload {
@@ -659,6 +664,8 @@ export interface TurnErrorPayload {
   backgroundSubagentResultConsumed?: boolean;
   /** 当前 turn 是否消费过来源为 workflow（dynamic-workflow run）的后台通知。 */
   workflowResultConsumed?: boolean;
+  /** DT：本 turn 已被 demote 为 backgroundTurn；终态收口不暂停 queue（settlement 释放 FIFO）。 */
+  backgroundTurnDetached?: boolean;
 }
 
 export type TurnResultType =
@@ -981,13 +988,27 @@ export type BackgroundTaskStatus =
   | "spawn_error"
   | "lost";
 
+/**
+ * DT 分组（2026-11-04）：primaryTurn demote 事实。身份对齐 TurnStarted.foregroundExecutionId；
+ * taskId 是 runtime registry 里 detached turn 的 workId（后续 BackgroundTask* 同键）。
+ */
+export interface BackgroundTurnDemotedPayload {
+  foregroundExecutionId: string;
+  taskId: string;
+  turnId?: TurnId;
+  inputId?: string;
+  /** Task Island 行标题；与 BackgroundTaskStarted 的 description 同源。 */
+  title?: string;
+}
+
 export interface BackgroundTaskPayloadBase {
   taskId: string;
   toolCallId?: ToolCallId | string;
   toolName?: string;
   // "workflow" = workflow run（CreateWorkflow）。追踪器的行为已按 per-tool lifecycleProvider
   // 分派，taskKind 只决定面板分组与图标，所以加宽是纯展示修正，不改任何生命周期语义。
-  taskKind?: "bash" | "subagent" | "workflow";
+  // "turn" = 用户 demote 的原 primaryTurn（DT 分组，2026-11-04）。
+  taskKind?: "bash" | "subagent" | "workflow" | "turn";
   childSessionId?: SessionId | string;
   blocked?: boolean;
   blockedReason?: "interactive_prompt_detected" | "no_output_progress" | string;
@@ -1335,6 +1356,7 @@ export type SessionEventPayload =
   | SessionInputPromotedPayload
   | TurnCompletePayload
   | TurnErrorPayload
+  | BackgroundTurnDemotedPayload
   | UserMessagePayload
   | AssistantMessagePayload
   | SystemMessagePayload

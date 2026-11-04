@@ -40,6 +40,7 @@ import type {
   ActiveTurnSteeringState,
   ActiveTurnStartReservation,
   ActiveForegroundExecutionState,
+  DetachedTurnHandle,
   ForegroundPromotionLeaseState,
   AgentRuntimeConfig,
   AgentRuntimeDeps,
@@ -166,6 +167,11 @@ export interface AgentRuntimeInternal
   runtimeCommandQueue: RuntimeCommandQueue;
   runtimeCommandDrainActive: boolean;
   activeForegroundExecution?: ActiveForegroundExecutionState;
+  /**
+   * DT：已 demote 的 turn 执行句柄（turnId 键）。cancelBackgroundWork / session close
+   * 经它 abort 对应 AbortController；settlement 后移除。重启即丢（backgroundTurnDiesOnRestart）。
+   */
+  readonly detachedTurns: Map<TurnId, DetachedTurnHandle>;
   foregroundPromotionLease?: ForegroundPromotionLeaseState;
   activeTurn?: ActiveTurnSteeringState;
   activeTurnStartReservation?: ActiveTurnStartReservation;

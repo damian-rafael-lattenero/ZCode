@@ -374,11 +374,12 @@ export type CommandStateSummary = z.infer<typeof commandStateSummarySchema>;
 
 export const backgroundWorkSummarySchema = z.object({
   workId: z.string(),
-  // workflow = workflow run（CreateWorkflow）。**闭集加值的偏斜代价**：
+  // workflow = workflow run（CreateWorkflow）。turn = 用户 demote 的原 primaryTurn（DT 分组，
+  // 2026-11-04），无 childSessionId、无 anchorRowId 绑定的 tool row。**闭集加值的偏斜代价**：
   // 旧桌面收到未知值时整个 state.updated patch 解析失败（已知键的非法值是错误，不是剥离），
   // 于是整帧被 assembler 拒收，且 resync 的 snapshot 携带同一个值、同样失败——不能优雅降级。
   // CLI 与桌面同批发布才使它可接受。
-  kind: z.enum(["bash", "subagent", "workflow"]),
+  kind: z.enum(["bash", "subagent", "workflow", "turn"]),
   title: z.string(),
   // resultPending = 已完成、结果在 continuation inbox 等待前台空闲；
   // 投递后条目消失（结果本体成为 origin=backgroundResult 的 userInput row）。

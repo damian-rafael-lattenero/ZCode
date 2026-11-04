@@ -338,8 +338,9 @@ export interface SubagentResultMeta {
 
 /** 独立后台结果轮的展示元信息；批量轮可复用代表任务身份并合成 title，不从通知文本反向解析。 */
 export interface BackgroundResultOriginMeta {
-  /** `workflow` 是 dynamic-workflow run（workId ≡ runId），复用整条后台通知管线。 */
-  backgroundSource: "bash" | "subagent" | "workflow";
+  /** `workflow` 是 dynamic-workflow run（workId ≡ runId），复用整条后台通知管线。
+   *  `turn` 是用户 demote 的原 primaryTurn 正常完成（DT 分组，2026-11-04）。 */
+  backgroundSource: "bash" | "subagent" | "workflow" | "turn";
   workId: string;
   title: string;
   /** 只在 backgroundSource === "workflow" 的单条通知轮上在场；manifest 渲染的唯一数据源。 */

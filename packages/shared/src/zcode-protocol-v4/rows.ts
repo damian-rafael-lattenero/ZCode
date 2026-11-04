@@ -135,10 +135,11 @@ export const userInputRowSchema = z.object({
     "synthetic",
     "workflowLaunch",
   ]),
-  originMeta: z
-    .object({
-      // 与 backgroundResultOriginMetaSchema 同一组取值（含 workflow run 的 "workflow"）。
-      backgroundSource: z.enum(["bash", "subagent", "workflow"]).optional(),
+    originMeta: z
+      .object({
+        // 与 backgroundResultOriginMetaSchema 同一组取值（含 workflow run 的 "workflow"
+        // 与 demoted turn 的 "turn"，DT 分组 2026-11-04）。
+        backgroundSource: z.enum(["bash", "subagent", "workflow", "turn"]).optional(),
       workId: z.string().optional(),
       senderSessionId: z.string().optional(),
       senderLabel: z.string().optional(),

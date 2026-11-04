@@ -5222,7 +5222,10 @@ export function SessionPane({
   const runningBackgroundWorkCount =
     statusPanelModel.runningBashWorks.length +
     statusPanelModel.runningSubagentWorks.length +
-    statusPanelModel.runningWorkflowRuns.length;
+    statusPanelModel.runningWorkflowRuns.length +
+    // DT 分组：demote 后的 detached turn 也是运行中的后台工作——否则 DT01 后 composer
+    // 徽标的 onOpen 会被关掉，用户失去打开 Task Island 查看该 turn 的入口。
+    statusPanelModel.runningTurnWorks.length;
   const runningTerminalCount = statusPanelModel.runningBashWorks.length;
   const runningAgentCount = statusPanelModel.runningSubagentWorks.length;
   const runningWorkflowCount = statusPanelModel.runningWorkflowRuns.length;

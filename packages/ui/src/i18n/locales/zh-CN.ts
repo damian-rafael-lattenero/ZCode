@@ -5714,9 +5714,11 @@ const zhCN: Record<string, string> = {
   "chat.composer.backgroundWorks.tooltipWorkflow": "打开运行中的工作流",
   // 唯一在跑的工作流直达详情页时，徽标如实说出落点。
   "chat.composer.backgroundWorks.tooltipWorkflowDetails": "打开工作流详情",
+  // DT 分组：徽标里恰好只有 detached turn 一类时的文案；混合仍走 tooltipMixed。
+  "chat.composer.backgroundWorks.tooltipTurn": "打开运行中的后台对话",
   "chat.composer.backgroundWorks.tooltipMixed": "打开运行中的终端与智能体",
   "chat.composer.backgroundWorks.ariaLabel":
-    "打开运行中的后台任务：Bash {bashCount} 个，工作流 {workflowCount} 个，子智能体 {subagentCount} 个，共 {count} 个",
+    "打开运行中的后台任务：Bash {bashCount} 个，工作流 {workflowCount} 个，子智能体 {subagentCount} 个，后台对话 {turnCount} 个，共 {count} 个",
   "chat.summaryPanel.goalIterationValue": "第 {count} 次迭代",
   "chat.summaryPanel.todoGoalIterationGroup": "第 {count} 轮迭代",
   "chat.summaryPanel.todoSessionGroup": "整个会话",
@@ -5738,6 +5740,8 @@ const zhCN: Record<string, string> = {
   "chat.statusPanel.todoWaitingFold": "待处理 {count} 项",
   "chat.statusPanel.terminals": "终端",
   "chat.statusPanel.agents": "智能体",
+  // DT 分组：demote 后的 detached turn 分区（用户主动转入后台的那轮对话）。
+  "chat.statusPanel.turns": "后台对话",
   // Workflows 分区：与 Terminals / Agents 并列的
   // 第三类实时活动。行内的状态词与步数复用 chat.toolCall.workflow.* 那一组，不另造词汇。
   "chat.statusPanel.workflows": "工作流",

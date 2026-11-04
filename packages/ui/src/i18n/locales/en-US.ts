@@ -6114,9 +6114,11 @@ const enUS: Record<string, string> = {
   "chat.composer.backgroundWorks.tooltipAgent": "Open running agents",
   "chat.composer.backgroundWorks.tooltipWorkflow": "Open running workflows",
   "chat.composer.backgroundWorks.tooltipWorkflowDetails": "Open workflow details",
+  // DT group: tooltip when the badge holds only detached turns; mixed kinds still use tooltipMixed.
+  "chat.composer.backgroundWorks.tooltipTurn": "Open running background chats",
   "chat.composer.backgroundWorks.tooltipMixed": "Open running terminals and agents",
   "chat.composer.backgroundWorks.ariaLabel":
-    "Open running background tasks: {bashCount} Bash, {workflowCount} workflow, {subagentCount} Subagent, {count} total",
+    "Open running background tasks: {bashCount} Bash, {workflowCount} workflow, {subagentCount} Subagent, {turnCount} background chat, {count} total",
   "chat.summaryPanel.goalIterationValue": "Iteration {count}",
   "chat.summaryPanel.todoGoalIterationGroup": "Iteration {count}",
   "chat.summaryPanel.todoSessionGroup": "Session",
@@ -6138,6 +6140,8 @@ const enUS: Record<string, string> = {
   "chat.statusPanel.todoWaitingFold": "{count} waiting",
   "chat.statusPanel.terminals": "Terminals",
   "chat.statusPanel.agents": "Agents",
+  // DT group: section for the detached turn (the conversation the user demoted to background).
+  "chat.statusPanel.turns": "Background chats",
   "chat.statusPanel.workflows": "Workflows",
   "chat.statusPanel.runningStatusValue": "{count} in background",
   "chat.statusPanel.runningStatusValuePlural": "{count} in background",

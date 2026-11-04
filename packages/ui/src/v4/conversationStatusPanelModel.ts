@@ -126,6 +126,8 @@ export interface ConversationStatusPanelModel {
   runningBashWorks: BackgroundWorkSummary[];
   runningSubagentWorks: ConversationStatusPanelRunningSubagent[];
   runningWorkflowRuns: ConversationStatusPanelWorkflowRun[];
+  /** DT 分组：用户 demote 的原 primaryTurn（backgroundTurn），Task Island 独立行。 */
+  runningTurnWorks: BackgroundWorkSummary[];
 }
 
 export interface BuildConversationStatusPanelModelInput {
@@ -346,6 +348,7 @@ export function buildConversationStatusPanelModel(
   const sessionPlans = buildSessionPlansModel(input.sessionPlans, input.workspacePath);
   const plan = buildPlanModel(input.plan);
   const runningBashWorks: BackgroundWorkSummary[] = [];
+  const runningTurnWorks: BackgroundWorkSummary[] = [];
   const workflowWorkByWorkId = new Map<string, BackgroundWorkSummary>();
   const subagentControlByChildSessionId = new Map<string, BackgroundWorkSummary | null>();
   for (const work of input.backgroundWorks ?? []) {
@@ -361,6 +364,13 @@ export function buildConversationStatusPanelModel(
       continue;
     }
     if (work.status !== "running") continue;
+    if (work.kind === "turn") {
+      // DT 分组：demote 后的 primaryTurn 以 backgroundTurn 继续执行；没有 childSessionId、
+      // 没有 anchorRowId 绑定的 tool row，只在 Task Island 出独立行（elapsed + cancel）。
+      // resultPending/failed/cancelled 不进运行态行：完成 wake 投递后条目本来就会消失。
+      runningTurnWorks.push(work);
+      continue;
+    }
     if (work.kind === "bash") {
       runningBashWorks.push(work);
     } else if (work.kind === "subagent" && work.childSessionId) {
@@ -415,6 +425,7 @@ export function buildConversationStatusPanelModel(
     runningBashWorks,
     runningSubagentWorks,
     runningWorkflowRuns,
+    runningTurnWorks,
     hasContent: Boolean(
       git ||
       goal ||
@@ -422,7 +433,8 @@ export function buildConversationStatusPanelModel(
       plan ||
       runningBashWorks.length > 0 ||
       runningSubagentWorks.length > 0 ||
-      runningWorkflowRuns.length > 0,
+      runningWorkflowRuns.length > 0 ||
+      runningTurnWorks.length > 0,
     ),
   };
 }

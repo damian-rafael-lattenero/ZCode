@@ -394,7 +394,8 @@ describe("Bash result mapping", () => {
         }),
       ),
     ).toBe(
-      "Command was manually backgrounded by user with ID: exec_bg. Output is being written to: /tmp/exec_bg.output",
+      // BT（2026-11-05）：用户移交文案以逐字指令收尾（模型行为锚定这段原文）。
+      "Command was manually backgrounded by user with ID: exec_bg. Output is being written to: /tmp/exec_bg.output. User moved this command to the background. It is still running. Do not wait, sleep, or poll for it. Continue with other useful work, or finish your response — you will be notified with the command's output when it completes.",
     );
 
     expect(

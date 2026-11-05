@@ -1427,6 +1427,96 @@ describe("bashHandler", () => {
     expect(BashOutputSchema.safeParse(output).success).toBe(true);
   });
 
+  // BT（2026-11-05）：普通前台命令改走 manual 生命周期（前台语义与裸 run 一致），
+  // 新增能力是用户经 v4 backgroundToolCall 移交仍在跑的命令。
+  it("wraps plain foreground commands in the manual background lifecycle", async () => {
+    const observedModes: string[] = [];
+    const run = vi.fn(async () => executionResult({ status: "completed", exitCode: 0 }));
+    const executionPort: BashBackgroundLifecycleExecutionPort = {
+      run,
+      async runBashWithBackgroundLifecycle(_request, lifecycle) {
+        observedModes.push(lifecycle.mode);
+        return {
+          kind: "foreground",
+          result: executionResult({ status: "completed", exitCode: 0, stdout: "ok\n" }),
+        };
+      },
+    };
+
+    // sleep 前缀不参与 auto-background 判定 → 落在 manual 分支。
+    const output = (await bashHandler(
+      { command: "sleep 30 && echo ok" } satisfies BashInput,
+      contextWith(executionPort),
+    )) as BashOutput;
+
+    expect(observedModes).toEqual(["manual"]);
+    expect(run).not.toHaveBeenCalled();
+    expect(output.status).toBe("completed");
+  });
+
+  it("marks user-requested backgrounding and appends the exact handoff instruction", async () => {
+    const executionPort: BashBackgroundLifecycleExecutionPort = {
+      async run() {
+        throw new Error("run should not be called");
+      },
+      runBashWithBackgroundLifecycle: vi.fn(async (_request, lifecycle: { mode: string }) => {
+        expect(lifecycle.mode).toBe("manual");
+        return {
+          kind: "backgrounded" as const,
+          requestedBy: "user" as const,
+          task: {
+            taskId: "exec_user_bg",
+            status: "running" as const,
+            startedAt: new Date(),
+            outputPath: "/tmp/exec_user_bg.output",
+          },
+        };
+      }),
+    };
+
+    const output = (await bashHandler(
+      { command: "sleep 30" } satisfies BashInput,
+      contextWith(executionPort),
+    )) as BashOutput;
+
+    expect(output.status).toBe("backgrounded");
+    expect(output.backgroundedByUser).toBe(true);
+    expect(output.timedOutAfterMs).toBeUndefined();
+    const content = String(bashToolEntry.formatModelContent?.(output));
+    expect(content).toContain(
+      "User moved this command to the background. It is still running. Do not wait, sleep, or poll for it. Continue with other useful work, or finish your response — you will be notified with the command's output when it completes.",
+    );
+    expect(BashOutputSchema.safeParse(output).success).toBe(true);
+  });
+
+  it("keeps explicit/auto background copy unchanged without requestedBy", async () => {
+    const executionPort: BashBackgroundLifecycleExecutionPort = {
+      async run() {
+        throw new Error("run should not be called");
+      },
+      runBashWithBackgroundLifecycle: vi.fn(async () => ({
+        kind: "backgrounded" as const,
+        task: {
+          taskId: "exec_explicit_bg",
+          status: "running" as const,
+          startedAt: new Date(),
+          outputPath: "/tmp/exec_explicit_bg.output",
+        },
+      })),
+    };
+
+    const output = (await bashHandler(
+      { command: "long-running command", run_in_background: true } satisfies BashInput,
+      contextWith(executionPort),
+    )) as BashOutput;
+
+    expect(output.status).toBe("backgrounded");
+    expect(output.backgroundedByUser).toBeUndefined();
+    const content = String(bashToolEntry.formatModelContent?.(output));
+    expect(content).toContain("Command running in background with ID: exec_explicit_bg.");
+    expect(content).not.toContain("User moved this command to the background");
+  });
+
   it.each([
     { inputTimeout: undefined, expected: 250 },
     { inputTimeout: 0, expected: 250 },

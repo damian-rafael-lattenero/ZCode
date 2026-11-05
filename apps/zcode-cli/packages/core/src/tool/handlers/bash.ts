@@ -216,10 +216,19 @@ async function executeBashHandler(
             { mode: "auto_on_timeout" },
             runOptions,
           )
-        : {
-            kind: "foreground" as const,
-            result: await executionPort.run(request, runOptions),
-          };
+        : // BT（2026-11-05）：普通前台也走 lifecycle（manual 模式）。前台语义与裸 run 逐字
+          // 一致（超时仍由 run 内部 kill、无自动转后台计时器），新增的唯一能力是用户经
+          // v4 backgroundToolCall 把仍在跑的命令原子移交后台。端口不支持时保持裸 run。
+          backgroundLifecyclePort
+          ? backgroundLifecyclePort.runBashWithBackgroundLifecycle(
+              request,
+              { mode: "manual" },
+              runOptions,
+            )
+          : {
+              kind: "foreground" as const,
+              result: await executionPort.run(request, runOptions),
+            };
   const runResult = commandTelemetry
     ? await commandTelemetry.run(async () => {
         const observed = await runCommand();
@@ -234,9 +243,14 @@ async function executeBashHandler(
 
   if (runResult.kind === "backgrounded") {
     // auto_on_timeout 只在超时计时器到点时转后台，所以这里记录的就是触发转后台的超时。
+    // 用户移交（requestedBy:"user"）改走 backgroundedByUser 文案，不携带超时记录。
     const timedOutAfterMs =
-      !parsed.run_in_background && eligibleForAutoBackground ? request.timeoutMs : undefined;
-    return toBackgroundedBashOutput(runResult.task, parsed, timedOutAfterMs);
+      !parsed.run_in_background &&
+      eligibleForAutoBackground &&
+      runResult.requestedBy === undefined
+        ? request.timeoutMs
+        : undefined;
+    return toBackgroundedBashOutput(runResult.task, parsed, timedOutAfterMs, runResult.requestedBy);
   }
 
   const result = runResult.result;
@@ -284,6 +298,7 @@ function toBackgroundedBashOutput(
   task: BackgroundExecutionStartResult,
   input: BashInput,
   timedOutAfterMs: number | undefined,
+  requestedBy?: "user",
 ): BashOutput {
   return attachToolExecutionTelemetry(
     {
@@ -292,6 +307,8 @@ function toBackgroundedBashOutput(
       interrupted: false,
       status: "backgrounded",
       backgroundTaskId: task.taskId,
+      // BT：用户经 backgroundToolCall 移交 → 模型面合成文案走 backgroundedByUser 分支。
+      ...(requestedBy ? { backgroundedByUser: true } : {}),
       ...(timedOutAfterMs !== undefined && timedOutAfterMs > 0 ? { timedOutAfterMs } : {}),
       rawOutputPath: task.outputPath,
       persistedOutputPath: task.outputPath,

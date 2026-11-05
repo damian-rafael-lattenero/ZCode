@@ -139,7 +139,9 @@ function formatBackgroundInfoForModel(result: BashOutput): string {
     return `Command exceeded the assistant-mode blocking budget (${ASSISTANT_BLOCKING_BUDGET_MS / 1000}s) and was moved to the background with ID: ${result.backgroundTaskId}. It is still running \u2014 you will be notified when it completes.${outputText} In assistant mode, delegate long-running work to a subagent or use run_in_background to keep this conversation responsive.`;
   }
   if (result.backgroundedByUser) {
-    return `Command was manually backgrounded by user with ID: ${result.backgroundTaskId}.${stripTrailingPeriod(outputText)}`;
+    // BT（2026-11-05）：用户移交（v4 backgroundToolCall / ctrl+b 复刻）。指令句子面契约
+    // （e2e/UI 与模型行为都锚定这段原文），不得改写。
+    return `Command was manually backgrounded by user with ID: ${result.backgroundTaskId}.${outputText} User moved this command to the background. It is still running. Do not wait, sleep, or poll for it. Continue with other useful work, or finish your response — you will be notified with the command's output when it completes.`;
   }
   const readHint = outputText
     ? ` To check interim output, use ${READ_TOOL_NAME} on that file path.`
@@ -160,10 +162,6 @@ function formatBackgroundOutputPaths(result: BashOutput): string {
     result.stdoutPersistedOutputPath ??
     result.stderrPersistedOutputPath;
   return outputPath ? ` Output is being written to: ${outputPath}.` : "";
-}
-
-function stripTrailingPeriod(value: string): string {
-  return value.endsWith(".") ? value.slice(0, -1) : value;
 }
 
 function observedOutputBytes(result: BashOutput): number {

@@ -184,8 +184,10 @@ test("zcode-cli Bash handler auto-backgrounds eligible foreground commands on ti
 
 test("zcode-cli Bash handler does not auto-background sleep commands on timeout", async () => {
   testRoot = "/repo";
+  // BT（2026-11-05）：sleep 这类非 auto-eligible 命令也走 lifecycle，但 mode 是 manual——
+  // 前台语义与裸 run 一致（从不自动转后台），只有用户显式移交才会进 backgrounded。
   let runCalled = false;
-  let runBashWithBackgroundLifecycleCalled = false;
+  const observedModes: string[] = [];
   const executionPort = {
     async run() {
       runCalled = true;
@@ -209,25 +211,38 @@ test("zcode-cli Bash handler does not auto-background sleep commands on timeout"
         timedOut: false,
       };
     },
-    async runBashWithBackgroundLifecycle() {
-      runBashWithBackgroundLifecycleCalled = true;
-      throw new Error("sleep should not use auto-background");
+    async runBashWithBackgroundLifecycle(
+      _request: ExecutionRequest,
+      lifecycle: { mode: string },
+    ) {
+      observedModes.push(lifecycle.mode);
+      if (lifecycle.mode !== "manual") {
+        throw new Error(`sleep must not use ${lifecycle.mode} lifecycle`);
+      }
+      return {
+        kind: "foreground" as const,
+        result: {
+          cancelled: false,
+          completedAt: new Date(),
+          durationMs: 1,
+          exitCode: 0,
+          startedAt: new Date(),
+          status: "completed" as const,
+          stderr: { bytes: 0, text: "", truncated: false },
+          stdout: { bytes: 0, text: "", truncated: false },
+          timedOut: false,
+        },
+      };
     },
-  } as ExecutionPort & {
-    runBashWithBackgroundLifecycle?: (
-      request: ExecutionRequest,
-      lifecycle: { mode: "explicit" | "auto_on_timeout" },
-      options?: unknown,
-    ) => Promise<unknown>;
-  };
+  } as ExecutionPort;
 
   const output = (await bashHandler(
     { command: "sleep 999", timeout: 10 },
     createContext({}, executionPort),
   )) as BashOutput;
 
-  expect(runCalled).toBe(true);
-  expect(runBashWithBackgroundLifecycleCalled).toBe(false);
+  expect(runCalled).toBe(false);
+  expect(observedModes).toEqual(["manual"]);
   expect(output.status).toBe("completed");
 });
 

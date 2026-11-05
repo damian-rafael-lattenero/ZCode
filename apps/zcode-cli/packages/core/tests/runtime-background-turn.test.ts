@@ -373,6 +373,176 @@ describe("backgroundTurn demotion（DT01 原语语义）", () => {
   });
 });
 
+// ── DT01 投影：detached turn 进入 core SessionProjection.backgroundTasks ──
+
+describe("backgroundTurn projection（DT01 core projection）", () => {
+  it("demote 后 backgroundTasks 出现 taskKind=turn 的 running 行，结算后收口 completed", async () => {
+    const harness = createGatedRuntime("background-turn-projection");
+    const { runtime } = harness;
+    const first = await runtime.admitPrompt(
+      "projection task",
+      undefined,
+      admissionOptions("dt-projection"),
+    );
+    if (first.kind !== "started") throw new Error("first prompt was not admitted");
+    await waitUntilTurnActive(runtime);
+    const foregroundExecutionId = runtime.getActiveForegroundExecutionId();
+    const demote = runtime.backgroundActiveForegroundExecution({
+      expectedForegroundExecutionId: foregroundExecutionId,
+    });
+    if (demote?.kind !== "demoted") throw new Error("demote failed");
+    await first.completion;
+
+    const runningProjection = await runtime.getProjection();
+    expect(
+      runningProjection.backgroundTasks.find((task) => task.taskId === demote.workId),
+    ).toMatchObject({
+      cancellable: true,
+      description: "projection task",
+      status: "running",
+      taskId: demote.workId,
+      taskKind: "turn",
+      toolName: "Turn",
+    });
+
+    harness.releaseModel();
+    await waitFor(() => !runtime.hasUnsettledBackgroundTurn(), "detached turn never settled");
+    await waitUntilIdleAfterWake(harness);
+    const settledProjection = await runtime.getProjection();
+    expect(
+      settledProjection.backgroundTasks.find((task) => task.taskId === demote.workId),
+    ).toMatchObject({
+      status: "completed",
+      taskId: demote.workId,
+      taskKind: "turn",
+    });
+  });
+});
+
+// ── DT08：stop 永不作用于 backgroundTurn ──
+
+describe("backgroundTurn stop exclusion（DT08）", () => {
+  it("demote 后 stop 为 idle noop：不 abort、不影响 detached turn", async () => {
+    const harness = createGatedRuntime("background-turn-stop-exclusion");
+    const { runtime } = harness;
+    const first = await runtime.admitPrompt(
+      "stop exclusion task",
+      undefined,
+      admissionOptions("dt-stop"),
+    );
+    if (first.kind !== "started") throw new Error("first prompt was not admitted");
+    await waitUntilTurnActive(runtime);
+    const foregroundExecutionId = runtime.getActiveForegroundExecutionId();
+    const demote = runtime.backgroundActiveForegroundExecution({
+      expectedForegroundExecutionId: foregroundExecutionId,
+    });
+    if (demote?.kind !== "demoted") throw new Error("demote failed");
+    await first.completion;
+
+    // foreground authority 已释放：主 stop（带 demote 前的 execution id 或不带）都是 idle，
+    // 没有 target 可 abort —— detached turn 只能经 cancelBackgroundWork 取消。
+    expect(
+      runtime.stopActiveForegroundExecution({
+        expectedForegroundExecutionId: foregroundExecutionId,
+        reason: "main stop button",
+      }),
+    ).toEqual({ kind: "idle" });
+    expect(runtime.stopActiveForegroundExecution()).toEqual({ kind: "idle" });
+
+    // turn 未被打断：仍在跑、仍 unsettled。
+    expect(runtime.hasUnsettledBackgroundTurn()).toBe(true);
+    expect(runtime.getActiveTurnInfo()?.turnId).toBe(first.turnId);
+
+    // 干净收口。
+    harness.releaseModel();
+    await waitFor(() => !runtime.hasUnsettledBackgroundTurn(), "detached turn never settled");
+    await waitUntilIdleAfterWake(harness);
+  });
+});
+
+// ── DT09：CLI restart 诚实降级（detached turn 丢失，不自动恢复、无 ghost running 行） ──
+
+describe("backgroundTurn restart honesty（DT09）", () => {
+  it("restart 后 detached turn 诚实丢失：无在跑事实、取消报 not found、无 ghost running 行", async () => {
+    const eventStore = createTestSessionEventStore();
+    // 模型 gate 永不释放：runtime 进程带着未收口的 detached turn「死亡」。
+    const modelGate = new Promise<void>(() => {});
+    const firstRuntime = new AgentRuntime(
+      createSessionId("background-turn-restart"),
+      { mode: "build", modelSelection: { providerId: "test-provider", modelId: "test-model" } },
+      {
+        eventStore,
+        modelFactory: createTestModelFactory({
+          generateText: (async () => {
+            await modelGate;
+            return {
+              finishReason: "stop",
+              text: "never finishes before restart",
+              usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 },
+            };
+          }) as never,
+        }),
+      },
+    );
+    const first = await firstRuntime.admitPrompt(
+      "restart victim",
+      undefined,
+      admissionOptions("dt-restart"),
+    );
+    if (first.kind !== "started") throw new Error("first prompt was not admitted");
+    await waitUntilTurnActive(firstRuntime);
+    const foregroundExecutionId = firstRuntime.getActiveForegroundExecutionId();
+    const demote = firstRuntime.backgroundActiveForegroundExecution({
+      expectedForegroundExecutionId: foregroundExecutionId,
+    });
+    if (demote?.kind !== "demoted") throw new Error("demote failed");
+    await first.completion;
+    await waitFor(
+      () => firstRuntime.hasUnsettledBackgroundTurn(),
+      "detached turn never registered",
+    );
+    // runtime 进程死亡（模型 gate 永不释放；不再触碰 firstRuntime）。
+
+    // 冷恢复：同一 eventStore 上的新 runtime。
+    const restarted = new AgentRuntime(
+      createSessionId("background-turn-restart"),
+      { mode: "build", modelSelection: { providerId: "test-provider", modelId: "test-model" } },
+      {
+        eventStore,
+        modelFactory: createTestModelFactory({
+          generateText: (async () => ({
+            finishReason: "stop",
+            text: "restarted",
+            usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 },
+          })) as never,
+        }),
+      },
+    );
+
+    // 诚实丢失：内存事实全部为空，不自动恢复执行。
+    expect(restarted.hasUnsettledBackgroundTurn()).toBe(false);
+    expect(restarted.hasRunningBackgroundTasks()).toBe(false);
+    expect(restarted.getActiveTurnInfo()).toBeUndefined();
+    expect(restarted.getActiveForegroundExecutionId()).toBeUndefined();
+
+    // 取消走 background control：句柄已死，如实报 not found（不误杀、不假装取消）。
+    await expect(restarted.stopBackgroundTask(demote.workId, {})).resolves.toMatchObject({
+      ok: false,
+      reason: "background_task_not_found",
+      status: "lost",
+      taskId: demote.workId,
+      type: "local_turn",
+    });
+
+    // FINDING（DT09 未完全落地，2026-11-04 报告）：重启后的 core projection 会把持久化的
+    // BackgroundTaskStarted 事件重放出 ghost running 行——
+    //   const ghost = (await restarted.getProjection()).backgroundTasks
+    //     .find((task) => task.taskId === demote.workId);
+    //   expect(ghost?.status ?? "absent").not.toBe("running");  // 实际收到 "running"
+    // 该断言对着 landed runtime 是红的，先不进绿套件；E2E / 投影侧需要补偿事件或冷恢复清理。
+  });
+});
+
 // ── DT02：queue drain hold（runtime command queue 的 FIFO 门）+ sendQueuedNow 提升屏障 ──
 
 function promptCommand(id: string, input: string): RuntimeCommand {

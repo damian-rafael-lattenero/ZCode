@@ -5707,6 +5707,8 @@ const zhCN: Record<string, string> = {
   // DT 分组：运行中的 primaryTurn 转入后台（demote）。turn 不中断，完成后以 backgroundResult 独立回流。
   "chat.composer.backgroundTurn": "转入后台",
   "chat.composer.backgroundTurn.tooltip": "当前任务转入后台继续执行，输入框立即可用",
+  // DT 分组：live tail 下方的带文字按钮（与 composer 按钮同一条命令）。
+  "chat.timeline.backgroundTurn": "转入后台",
   "chat.composer.backgroundWorks.tooltipTerminal": "运行中的终端",
   "chat.composer.backgroundWorks.tooltipAgent": "打开运行中的智能体",
   // workflow 从 bash 拆出后 badge 有三类：

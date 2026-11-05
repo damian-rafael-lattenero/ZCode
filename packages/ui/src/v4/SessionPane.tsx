@@ -6289,6 +6289,10 @@ export function SessionPane({
                   onLoadAllOlder={handleLoadAllOlder}
                   turnNavigatorDirectoryRevision={state.turnNavigatorDirectoryRevision}
                   bottomDock={conversationBottomDock}
+                  onBackgroundTurn={handleBackgroundTurn}
+                  canBackgroundTurn={(timelineSnapshot?.control.activeWorks ?? []).some(
+                    (work) => work.kind === "primaryTurn",
+                  )}
                   hideTurnNavigator={shareSelectionPanelVisible && !compactForRemoteControl}
                   backgroundScrollLocked={false}
                   headerSlot={

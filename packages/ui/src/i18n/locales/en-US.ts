@@ -6110,6 +6110,8 @@ const enUS: Record<string, string> = {
   "chat.composer.backgroundTurn": "Send to background",
   "chat.composer.backgroundTurn.tooltip":
     "Keep the current task running in the background; you can keep typing right away",
+  // DT group: the labeled pill under the live tail (same command as the composer button).
+  "chat.timeline.backgroundTurn": "Go to background",
   "chat.composer.backgroundWorks.tooltipTerminal": "Open running terminals",
   "chat.composer.backgroundWorks.tooltipAgent": "Open running agents",
   "chat.composer.backgroundWorks.tooltipWorkflow": "Open running workflows",

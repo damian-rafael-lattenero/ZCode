@@ -15,7 +15,6 @@ import { clearAppData, clickTestIdByDom } from "#e2e/helpers/desktop-app";
 import { ensureToolCrossProductFullAccessMode } from "#e2e/helpers/conversation-session-tool-cross-product";
 import {
   countUpstreamRequests,
-  findFirstUpstreamRequestIndex,
   waitForUpstreamRequest,
 } from "#e2e/helpers/conversation-session-network";
 import { waitForToolCallBlockByToolCallId } from "#e2e/helpers/conversation-session-tool";
@@ -105,26 +104,16 @@ describe("BT01/BT04 转入后台：Bash tool call demote 主链路与同 turn co
     // tool call 立即结算：合成结果（含字面交接句）回灌进入下一次 provider 请求。
     // 注意：`<task-notification>` 字样出现在每个请求的系统提示（Bash 工具说明）里，
     // 任何 body 级排除/包含都会误伤；请求锚定用 includes 的唯一串 + lastUserMessageIncludes。
-    const settleQuery = {
-      includes: [BT_MAIN_TOOL_CALL_ID, BT_HANDOFF_SENTENCE],
-      excludes: [TITLE_SENTINEL, "CRITICAL: Respond with TEXT ONLY"],
-    };
+    // 结算与 continuation 是同一个请求（合成 tool_result + 历史 marker/toolu 同体）：
+    // turn 不中断的顺序事实由「idle 时 wake 请求仍为 0（sleep 未到点）」承载，见下。
     await waitForUpstreamRequest(
-      settleQuery,
+      {
+        includes: [BT_MAIN_TOOL_CALL_ID, BT_HANDOFF_SENTENCE],
+        excludes: [TITLE_SENTINEL, "CRITICAL: Respond with TEXT ONLY"],
+      },
       "BT01 移交后合成结果没有回灌，模型没有拿到继续指令",
       30000,
     );
-    const settleIndex = await findFirstUpstreamRequestIndex(settleQuery);
-    expect(settleIndex).not.toBeNull();
-    // turn 不中断：continuation 请求先于任何 task-notification（不是 DT 式前台收口）。
-    const continuationIndex = await findFirstUpstreamRequestIndex(
-      {
-        includes: [BT_MAIN_MARKER, BT_MAIN_TOOL_CALL_ID],
-        excludes: [TITLE_SENTINEL, "CRITICAL: Respond with TEXT ONLY"],
-      },
-      { afterIndex: settleIndex ?? undefined },
-    );
-    expect(continuationIndex).not.toBeNull();
     await waitForV4AssistantMessageContaining(BT_MAIN_CONTINUED_TEXT, 60000);
 
     // turn 正常收口（composer 不被 force-idle 是「后台 work 比 turn 活得久」的同框事实）：
@@ -134,6 +123,9 @@ describe("BT01/BT04 转入后台：Bash tool call demote 主链路与同 turn co
       "BT01 turn 没有正常收口（streaming 未解除）",
       60000,
     );
+    // turn 不中断的最强顺序事实：turn 已收口而后台命令（sleep 20）仍在跑——此刻
+    // 不可能有 task-notification 请求；continuation 没有被 wake 吞并。
+    expect(await countWakeRequests(BT_MAIN_MARKER)).toBe(0);
 
     // 行翻 backgrounded：按钮消失，kind 标签缀 `· Background`（zh/en 双语断言）。
     expect(await hasToolBackgroundButton(BT_MAIN_TOOL_CALL_ID)).toBe(false);

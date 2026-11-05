@@ -282,7 +282,10 @@ export function withOfficialCommandEnv(
   // 丢 requestBackgroundByToolCallId 时 v4 backgroundToolCall 在桌面/带官方命令端点的
   // 运行时里永远落到 unsupported fault（ack failed），卡上的「Go to background」全灭。
   if (supportsBashBackgroundRequestByToolCallId(port)) {
-    wrapped.requestBackgroundByToolCallId = port.requestBackgroundByToolCallId.bind(port);
+    const requestBackgroundByToolCallId = port.requestBackgroundByToolCallId;
+    if (typeof requestBackgroundByToolCallId === "function") {
+      wrapped.requestBackgroundByToolCallId = requestBackgroundByToolCallId.bind(port);
+    }
   }
   if (supportsBackgroundTaskWaiter(port)) {
     wrapped.waitForBackgroundTask = port.waitForBackgroundTask.bind(port);

@@ -29,6 +29,7 @@ const forkTestFiles = [
   "packages/ui/test/useUiPluginRecommendations.test.ts",
   "packages/ui/test/v4ConversationStatusPanelGitReview.test.ts",
   "packages/ui/test/v4ConversationTurnRenderUnits.test.ts",
+  "packages/ui/test/v4ToolBackgroundButton.test.ts",
 ];
 
 export default defineConfig({

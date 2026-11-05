@@ -116,6 +116,11 @@ export function toolCallRowToLegacyNode(row: ToolCallRow): TaskChatToolCallTreeN
         toolCallId: row.toolCallId,
         toolName: row.toolName,
         v4Status: row.status,
+        // ctrl+b parity：单工具后台移交的可见性事实。投影把行翻成 backgrounded=true +
+        // workId（移交成功）后 execute renderer 据此收走按钮；真值才落键，与 cuaApp 等
+        // 条目保持同一个「缺席即未发生」的 raw 形状。
+        ...(row.backgrounded === true ? { backgrounded: true } : {}),
+        ...(row.workId !== undefined ? { workId: row.workId } : {}),
         ...(row.cuaApp ? { cuaApp: row.cuaApp } : {}),
         ...(legacyDisplay ? { display: legacyDisplay } : {}),
         // R7：运行中进度（MCP notifications/progress）供 McpToolCallBlock 头部进度条消费。

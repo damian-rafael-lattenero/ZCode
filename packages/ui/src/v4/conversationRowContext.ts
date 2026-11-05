@@ -116,6 +116,14 @@ export interface ConversationRowRenderContext {
    */
   onCancelBackgroundWork?: (workId: string) => void;
   /**
+   * 把一条**运行中的工具调用**移交后台（v4 `backgroundToolCall {toolCallId}`），由宿主绑定
+   * dispatchCommand + sessionId。运行中的 Bash 卡用它做单卡粒度的「Go to background」
+   * （OpenCode ctrl+b parity）：与轮级 `onBackgroundTurn` 不同粒度——demote 的是单个
+   * tool call，不是整个 primaryTurn。投影把行翻成 `backgrounded: true, workId` 后入口
+   * 随之消失；只读会话宿主不注入即整卡无入口。
+   */
+  onBackgroundToolCall?: (toolCallId: string) => void;
+  /**
    * 工具卡页脚的 Resume：与详情页同一条
    * v4 `resumeWorkflowRun {workId ≡ runId}`。只读会话下宿主不注入。
    */

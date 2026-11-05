@@ -10,6 +10,7 @@ import {
   acquireForegroundPromotionLease,
   drainRuntimeCommandQueue,
 } from "../src/runtime/methods/runtime-command-queue.js";
+import { InMemoryRuntimeTaskRegistry } from "../src/runtime-task/registry.js";
 
 function command(id: string, priority: RuntimeCommandPriority): RuntimeCommand {
   return {
@@ -182,6 +183,8 @@ describe("RuntimeCommandQueue", () => {
       foregroundPromotionLease: undefined,
       runtimeCommandDrainActive: false,
       runtimeCommandQueue: createRuntimeCommandQueue(),
+      // DT（2026-11-04）：drain 现在读 runtime task registry 判断 detached turn hold。
+      runtimeTaskRegistry: new InMemoryRuntimeTaskRegistry(),
     } as unknown as AgentRuntimeInternal;
 
     expect(

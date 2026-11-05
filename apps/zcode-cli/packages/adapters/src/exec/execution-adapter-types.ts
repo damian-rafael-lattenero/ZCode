@@ -55,7 +55,12 @@ export interface PreparedBashOutput {
   releasePreparation: () => void;
 }
 
-export type BashBackgroundLifecycleMode = "explicit" | "auto_on_timeout";
+/**
+ * "manual"（2026-11-05 BT 分组）：普通前台 Bash 也走 lifecycle，前台语义与裸 run 逐字一致
+ * （timeout 仍由 run 内部 kill、无 auto-background deadline），唯一新增能力是外部触发
+ * requestBackgroundByToolCallId 可把仍在跑的前台命令原子移交后台。
+ */
+export type BashBackgroundLifecycleMode = "explicit" | "auto_on_timeout" | "manual";
 
 export type BashBackgroundLifecycleResult =
   | {
@@ -65,6 +70,8 @@ export type BashBackgroundLifecycleResult =
   | {
       kind: "backgrounded";
       task: BackgroundExecutionStartResult;
+      /** 仅外部（用户 backgroundToolCall）触发时置位：handler 据此改写合成输出文案。 */
+      requestedBy?: "user";
     };
 
 export interface PreparedChildSpawn {

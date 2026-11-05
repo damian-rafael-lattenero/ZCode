@@ -20,6 +20,16 @@ import type {
 } from "@zcode/contracts";
 
 export class NodeExecutionAdapterLifecycle extends NodeExecutionAdapterRun {
+  /**
+   * BT（2026-11-05）：仍在跑的前台 Bash lifecycle 按 toolCallId 的外部移交入口。
+   * 仅 state==="foreground" 的在跑命令在场（commitBackground 幂等守卫 state，终态/移交后
+   * 由 settle 释放条目）；value 携带 taskId，移交成功即返回 workId 供 runtime 结果使用。
+   */
+  private readonly foregroundBashBackgroundRequests = new Map<
+    string,
+    { commit: (requestedBy?: "user") => boolean; taskId: string }
+  >();
+
   async start(
     request: ExecutionRequest,
     options: ExecutionRunOptions = {},
@@ -128,13 +138,19 @@ export class NodeExecutionAdapterLifecycle extends NodeExecutionAdapterRun {
     const taskId = `exec_${crypto.randomUUID()}`;
     const startedAt = new Date();
     const controller = new AbortController();
+    // BT：外部移交（requestBackgroundByToolCallId）按请求自带的 toolCallId 寻址。
+    const traceAttributes = request.trace?.attributes;
+    const externalToolCallId =
+      typeof traceAttributes?.toolCallId === "string" ? traceAttributes.toolCallId : undefined;
     const originalPersistOutput = request.outputLimit?.persistOutput ?? "none";
     const originalMaxArtifactBytes = useBashFile
       ? undefined
       : (request.outputLimit?.maxArtifactBytes ?? this.persistedOutputLimit(request));
     const runRequest: ExecutionRequest = {
       ...request,
-      timeoutMs: 0,
+      // manual 模式的前台语义与裸 run 一致：超时仍由 run 内部 kill（deadline timer 不存在）。
+      // explicit / auto_on_timeout 沿用原行为：不计 run 内超时，转后台由移交/计时器决定。
+      timeoutMs: lifecycle.mode === "manual" ? request.timeoutMs : 0,
       outputLimit: {
         ...request.outputLimit,
         killProcessOnPersistedLimit: false,
@@ -206,7 +222,7 @@ export class NodeExecutionAdapterLifecycle extends NodeExecutionAdapterRun {
       timeoutTimer = undefined;
     };
 
-    const commitBackground = () => {
+    const commitBackground = (requestedBy?: "user") => {
       if (state !== "foreground" || controller.signal.aborted) return false;
 
       // 旧 explicit background 复用了通用 start()，foreground timeout 与
@@ -229,9 +245,26 @@ export class NodeExecutionAdapterLifecycle extends NodeExecutionAdapterRun {
           pid: record.pid,
           ...outputPaths,
         },
+        ...(requestedBy ? { requestedBy } : {}),
       });
       return true;
     };
+
+    // BT：外部移交入口登记。toolCallId 缺席（非 Bash handler 请求）不登记；
+    // settle 时按条目身份释放，避免同 id 的后续执行被旧条目误删。
+    const releaseExternalBackgroundRequest = () => {
+      if (!externalToolCallId) return;
+      const entry = this.foregroundBashBackgroundRequests.get(externalToolCallId);
+      if (entry && entry.commit === commitBackground) {
+        this.foregroundBashBackgroundRequests.delete(externalToolCallId);
+      }
+    };
+    if (externalToolCallId) {
+      this.foregroundBashBackgroundRequests.set(externalToolCallId, {
+        commit: commitBackground,
+        taskId,
+      });
+    }
 
     const armForegroundDeadline = () => {
       if (lifecycle.mode !== "auto_on_timeout" || timeoutTimer || state !== "foreground") {
@@ -278,6 +311,7 @@ export class NodeExecutionAdapterLifecycle extends NodeExecutionAdapterRun {
     };
 
     const settleExecution = async (unprocessedResult: ExecutionResult) => {
+      releaseExternalBackgroundRequest();
       clearForegroundDeadline();
       if (state === "backgrounded") {
         this.finalizeBackgroundTaskRecord(
@@ -315,6 +349,18 @@ export class NodeExecutionAdapterLifecycle extends NodeExecutionAdapterRun {
     })();
 
     return await outcome;
+  }
+
+  /**
+   * BT（2026-11-05）：按 toolCallId 把仍在跑的前台 Bash 原子移交后台。进程信号不动——
+   * 命中即走 commitBackground（脱离 parent abort、清 deadline、登记 task、outcome 以
+   * requestedBy:"user" 提前 resolve）。命中返回后台 workId（≡ tracker taskId）；
+   * 无在跑前台 / 已移交 / 已终态返回 undefined（调用方按 guard noop 处理）。
+   */
+  requestBackgroundByToolCallId(toolCallId: string): string | undefined {
+    const entry = this.foregroundBashBackgroundRequests.get(toolCallId);
+    if (!entry) return undefined;
+    return entry.commit("user") ? entry.taskId : undefined;
   }
 
   async readBackgroundBashOutput(

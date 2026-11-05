@@ -7,7 +7,7 @@ import type {
   ExecutionRunOptions,
 } from "@zcode/contracts";
 
-export type BashBackgroundLifecycleMode = "explicit" | "auto_on_timeout";
+export type BashBackgroundLifecycleMode = "explicit" | "auto_on_timeout" | "manual";
 
 export type BashBackgroundLifecycleResult =
   | {
@@ -17,6 +17,8 @@ export type BashBackgroundLifecycleResult =
   | {
       kind: "backgrounded";
       task: BackgroundExecutionStartResult;
+      /** 仅外部（用户 backgroundToolCall）触发时置位：handler 据此改写合成输出文案。 */
+      requestedBy?: "user";
     };
 
 export interface BashBackgroundLifecycleExecutionPort extends ExecutionPort {
@@ -25,6 +27,21 @@ export interface BashBackgroundLifecycleExecutionPort extends ExecutionPort {
     lifecycle: { mode: BashBackgroundLifecycleMode },
     options?: ExecutionRunOptions,
   ): Promise<BashBackgroundLifecycleResult>;
+  /**
+   * BT（2026-11-05）：按 toolCallId 把仍在跑的前台 Bash 原子移交后台（进程不动、不 abort）。
+   * 命中返回后台 workId（≡ tracker 的 taskId）；无在跑前台 / 已终态返回 undefined。
+   * 可选能力：runtime 与 handler 均鸭子类型探测，fakes 无需实现。
+   */
+  requestBackgroundByToolCallId?(toolCallId: string): string | undefined;
+}
+
+export function supportsBashBackgroundRequestByToolCallId(
+  executionPort: ExecutionPort | undefined,
+): executionPort is BashBackgroundLifecycleExecutionPort {
+  return (
+    typeof (executionPort as Partial<BashBackgroundLifecycleExecutionPort>)
+      .requestBackgroundByToolCallId === "function"
+  );
 }
 
 export function supportsBashBackgroundLifecycle(

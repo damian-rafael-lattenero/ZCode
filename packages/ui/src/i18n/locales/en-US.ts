@@ -6105,12 +6105,7 @@ const enUS: Record<string, string> = {
   "chat.summaryPanel.runningBackgroundTasksMiniValuePlural": "{count} background",
   "chat.summaryPanel.stopRunningBackgroundTask": "Stop running background task",
   "chat.summaryPanel.openRunningSubagentSession": "Open subagent session",
-  // DT group: demote the running primaryTurn to background. The turn keeps running and
-  // comes back as an independent backgroundResult turn when done.
-  "chat.composer.backgroundTurn": "Send to background",
-  "chat.composer.backgroundTurn.tooltip":
-    "Keep the current task running in the background; you can keep typing right away",
-  // DT group: the labeled pill under the live tail (same command as the composer button).
+  // BT group (OpenCode ctrl+b parity): the label under a RUNNING bash tool card.
   "chat.timeline.backgroundTurn": "Go to background",
   // ctrl+b parity: execute card kind-label suffix once the projection flips row.backgrounded.
   "chat.toolCall.backgrounded": "Background",

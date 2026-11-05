@@ -5587,6 +5587,14 @@ ensureReady/restart 必须拒绝，原实例不关闭且 generation 不变；正
 
 ## DT. 转入后台（Foreground→Background Turn，2026-11-04 accepted）
 
+**2026-11-05 修订（owner verdict）：UI 入口退役。** BT 落地后 owner 明确拒绝通用 affordance
+（「ese go to background GENERICO NO DEBERIA ESTAR AHI」）：composer 图标与 timeline pill
+已删除——运行中的 turn 没有任何可见的 backgroundTurn 入口，唯一入口是运行中 Bash 卡下方的
+"Go to background"（BT）。`backgroundTurn` 命令与 runtime/projection 机制保留（协议能力，
+无 UI 入口；Task Island detached 分区与 settle 逻辑照旧，服务任何未来 demote 路径）。
+点按 composer 按钮的 DT01/DT05–DT08 pending E2E 入口已消失——那些 pending spec 视为
+obsolete，除非未来恢复 turn 级入口，不再 replay。
+
 owner 2026-11-04 裁决：运行中的 primary turn 可由用户主动转入 background（demote），解除
 completion gate，让用户立即继续其他工作；turn 本身不得中断。该裁决取代 background matrix
 BG-P03 的剪枝（Ctrl+B 类前台转后台控制从 "unsupported product surface" 变为 accepted 产品能力）。

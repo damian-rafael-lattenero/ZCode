@@ -5704,10 +5704,7 @@ const zhCN: Record<string, string> = {
   "chat.summaryPanel.runningBackgroundTasksMiniValuePlural": "{count} 后台",
   "chat.summaryPanel.stopRunningBackgroundTask": "停止运行中的后台任务",
   "chat.summaryPanel.openRunningSubagentSession": "打开子智能体会话",
-  // DT 分组：运行中的 primaryTurn 转入后台（demote）。turn 不中断，完成后以 backgroundResult 独立回流。
-  "chat.composer.backgroundTurn": "转入后台",
-  "chat.composer.backgroundTurn.tooltip": "当前任务转入后台继续执行，输入框立即可用",
-  // DT 分组：live tail 下方的带文字按钮（与 composer 按钮同一条命令）。
+  // BT 分组（OpenCode ctrl+b parity）：运行中 Bash 卡下方按钮的文案。
   "chat.timeline.backgroundTurn": "转入后台",
   // ctrl+b parity：投影把行翻成 backgrounded 后，execute 卡 kind 标签的后缀词。
   "chat.toolCall.backgrounded": "后台",

@@ -60,7 +60,6 @@ import {
   TID_V4_ATTACHMENT,
   TID_V4_ATTACHMENT_UPLOAD_PROGRESS,
   TID_V4_ATTACHMENT_UPLOAD_RETRY,
-  TID_V4_COMPOSER_BACKGROUND_TURN,
   TID_V4_STOP,
   testId,
 } from "@zcode/shared/test-ids";
@@ -73,7 +72,6 @@ import {
   ArrowUpIcon,
   ClipboardPenLineIcon,
   InfoIcon,
-  PictureInPicture2Icon,
   RotateCcwIcon,
   SquareIcon,
   XIcon,
@@ -507,12 +505,6 @@ export interface ConversationComposerProps {
   /** queue 撤回 admission 读取的完整 composer 占用态；附件包含上传中状态。 */
   onDraftStateChange?: (state: { hasContent: boolean; busy: boolean }) => void;
   onStop: () => void;
-  /**
-   * DT 分组：把运行中的 primaryTurn demote 为 backgroundTurn（`backgroundTurn` 命令）。
-   * 身份（expectedForegroundExecutionId）由宿主从 demote 时刻的最新投影读取；
-   * demote 不被草稿或 pending interaction 阻塞（DT05），投影回放前这里不做乐观相位。
-   */
-  onBackgroundTurn: () => void;
   /** 目录选中模型（providerId/modelId）；thought/revision 由宿主从最新投影补齐。 */
   onSelectModel: (
     provider: string,
@@ -628,7 +620,6 @@ function ConversationComposerImpl({
   onTextChange,
   onDraftStateChange,
   onStop,
-  onBackgroundTurn,
   onSelectModel,
   onSelectThought,
   onSwitchMode,
@@ -1435,13 +1426,6 @@ function ConversationComposerImpl({
     (canReload || (routingAllowsSend && attachmentsReady && submissionReady && !runtimeBlocked));
   // 旧 UI 状态机：streaming + 空草稿 → Stop；有草稿 → 发送键（入队）。
   const showStopControl = canStop && !hasDraftToSubmit;
-  // DT 分组：投影里仍有 primaryTurn 即可「转入后台」（该条件本身蕴含 running/canStop，
-  // 与 stop 的可用性同源：都只读 control 投影，不引入第二份状态）。草稿与 pending
-  // interaction 都不阻塞 demote（DT05）——有草稿时按钮排在发送键旁，而不是隐藏。
-  const demotablePrimaryTurn = (snapshot?.control.activeWorks ?? []).some(
-    (work) => work.kind === "primaryTurn",
-  );
-  const showBackgroundTurnControl = canStop && demotablePrimaryTurn;
 
   useEffect(() => {
     if (!canSend) setSendTooltipOpen(false);
@@ -2002,20 +1986,6 @@ function ConversationComposerImpl({
     });
   }, [onStop]);
 
-  // DT 分组：转入后台。identity/命令都在宿主（handleBackgroundTurn）里，与 stop 相同分工。
-  const handleBackgroundTurnClick = useCallback(() => {
-    runUserAction({
-      input: {
-        featureId: "conversation.composer.message",
-        action: "background_turn",
-        trigger: "button",
-      },
-      operation: onBackgroundTurn,
-      completed: { resultSource: "optimistic_projection" },
-      failureStage: "background_turn",
-    });
-  }, [onBackgroundTurn]);
-
   // 发送键是 type="submit"，与 Enter 共用 handleEditorSubmit；DOM 事件顺序保证 click 早于
   // submit，故这里只置标记，由 submit() 读取并复位。
   const handleSendButtonClick = useCallback(
@@ -2092,12 +2062,6 @@ function ConversationComposerImpl({
     : sendTooltipTitle;
   const resolvedSendTooltipShortcut = modifierTooltip?.shortcut ?? sendShortcut;
   const stopTooltipTitle = intl.formatMessage({ id: "chat.stop" });
-  // DT 分组：转入后台按钮的 aria 文案与 tooltip 分开——aria 说动作本身，tooltip 说后果
-  // （turn 不中断、composer 立即可输入），避免两处都需要一整句话。
-  const backgroundTurnTitle = intl.formatMessage({ id: "chat.composer.backgroundTurn" });
-  const backgroundTurnTooltipTitle = intl.formatMessage({
-    id: "chat.composer.backgroundTurn.tooltip",
-  });
   const visibleError = error && !shouldSuppressChatErrorBanner(error) ? error : null;
 
   useEffect(() => {
@@ -2582,24 +2546,6 @@ function ConversationComposerImpl({
             />
           </span>
         ) : null}
-        {showBackgroundTurnControl ? (
-          // DT 分组：转入后台与 Stop 并排（有草稿时与发送键并排）。demote 后按钮随
-          // 权威投影里 primaryTurn 的消失而消失，不做本地乐观隐藏。
-          <ControlHintTooltip title={backgroundTurnTooltipTitle}>
-            <Button
-              type="button"
-              variant="secondary"
-              size="icon-md"
-              onClick={handleBackgroundTurnClick}
-              data-testid={TID_V4_COMPOSER_BACKGROUND_TURN}
-              className="rounded-full"
-              aria-label={backgroundTurnTitle}
-            >
-              <PictureInPicture2Icon className="size-4" />
-              <span className="sr-only">{backgroundTurnTitle}</span>
-            </Button>
-          </ControlHintTooltip>
-        ) : null}
         {showStopControl ? (
           <ControlHintTooltip title={stopTooltipTitle} shortcut="Esc">
             <Button
@@ -2648,7 +2594,6 @@ function ConversationComposerImpl({
       draftConfig,
       draftMode,
       handleStopClick,
-      handleBackgroundTurnClick,
       handleSendButtonClick,
       handleConfigPickerOpenChange,
       highspeedCard,
@@ -2676,11 +2621,8 @@ function ConversationComposerImpl({
       sendShortcut,
       sendTooltipTitle,
       sessionId,
-      showBackgroundTurnControl,
       showStopControl,
       stopTooltipTitle,
-      backgroundTurnTitle,
-      backgroundTurnTooltipTitle,
       workspaceIdentity,
       workspacePath,
     ],

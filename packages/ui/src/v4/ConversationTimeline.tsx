@@ -18,12 +18,8 @@ import {
 } from "react";
 import { flushSync } from "react-dom";
 import { useVirtualizer } from "@tanstack/react-virtual";
-import { ArrowDownIcon, PictureInPicture2Icon } from "lucide-react";
-import {
-  TID_V4_TIMELINE,
-  TID_V4_TIMELINE_BACKGROUND_TURN,
-  TID_V4_TIMELINE_BOTTOM,
-} from "@zcode/shared/test-ids";
+import { ArrowDownIcon } from "lucide-react";
+import { TID_V4_TIMELINE, TID_V4_TIMELINE_BOTTOM } from "@zcode/shared/test-ids";
 import type {
   ApiRetryState,
   AttachmentRef,
@@ -375,14 +371,6 @@ export interface ConversationTimelineProps {
   };
   /** 范围编辑时，左侧 rail 由分享选择面板独占。 */
   hideTurnNavigator?: boolean;
-  /** DT 分组：发出 backgroundTurn 命令的回调（宿主 SessionPane 的 handleBackgroundTurn）。 */
-  onBackgroundTurn?: () => void;
-  /**
-   * DT 分组：在 live tail 下方显示「Go to background」按钮。
-   * 可见性权威在宿主投影（control.activeWorks 里有 demotable 的 primaryTurn），
-   * timeline 只负责把它渲染在正在执行的任务正下方。
-   */
-  canBackgroundTurn?: boolean;
 }
 
 /**
@@ -433,8 +421,6 @@ function ConversationTimelineImpl({
   scrollToQueryActionRef,
   selectionActions,
   hideTurnNavigator = false,
-  onBackgroundTurn,
-  canBackgroundTurn = false,
 }: ConversationTimelineProps) {
   const { intl } = useZCodeIntl();
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -2257,35 +2243,6 @@ function ConversationTimelineImpl({
                     onEdit={onEdit}
                     topClearedByTimeline={sessionStartAtTop && liveUnitIndex === 0}
                   />
-                </div>
-              ) : null}
-              {canBackgroundTurn && onBackgroundTurn ? (
-                // DT 分组：带文字的「Go to background」直接落在 live tail（正在执行的
-                // 回合——bash/shell/subagent…）正下方。与 composer 图标按钮发出同一条
-                // backgroundTurn 命令；投影里的 primaryTurn 消失后按钮随之消失。
-                <div
-                  data-v4-timeline-content-column="true"
-                  className={cn(
-                    "relative mx-auto w-full shrink-0",
-                    contentWidthClassName,
-                    summaryPanelInlineOffsetClassName,
-                  )}
-                >
-                  <div className="flex justify-center py-2">
-                    <Button
-                      type="button"
-                      variant="secondary"
-                      size="sm"
-                      onClick={onBackgroundTurn}
-                      data-testid={TID_V4_TIMELINE_BACKGROUND_TURN}
-                      className="rounded-full gap-1.5"
-                    >
-                      <PictureInPicture2Icon className="size-3.5" />
-                      <span>
-                        {intl.formatMessage({ id: "chat.timeline.backgroundTurn" })}
-                      </span>
-                    </Button>
-                  </div>
                 </div>
               ) : null}
               {pendingGuides.length > 0 ? (

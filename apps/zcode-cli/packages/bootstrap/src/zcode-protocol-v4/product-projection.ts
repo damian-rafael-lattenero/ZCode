@@ -37,6 +37,7 @@ import type {
   ToolCallErrorPayload,
   ToolCallProgressPayload,
   ToolCallResultPayload,
+  BackgroundTurnDemotedPayload,
   ToolCallScheduledPayload,
   ToolCallStartedPayload,
   ToolResultDisplayPayload,
@@ -1052,9 +1053,29 @@ export class ProductProjection {
   completeHydrationReplay(): ConversationDelta[] {
     if (!this.hydrationAccumulator) throw new Error("hydration replay is not active");
     const deltas = this.materializeCommandRowActions([]);
+    // DT09（backgroundTurnDiesOnRestart）：detached turn 不跨进程。hydration
+    // replay 里仍 running 的 kind "turn" row 只能是被重启杀死的孤儿——诚实收口
+    // 为 cancelled，不留 ghost 行、不触发 wake。
+    const ghostDelta = this.settleOrphanedDetachedTurns();
+    if (ghostDelta) deltas.push(ghostDelta);
     applyConversationDeltasMutable(this.hydrationAccumulator, deltas);
     this.hydrationAccumulator = null;
     return deltas;
+  }
+
+  /** 见 [completeHydrationReplay]：孤儿 detached turn → cancelled（幂等，无孤儿为 null）。 */
+  private settleOrphanedDetachedTurns(): ConversationDelta | null {
+    const backgroundWorks = this.snapshot.backgroundWorks;
+    const hasOrphan = backgroundWorks.some(
+      (work) => work.kind === "turn" && work.status === "running",
+    );
+    if (!hasOrphan) return null;
+    const settled = backgroundWorks.map((work) =>
+      work.kind === "turn" && work.status === "running"
+        ? { ...work, status: "cancelled" as const }
+        : work,
+    );
+    return { op: "state.updated", patch: { backgroundWorks: settled } };
   }
 
   private applyEventInternal(
@@ -1589,6 +1610,8 @@ export class ProductProjection {
         return this.onSessionForked(event);
       case SessionEventType.RewindTriggered:
         return this.onRewindTriggered(event);
+      case SessionEventType.BackgroundTurnDemoted:
+        return this.onBackgroundTurnDemoted(event);
       case SessionEventType.BackgroundTaskStarted:
       case SessionEventType.BackgroundTaskUpdated:
       case SessionEventType.BackgroundTaskCompleted:
@@ -4675,6 +4698,32 @@ export class ProductProjection {
   // cancelBackgroundWork：后台任务生命周期（BackgroundTaskStarted/Updated/Completed）
   // → 维护 snapshot.backgroundWorks（后台工作面读它渲染 + cancel 入口）。
   // taskId≡workId 无需翻译；status 归一到 summary 的 4 值封闭枚举。
+  // DT（2026-11-04）：primaryTurn demote。执行不中断——foreground 侧在此收口：
+  // header sella SUCCESS、control 清空 activeWorks 回 completed（stopExcludes-
+  // BackgroundTurn：canStop 回 idle）。执行本体随后以 taskKind "turn" 进入
+  // backgroundWorks（BackgroundTaskStarted），结果经 backgroundResult wake 的
+  // 独立 product turn 回到时间线；迟到的真实 TurnComplete 再 settle 一次是幂等的。
+  private onBackgroundTurnDemoted(event: SessionEvent): ConversationDelta[] {
+    this.outputContinuationTextRowId = null;
+    const deltas: ConversationDelta[] = [
+      ...this.upsertTurnHeader(event, "completedSuccess"),
+      {
+        op: "state.updated",
+        patch: this.controlPatch({
+          phase: "completedSuccess",
+          sessionEnded: true,
+          canStop: false,
+          stopState: "idle",
+          stopTargetKind: "unknown",
+          activeWorks: [],
+        }),
+      },
+    ];
+    this.currentTurnId = null;
+    this.currentTurnStartedModelOnly = false;
+    return deltas;
+  }
+
   private onBackgroundTaskLifecycle(event: SessionEvent): ConversationDelta[] {
     const payload = event.payload as {
       taskId?: string;
@@ -4703,7 +4752,9 @@ export class ProductProjection {
           ? "bash"
           : payload.taskKind === "workflow"
             ? "workflow"
-            : legacyKind === "agent"
+            : payload.taskKind === "turn"
+              ? "turn"
+              : legacyKind === "agent"
               ? "subagent"
               : legacyKind === "bash"
                 ? "bash"

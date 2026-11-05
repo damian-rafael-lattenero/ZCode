@@ -3078,6 +3078,22 @@ export function SessionPane({
     [dispatchCommand, sessionId],
   );
 
+  // 单工具粒度的后台移交（ctrl+b parity）：与 handleBackgroundTurn 不同，toolCallId 由
+  // 运行中的行自己带来（哪张卡在跑只有卡片知道），pane 不做 activeWorks 查找；执行身份
+  // 与状态守卫由 runtime 按 toolCallId 自行解析。无乐观相位——卡片翻成后台态等权威投影
+  // （row.backgrounded / row.workId）回放（runtimeFactsAreAuthoritative）。
+  // 定义在 rowContext memo 之前（handleCancelBackgroundWork 同款约束）。
+  const handleBackgroundToolCall = useCallback(
+    (toolCallId: string) => {
+      if (!sessionId) return;
+      logger.lifecycle.info("[v4-pane] backgroundToolCall 命令发出", { sessionId, toolCallId });
+      void dispatchCommand("backgroundToolCall", { toolCallId }, sessionId).catch((error) => {
+        logger.lifecycle.warn(`[v4-pane] backgroundToolCall 失败: ${String(error)}`);
+      });
+    },
+    [dispatchCommand, sessionId],
+  );
+
   // 动态工作流灰度快照：只读 store，
   // 取数在 Root 里做一次。未就绪时 enabled 为 false，按未命中处理。
   const { enabled: dynamicWorkflowEnabled } = useDynamicWorkflowAvailability();
@@ -3167,6 +3183,9 @@ export function SessionPane({
       onOpenWorkflowArtifact:
         runtimeReady && onOpenWorkflowArtifact ? handleOpenWorkflowArtifact : undefined,
       onCancelBackgroundWork: readOnly || !runtimeReady ? undefined : handleCancelBackgroundWork,
+      // 单工具后台移交（ctrl+b parity）：与 onCancelBackgroundWork 同两道门（只读、runtime
+      // 就绪）；缺席即运行中的 Bash 卡没有「Go to background」。
+      onBackgroundToolCall: readOnly || !runtimeReady ? undefined : handleBackgroundToolCall,
       // Resume 进入会话上下文的唯一供给点；灰度与只读两道门都在 resolveWorkflowResumeHandler 里，
       // 断在这里等于工具卡页脚与摘要卡的按钮一起消失。
       onResumeWorkflowRun: resolveWorkflowResumeHandler({
@@ -3251,6 +3270,7 @@ export function SessionPane({
       readOnly,
       runtimeReady,
       handleCancelBackgroundWork,
+      handleBackgroundToolCall,
       dynamicWorkflowEnabled,
       handleResumeWorkflowRun,
       handleAmendWorkflowRunSettings,

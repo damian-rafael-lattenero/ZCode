@@ -1,0 +1,169 @@
+{
+  "version": 1,
+  "caseName": "conversation-session-detach-turn",
+  "spec": "./test/e2e/conversation-session/conversation-session-detach-turn.test.ts",
+  "fixtures": [
+    {
+      "id": "dt-detach-title-peer",
+      "description": "E2E_DT_DETACH_PEER 对照会话首发的 case-local 标题生成响应。",
+      "metadata": {
+        "kind": "common",
+        "timingPolicy": "fast-text",
+        "source": "synthetic",
+        "syntheticReason": "E2E_DT_DETACH_PEER 首发会触发默认 title sidecar；固定 case-local 标题响应，避免 default replay 回退 legacy provider-basic，并用该首发 marker 隔离跨 case 匹配。"
+      },
+      "match": {
+        "method": "POST",
+        "pathIncludes": "/messages",
+        "bodyIncludes": ["Generate a concise title", "E2E_DT_DETACH_PEER"]
+      },
+      "response": {
+        "statusCode": 200,
+        "text": {
+          "id": "dt-detach-title-peer",
+          "inputTokens": 64,
+          "outputTokens": 8,
+          "text": "{\"title\":\"DT Detach Peer\"}"
+        }
+      }
+    },
+    {
+      "id": "dt-detach-peer-fast-text",
+      "description": "对照会话（DT01 sidebar 排序基准行）的稳定完成回复。",
+      "metadata": {
+        "kind": "main",
+        "timingPolicy": "fast-text",
+        "source": "synthetic",
+        "syntheticReason": "对照会话只需可断言的完成哨兵，证明其先于主会话回到 completed 的非运行分层。"
+      },
+      "maxMatches": 1,
+      "match": {
+        "method": "POST",
+        "pathIncludes": "/messages",
+        "lastUserMessageIncludes": ["E2E_DT_DETACH_PEER"],
+        "bodyExcludes": ["Generate a concise title", "CRITICAL: Respond with TEXT ONLY"]
+      },
+      "response": {
+        "statusCode": 200,
+        "text": {
+          "id": "dt-detach-peer-reply",
+          "inputTokens": 96,
+          "outputTokens": 8,
+          "text": "dt-detach-peer-ok"
+        }
+      }
+    },
+    {
+      "id": "upstream-dt-detach-main-controlled-stream",
+      "description": "DT01 主链路：首轮受控慢流，部分正文流出后停在 mid-flight 等待用例释放。",
+      "metadata": {
+        "kind": "main",
+        "timingPolicy": "controlled-stream",
+        "source": "synthetic",
+        "syntheticReason": "demote 断言需要稳定的中流窗口（部分正文已流出且轮未收口）；真实 provider 过快完成会让「转入后台」无可观察窗口。releaseAfterChunks=3 在首段正文后 hold，观察点（demote、Task Island、sidebar 排序、切走会话）完成后由用例释放自然收口。"
+      },
+      "maxMatches": 1,
+      "match": {
+        "method": "POST",
+        "pathIncludes": "/messages",
+        "lastUserMessageIncludes": ["E2E_DT_DETACH_MAIN"],
+        "bodyExcludes": ["Generate a concise title", "CRITICAL: Respond with TEXT ONLY"]
+      },
+      "response": {
+        "statusCode": 200,
+        "statusMessage": "OK",
+        "headers": {
+          "cache-control": "no-cache",
+          "content-type": "text/event-stream; charset=utf-8"
+        },
+        "releaseAfterChunks": 3,
+        "chunks": [
+          {
+            "offsetMs": 0,
+            "text": "event: message_start\ndata: {\"type\":\"message_start\",\"message\":{\"id\":\"dt-detach-main\",\"type\":\"message\",\"role\":\"assistant\",\"model\":\"deepseek-v4-flash\",\"content\":[],\"stop_reason\":null,\"stop_sequence\":null,\"usage\":{\"input_tokens\":88,\"cache_creation_input_tokens\":0,\"cache_read_input_tokens\":0,\"output_tokens\":0,\"service_tier\":\"standard\"}}}\n\n"
+          },
+          {
+            "offsetMs": 0,
+            "text": "event: content_block_start\ndata: {\"type\":\"content_block_start\",\"index\":0,\"content_block\":{\"type\":\"text\",\"text\":\"\"}}\n\n"
+          },
+          {
+            "offsetMs": 0,
+            "text": "event: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"text_delta\",\"text\":\"dt-detach-streaming \"}}\n\n"
+          },
+          {
+            "offsetMs": 0,
+            "text": "event: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"text_delta\",\"text\":\"dt-detach-final-ok\"}}\n\n"
+          },
+          {
+            "offsetMs": 0,
+            "text": "event: content_block_stop\ndata: {\"type\":\"content_block_stop\",\"index\":0}\n\n"
+          },
+          {
+            "offsetMs": 0,
+            "text": "event: message_delta\ndata: {\"type\":\"message_delta\",\"delta\":{\"stop_reason\":\"end_turn\",\"stop_sequence\":null},\"usage\":{\"input_tokens\":88,\"output_tokens\":8,\"service_tier\":\"standard\"}}\n\n"
+          },
+          {
+            "offsetMs": 0,
+            "text": "event: message_stop\ndata: {\"type\":\"message_stop\"}\n\n"
+          }
+        ],
+        "text": {
+          "id": "dt-detach-main",
+          "inputTokens": 88,
+          "outputTokens": 8,
+          "text": "dt-detach-streaming dt-detach-final-ok"
+        }
+      }
+    },
+    {
+      "id": "dt-detach-title-main",
+      "description": "E2E_DT_DETACH_MAIN 主会话首发的 case-local 标题生成响应。",
+      "metadata": {
+        "kind": "common",
+        "timingPolicy": "fast-text",
+        "source": "synthetic",
+        "syntheticReason": "E2E_DT_DETACH_MAIN 首发会触发默认 title sidecar；固定 case-local 标题响应，避免 default replay 回退 legacy provider-basic，并用该首发 marker 隔离跨 case 匹配。"
+      },
+      "match": {
+        "method": "POST",
+        "pathIncludes": "/messages",
+        "bodyIncludes": ["Generate a concise title", "E2E_DT_DETACH_MAIN"]
+      },
+      "response": {
+        "statusCode": 200,
+        "text": {
+          "id": "dt-detach-title-main",
+          "inputTokens": 64,
+          "outputTokens": 8,
+          "text": "{\"title\":\"DT Detach Main\"}"
+        }
+      }
+    },
+    {
+      "id": "dt-detach-wake-fast-text",
+      "description": "DT06 backgroundResult wake：detached turn 完成通知触发的独立 product turn 回复。",
+      "metadata": {
+        "kind": "main",
+        "timingPolicy": "fast-text",
+        "source": "synthetic",
+        "syntheticReason": "wake 轮只需稳定完成的可断言哨兵；通知请求本身由 runtime 的 backgroundResult 管线真实产生。"
+      },
+      "maxMatches": 1,
+      "match": {
+        "method": "POST",
+        "pathIncludes": "/messages",
+        "bodyIncludes": ["<task-notification>", "E2E_DT_DETACH_MAIN"],
+        "bodyExcludes": ["Generate a concise title"]
+      },
+      "response": {
+        "statusCode": 200,
+        "text": {
+          "id": "dt-detach-wake-reply",
+          "inputTokens": 160,
+          "outputTokens": 12,
+          "text": "dt-detach-wake-consumed-ok"
+        }
+      }
+    }
+  ]
+}

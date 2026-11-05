@@ -274,6 +274,13 @@ export interface ToolCallBlockRenderContext {
    */
   onResumeWorkflowRun?: (request: { workflowName?: string }) => void;
   /**
+   * 运行中的 Bash 卡把单条命令移交后台（v4 `backgroundToolCall {toolCallId}`，
+   * OpenCode ctrl+b parity）。与轮级 backgroundTurn 不同粒度；可见性门在 renderer
+   * （v4Status=running 且投影尚未翻 backgrounded）。缺席（只读 / runtime 未就绪 /
+   * 非 v4 宿主）即不渲染按钮。
+   */
+  onBackgroundToolCall?: (toolCallId: string) => void;
+  /**
    * 点一枚子代理药丸直接开它的 transcript：卡片交出槽位身份（run、站点、序号、运行时名，会话 id 有则随行；
    * 还没启动的药丸也可开，落到占位 tab），会话与 workspace 身份由宿主绑定。缺席即药丸不可点。
    */

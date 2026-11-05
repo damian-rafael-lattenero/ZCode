@@ -2338,6 +2338,9 @@ const ToolCallRowView = memo(function ToolCallRowView({
               ? (request) => context.onResumeWorkflowRun?.(workflowRun.runId, request.workflowName)
               : undefined
           }
+          // ctrl+b parity：单工具后台移交。可见性门（v4Status=running 且未 backgrounded）
+          // 在 execute renderer；这里只把宿主绑定的分发器带下去。
+          onBackgroundToolCall={context.onBackgroundToolCall}
           // 产物药丸 → 产物 tab：与通知行的 chips 同一条打开路径（不带版本号，打开即最新版）。
           onOpenWorkflowArtifact={
             context.onOpenWorkflowArtifact && context.sessionId && workflowRun

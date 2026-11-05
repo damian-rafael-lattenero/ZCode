@@ -5709,6 +5709,8 @@ const zhCN: Record<string, string> = {
   "chat.composer.backgroundTurn.tooltip": "当前任务转入后台继续执行，输入框立即可用",
   // DT 分组：live tail 下方的带文字按钮（与 composer 按钮同一条命令）。
   "chat.timeline.backgroundTurn": "转入后台",
+  // ctrl+b parity：投影把行翻成 backgrounded 后，execute 卡 kind 标签的后缀词。
+  "chat.toolCall.backgrounded": "后台",
   "chat.composer.backgroundWorks.tooltipTerminal": "运行中的终端",
   "chat.composer.backgroundWorks.tooltipAgent": "打开运行中的智能体",
   // workflow 从 bash 拆出后 badge 有三类：

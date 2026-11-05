@@ -3,9 +3,11 @@ import {
   bashOutputDisplaySchema,
   executionOutputPreviewSchema,
 } from "@zcode/shared/zcode-protocol-v4";
+import { TID_V4_TOOL_BACKGROUND, testId } from "@zcode/shared/test-ids";
 import { ExecuteOutput } from "@/ToolCallBlocks/renderers/ExecuteOutput.js";
-import { SquareTerminalIcon } from "lucide-react";
+import { PictureInPicture2Icon, SquareTerminalIcon } from "lucide-react";
 import { useCallback, useMemo } from "react";
+import { Button } from "@/components/ui/button.js";
 import { useZCodeIntl } from "@/i18n/IntlProvider.js";
 import { ToolSnapshotFieldNotice } from "@/ToolCallBlocks/ToolSnapshotFieldNotice.js";
 import { ToolLayout } from "../ToolLayout.js";
@@ -270,6 +272,16 @@ export function ExecuteToolCallBlock(context: ToolCallBlockRenderContext) {
   const { intl } = useZCodeIntl();
   const { toolCallNode, isRunning, statusLabel, errorText, isOfficeMode = false } = context;
   const { toolCall } = toolCallNode;
+  // ctrl+b parity：v4 投影的后台移交事实都在 raw（toolCallRowAdapter 桥接）。
+  // 运行判定用 v4Status 而不是 isRunning：legacy isRunning 还涵盖 pending
+  // （流式输入 / 审批中），那些卡还没有可移交的执行。投影把行翻成
+  // backgrounded=true 后按钮消失、kind 标签缀上后台状态。
+  const raw = isPlainRecord(toolCall.raw) ? toolCall.raw : undefined;
+  const isV4Running = raw?.v4Status === "running";
+  const backgrounded = raw?.backgrounded === true;
+  const onBackgroundToolCall = context.onBackgroundToolCall;
+  const canBackgroundToolCall =
+    onBackgroundToolCall !== undefined && isV4Running && !backgrounded && !isOfficeMode;
   const secondaryText = getExecuteSecondaryText(toolCall.input);
   const contentParts = getExecuteContentParts(toolCall.input);
   const outputText = extractExecuteResultText(toolCall.output);
@@ -356,9 +368,22 @@ export function ExecuteToolCallBlock(context: ToolCallBlockRenderContext) {
                   : "chat.toolCall.execute.conciseCompleted",
               })
             : context.kindLabelOverride) ??
-          intl.formatMessage({
-            id: isRunning ? "chat.toolCall.execute.running" : "chat.toolCall.kind.terminal",
-          })
+          (backgrounded ? (
+            // 后台态是条事实不是新设计语言：在既有 kind 标签后缀一枚弱化词。
+            <span>
+              {intl.formatMessage({
+                id: isRunning ? "chat.toolCall.execute.running" : "chat.toolCall.kind.terminal",
+              })}
+              <span className="text-foreground-subtle">
+                {" · "}
+                {intl.formatMessage({ id: "chat.toolCall.backgrounded" })}
+              </span>
+            </span>
+          ) : (
+            intl.formatMessage({
+              id: isRunning ? "chat.toolCall.execute.running" : "chat.toolCall.kind.terminal",
+            })
+          ))
         }
         sourceLabel={context.sourceLabel}
         primaryText={
@@ -376,6 +401,25 @@ export function ExecuteToolCallBlock(context: ToolCallBlockRenderContext) {
         title={isOfficeMode ? undefined : toolCall.title}
         renderContent={renderContent}
       />
+      {canBackgroundToolCall && onBackgroundToolCall ? (
+        // ctrl+b parity：运行中的 Bash 卡把单条命令移交后台（v4 backgroundToolCall）。
+        // 与轮级「Go to background」药丸（ConversationTimeline）不同粒度；置于卡下方、
+        // 不随收起态隐藏（ToolSnapshotFieldNotice 同款位置约定）。投影翻成
+        // backgrounded 后整块消失。
+        <div className="mt-1 flex justify-center">
+          <Button
+            type="button"
+            variant="secondary"
+            size="sm"
+            className="rounded-full gap-1.5"
+            onClick={() => onBackgroundToolCall(toolCall.toolId)}
+            data-testid={testId(TID_V4_TOOL_BACKGROUND, toolCall.toolId)}
+          >
+            <PictureInPicture2Icon className="size-3.5" />
+            <span>{intl.formatMessage({ id: "chat.timeline.backgroundTurn" })}</span>
+          </Button>
+        </div>
+      ) : null}
       {!isOfficeMode ? (
         <ToolSnapshotFieldNotice
           refs={toolCall.snapshotRefs ?? []}

@@ -90,12 +90,17 @@ export function ExecuteGroupToolCallBlock(context: ToolCallBlockRenderContext) {
             onOpenBrowserUrl={context.onOpenBrowserUrl}
             onOpenAutomationsMain={context.onOpenAutomationsMain}
             onLoadFullToolCallFields={context.onLoadFullToolCallFields}
+            // ctrl+b parity：组内成员渲染的是完整 execute 卡，让它自持「Go to
+            // background」——可见性门（v4Status=running 且未 backgrounded）在 execute
+            // renderer，只有仍在运行的那个成员会长出按钮，身份（toolCallId）也归它。
+            onBackgroundToolCall={context.onBackgroundToolCall}
           />
         ))}
       </div>
     ),
     [
       childToolCalls,
+      context.onBackgroundToolCall,
       context.onLoadFullToolCallFields,
       context.onOpenAutomationsMain,
       context.onOpenBrowserUrl,

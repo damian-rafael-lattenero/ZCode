@@ -89,6 +89,7 @@ function ToolCallBlockComponent({
   pluginUi: providedPluginUi,
   onOpenWorkflowRun,
   onResumeWorkflowRun,
+  onBackgroundToolCall,
   onOpenWorkflowActor,
   onOpenWorkflowWorkspace,
   onOpenWorkflowArtifact,
@@ -125,6 +126,8 @@ function ToolCallBlockComponent({
   onOpenWorkflowRun?: ToolCallBlockRenderContext["onOpenWorkflowRun"];
   /** 工具卡页脚的 Resume；与 workflowRun 同样不向子工具卡透传。 */
   onResumeWorkflowRun?: ToolCallBlockRenderContext["onResumeWorkflowRun"];
+  /** 运行中 Bash 卡的「Go to background」（ctrl+b parity）；可见性门在 execute renderer。 */
+  onBackgroundToolCall?: ToolCallBlockRenderContext["onBackgroundToolCall"];
   /** 药丸 → 子代理 transcript；同样不向子工具卡透传。 */
   onOpenWorkflowActor?: ToolCallBlockRenderContext["onOpenWorkflowActor"];
   /** 脚本药丸 → 脚本 transcript；同样不向子工具卡透传。 */
@@ -327,6 +330,7 @@ function ToolCallBlockComponent({
       // 是根本没渲染过。run 态紧凑卡就挂在这个回调上，所以它必须在这里。
       onOpenWorkflowRun,
       onResumeWorkflowRun,
+      onBackgroundToolCall,
       onOpenWorkflowActor,
       onOpenWorkflowWorkspace,
       onOpenWorkflowArtifact,
@@ -353,6 +357,7 @@ function ToolCallBlockComponent({
       pluginUi,
       onOpenWorkflowRun,
       onResumeWorkflowRun,
+      onBackgroundToolCall,
       onOpenWorkflowActor,
       onOpenWorkflowWorkspace,
       onOpenWorkflowArtifact,

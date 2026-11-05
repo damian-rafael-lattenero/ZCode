@@ -2166,18 +2166,18 @@ BG13/BG18 增量埋点断言：保留内部工具逐条上报及零 token 断言
 
 ## DT（Foreground→Background Turn）覆盖状态
 
-这些 case 对应 [conversation-session-case-catalog.md](../conversation-session-case-catalog.md) 的 `DT` 分组（2026-11-04 owner 裁决，取代 background matrix 的 BG-P03 剪枝）。当前全部为 accepted-but-missing：产品语义已锁定，自动化断言随实现落地补齐。
+这些 case 对应 [conversation-session-case-catalog.md](../conversation-session-case-catalog.md) 的 `DT` 分组（2026-11-04 owner 裁决，取代 background matrix 的 BG-P03 剪枝）。DT01/DT05/DT06/DT07/DT08 已有 `manual-review/pending` spec（case-local fixture/manifest 齐备，待人工 review 后转正）；其余仍为 accepted-but-missing：产品语义已锁定，自动化断言随实现落地补齐。
 
 | Catalog ID | 覆盖状态 | 自动化 | 备注                                                                                  |
 | ---------- | -------- | ------ | ------------------------------------------------------------------------------------- |
-| DT01       | missing  |        | demote 主链路：turn 不中断、session completed、Task Island detached 行、composer 可输入 |
+| DT01       | planned  | `manual-review/pending/conversation-session-detach-turn.test.ts`      | demote 主链路：turn 不中断、session completed、Task Island detached 行、composer 可输入；pending spec 已含 case-local fixture/manifest，待人工 review 后转正 |
 | DT02       | missing  |        | demote + queue>0：drain 被 detached turn 阻塞，收口后 FIFO 恢复                        |
 | DT03       | missing  |        | demote + guide eligible：文本照常 steer 进 detached turn                               |
 | DT04       | missing  |        | demote 后跨 session 并发不受影响                                                       |
-| DT05       | missing  |        | pending interaction 下 demote：badge 呈现、resolve 后继续                              |
-| DT06       | missing  |        | detached 完成的 backgroundResult wake：独立 product turn + OS 通知 + badge             |
-| DT07       | missing  |        | Task Island cancel：无 wake、session 保持 completed                                    |
-| DT08       | missing  |        | stop 排除 detached turn：按钮不可用、stop noop                                         |
+| DT05       | planned  | `manual-review/pending/conversation-session-detach-turn-edges.test.ts` | pending interaction 下 demote：badge 呈现、resolve 后继续；pending spec 已含 case-local fixture/manifest，待人工 review 后转正 |
+| DT06       | planned  | `manual-review/pending/conversation-session-detach-turn.test.ts`      | detached 完成的 backgroundResult wake：独立 product turn + OS 通知 + badge；pending spec 已含 case-local fixture/manifest，待人工 review 后转正 |
+| DT07       | planned  | `manual-review/pending/conversation-session-detach-turn-edges.test.ts` | Task Island cancel：无 wake、session 保持 completed；pending spec 已含 case-local fixture/manifest，待人工 review 后转正 |
+| DT08       | planned  | `manual-review/pending/conversation-session-detach-turn-edges.test.ts` | stop 排除 detached turn：按钮不可用、stop noop；pending spec 已含 case-local fixture/manifest，待人工 review 后转正 |
 | DT09       | missing  |        | CLI restart 丢失 detached turn：无 ghost 行、transcript 保留                           |
 | DT10       | missing  |        | fork 不复制 detached turn 与 pending result                                            |
 

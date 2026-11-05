@@ -1,0 +1,52 @@
+{
+  "version": 1,
+  "caseName": "conversation-session-detach-turn",
+  "spec": "./test/e2e/conversation-session/conversation-session-detach-turn.test.ts",
+  "providerFixtures": [
+    "./test/e2e/fixtures/upstream/common.json",
+    "./test/e2e/fixtures/upstream/conversation-session/conversation-session-detach-turn.json"
+  ],
+  "fileFixtures": [],
+  "requests": [
+    {
+      "id": "dt-detach-title-peer",
+      "description": "E2E_DT_DETACH_PEER 对照会话首发的 case-local 标题生成响应。",
+      "kind": "common",
+      "source": "synthetic",
+      "timingPolicy": "fast-text",
+      "syntheticReason": "E2E_DT_DETACH_PEER 首发会触发默认 title sidecar；固定 case-local 标题响应，避免 default replay 回退 legacy provider-basic，并用该首发 marker 隔离跨 case 匹配。"
+    },
+    {
+      "id": "dt-detach-peer-fast-text",
+      "description": "对照会话（DT01 sidebar 排序基准行）的稳定完成回复。",
+      "kind": "main",
+      "source": "synthetic",
+      "timingPolicy": "fast-text",
+      "syntheticReason": "对照会话只需可断言的完成哨兵，证明其先于主会话回到 completed 的非运行分层。"
+    },
+    {
+      "id": "upstream-dt-detach-main-controlled-stream",
+      "description": "DT01 主链路：首轮受控慢流，部分正文流出后停在 mid-flight 等待用例释放。",
+      "kind": "main",
+      "source": "synthetic",
+      "timingPolicy": "controlled-stream",
+      "syntheticReason": "demote 断言需要稳定的中流窗口（部分正文已流出且轮未收口）；真实 provider 过快完成会让「转入后台」无可观察窗口。releaseAfterChunks=3 在首段正文后 hold，观察点（demote、Task Island、sidebar 排序、切走会话）完成后由用例释放自然收口。"
+    },
+    {
+      "id": "dt-detach-title-main",
+      "description": "E2E_DT_DETACH_MAIN 主会话首发的 case-local 标题生成响应。",
+      "kind": "common",
+      "source": "synthetic",
+      "timingPolicy": "fast-text",
+      "syntheticReason": "E2E_DT_DETACH_MAIN 首发会触发默认 title sidecar；固定 case-local 标题响应，避免 default replay 回退 legacy provider-basic，并用该首发 marker 隔离跨 case 匹配。"
+    },
+    {
+      "id": "dt-detach-wake-fast-text",
+      "description": "DT06 backgroundResult wake：detached turn 完成通知触发的独立 product turn 回复。",
+      "kind": "main",
+      "source": "synthetic",
+      "timingPolicy": "fast-text",
+      "syntheticReason": "wake 轮只需稳定完成的可断言哨兵；通知请求本身由 runtime 的 backgroundResult 管线真实产生。"
+    }
+  ]
+}

@@ -170,6 +170,13 @@ export const commandPayloadSchemas = {
   backgroundTurn: z.object({
     expectedForegroundExecutionId: z.string().min(1).optional(),
   }),
+  // 2026-11-05 BT 分组（OpenCode ctrl+b 复刻）：运行中的 Bash tool call 由用户主动转入
+  // 后台。粒度与 backgroundTurn 不同：tool call 以合成结果立即结算（"Command moved to
+  // the background…"），进程继续跑，模型在同一 turn 内继续下一步；完成时走既有的
+  // BackgroundTaskCompleted → backgroundResult 通知回流。不是 CAS 命令。
+  backgroundToolCall: z.object({
+    toolCallId: z.string().min(1),
+  }),
   // compact 是输入型维护命令：idle 时立即执行，busy/held 时进入 FIFO。
   // 因为 admission 与当前 revision 无关，不走 CAS；sourceCommandId 提供幂等边界。
   compact: z.object({ modelSelection: modelSelectionSchema.optional() }),

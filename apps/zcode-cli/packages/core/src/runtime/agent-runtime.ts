@@ -124,6 +124,7 @@ import type {
   StableConversationForkOptions,
   BackgroundActiveForegroundExecutionOptions,
   BackgroundActiveForegroundExecutionResult,
+  RuntimeBackgroundRunningToolCallResult,
   DetachedTurnHandle,
   StopActiveForegroundExecutionOptions,
   StopActiveForegroundExecutionResult,
@@ -756,6 +757,15 @@ export interface AgentRuntime {
   backgroundActiveForegroundExecution(
     options?: BackgroundActiveForegroundExecutionOptions,
   ): BackgroundActiveForegroundExecutionResult;
+  /**
+   * BT（2026-11-05）：把仍在跑的前台 Bash tool call 移交后台（OpenCode ctrl+b 复刻）。
+   * 身份守卫在 adapter 的 toolCallId 登记表（foreground + 未 aborted → 否则 noop，
+   * 绝不 abort）；命中后进程信号不动，tool call 以合成结果立即 resolve。
+   */
+  backgroundRunningToolCall(
+    toolCallId: string,
+    options?: { traceContext?: TraceContext },
+  ): RuntimeBackgroundRunningToolCallResult;
   /** 未收口的 detached turn 是否存在（queue drain gate 与命令路由的权威事实）。 */
   hasUnsettledBackgroundTurn(): boolean;
   activatePausedTargetAfterResume(traceContext: TraceContext): Promise<SessionGoal | null>;

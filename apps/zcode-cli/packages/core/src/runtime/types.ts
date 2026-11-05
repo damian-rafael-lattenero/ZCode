@@ -640,6 +640,17 @@ export type BackgroundActiveForegroundExecutionResult =
   | { kind: "mismatch"; activeForegroundExecutionId: string }
   | { kind: "unsupported"; activeForegroundExecutionId: string };
 
+/**
+ * backgroundRunningToolCall（BT，2026-11-05）的结果：
+ * - backgrounded：tool call 已移交后台，workId ≡ 后台任务 taskId（tracker/投影共用）；
+ * - noop：守卫未命中（无该 toolCallId 的在跑前台 / 已移交 / 已终态），绝不 abort；
+ * - unsupported：executionPort 缺外部移交能力（stub / 旧端口）。
+ */
+export type RuntimeBackgroundRunningToolCallResult =
+  | { kind: "backgrounded"; workId: string }
+  | { kind: "noop" }
+  | { kind: "unsupported" };
+
 export type ForegroundPromotionLeaseMode = "after-current" | "idle-only";
 
 export interface ForegroundPromotionLeaseState {

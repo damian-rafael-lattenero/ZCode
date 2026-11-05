@@ -39,8 +39,8 @@ export function supportsBashBackgroundRequestByToolCallId(
   executionPort: ExecutionPort | undefined,
 ): executionPort is BashBackgroundLifecycleExecutionPort {
   return (
-    typeof (executionPort as Partial<BashBackgroundLifecycleExecutionPort>)
-      .requestBackgroundByToolCallId === "function"
+    typeof (executionPort as Partial<BashBackgroundLifecycleExecutionPort> | undefined)
+      ?.requestBackgroundByToolCallId === "function"
   );
 }
 

@@ -63,6 +63,7 @@ import {
   backgroundActiveForegroundExecution,
   hasUnsettledBackgroundTurn,
 } from "./background-turn.js";
+import { backgroundRunningToolCall } from "./background-tool-call.js";
 import { hasResidencyBlockingWork, trackResidencyBlockingWork } from "./residency.js";
 import {
   clearAllPendingInputs,
@@ -267,6 +268,7 @@ export function installAgentRuntimeMethods(ctor: AgentRuntimeConstructor): void 
   proto.releaseForegroundPromotionLease = releaseForegroundPromotionLease;
   proto.stopActiveForegroundExecution = stopActiveForegroundExecution;
   proto.backgroundActiveForegroundExecution = backgroundActiveForegroundExecution;
+  proto.backgroundRunningToolCall = backgroundRunningToolCall;
   proto.hasUnsettledBackgroundTurn = hasUnsettledBackgroundTurn;
   proto.enqueueBackgroundTaskNotification = enqueueBackgroundTaskNotification;
   proto.enqueueSubagentMessage = enqueueSubagentMessage;

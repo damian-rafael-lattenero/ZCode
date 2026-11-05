@@ -1,0 +1,138 @@
+{
+  "version": 1,
+  "caseName": "conversation-session-background-tool-call-edges",
+  "spec": "./test/e2e/conversation-session/conversation-session-background-tool-call-edges.test.ts",
+  "providerFixtures": [
+    "./test/e2e/fixtures/upstream/common.json",
+    "./test/e2e/fixtures/upstream/conversation-session/conversation-session-background-tool-call-edges.json"
+  ],
+  "fileFixtures": [
+    {
+      "path": ".zcode-e2e/conversation-session-background-tool-call-edges/bt-read-target.txt",
+      "source": "created-by-spec",
+      "description": "BT03 相位 2 Read tool_use 的读取目标（spec before 钩子经 resolveE2ERuntimePath 预建，fixture 以 {{e2eRuntimeRoot}} 绝对路径引用）。"
+    }
+  ],
+  "requests": [
+    {
+      "id": "bt-edges-title-double",
+      "description": "E2E_BT_DOUBLE 会话首发的 case-local 标题生成响应。",
+      "kind": "common",
+      "source": "synthetic",
+      "timingPolicy": "fast-text",
+      "syntheticReason": "E2E_BT_DOUBLE 首发会触发默认 title sidecar；固定 case-local 标题响应，避免 default replay 回退 legacy provider-basic，并用该首发 marker 隔离跨 case 匹配。"
+    },
+    {
+      "id": "bt-edges-double-bash-tool-call",
+      "description": "BT02：Bash tool_use，启动真实 `sleep` 前台进程，为同帧双击提供稳定 running 窗口。",
+      "kind": "main",
+      "source": "synthetic",
+      "timingPolicy": "fast-text",
+      "syntheticReason": "双击幂等的两次点击都必须落在投影回流前的运行窗口；真实 sleep 进程保证窗口稳定而不需要受控流。"
+    },
+    {
+      "id": "bt-edges-double-continue",
+      "description": "BT02：第一条命令 accepted 后合成结果回灌 → 模型同 turn 继续（只结算一次）。",
+      "kind": "main",
+      "source": "synthetic",
+      "timingPolicy": "fast-text",
+      "syntheticReason": "continuation 哨兵证明重复移交被 noop 拒绝后 tool call 只结算一次、turn 未中断；matcher 靠 toolCallId 区分且显式排除 task-notification。"
+    },
+    {
+      "id": "bt-edges-double-wake",
+      "description": "BT02：后台命令自然完成后的单一 backgroundResult wake 回复。",
+      "kind": "main",
+      "source": "synthetic",
+      "timingPolicy": "fast-text",
+      "syntheticReason": "wake 哨兵证明重复移交被拒绝后原命令仍按 backgroundResult 语义单次收口，用例用请求计数断言无重复通知。"
+    },
+    {
+      "id": "bt-edges-title-visibility",
+      "description": "E2E_BT_VISIBILITY 会话（BT03 三相位共用 session）首发的 case-local 标题生成响应。",
+      "kind": "common",
+      "source": "synthetic",
+      "timingPolicy": "fast-text",
+      "syntheticReason": "E2E_BT_VISIBILITY 首发会触发默认 title sidecar；固定 case-local 标题响应，避免 default replay 回退 legacy provider-basic。后续同 session 相位不发标题请求；后续新 session 的 marker 以该前缀开头，复用同一标题响应即可（标题内容不参与断言）。"
+    },
+    {
+      "id": "bt-edges-vis-echo-tool-call",
+      "description": "BT03 相位 1：Bash `echo` tool_use，命令立即完成，构造 completed 卡前置。",
+      "kind": "main",
+      "source": "synthetic",
+      "timingPolicy": "fast-text",
+      "syntheticReason": "completed 卡的按钮缺席断言需要一条确定性完成的 Bash 命令；echo 在前台轮内直接结算，不进入后台生命周期。"
+    },
+    {
+      "id": "bt-edges-vis-echo-continue",
+      "description": "BT03 相位 1：echo 结果回灌后的 continuation 文本（completed 卡收口哨兵）。",
+      "kind": "main",
+      "source": "synthetic",
+      "timingPolicy": "fast-text",
+      "syntheticReason": "completed 断言必须落在确定性终态：continuation 文本到达即 tool call 已终态，此时断言按钮缺席无竞速。"
+    },
+    {
+      "id": "bt-edges-vis-read-tool-call",
+      "description": "BT03 相位 2：Read tool_use（非 execute 家族卡），目标文件由 spec 预建。",
+      "kind": "main",
+      "source": "synthetic",
+      "timingPolicy": "fast-text",
+      "syntheticReason": "非 execute 家族卡的按钮缺席断言需要一个真实运行的工具；Read 渲染器不在 execute gate 内，任何相位都不应有移交按钮。"
+    },
+    {
+      "id": "bt-edges-vis-read-continue",
+      "description": "BT03 相位 2：Read 结果回灌后的 continuation 文本。",
+      "kind": "main",
+      "source": "synthetic",
+      "timingPolicy": "fast-text",
+      "syntheticReason": "收口哨兵：Read 相结束后再进入相位 3，保证相位 fixture 按序消费、匹配互不串扰。"
+    },
+    {
+      "id": "bt-edges-vis-bg-tool-call",
+      "description": "BT03 相位 3：Bash tool_use，启动真实 `sleep` 前台进程，验证 backgrounded 后的按钮缺席与 `· Background` 提示。",
+      "kind": "main",
+      "source": "synthetic",
+      "timingPolicy": "fast-text",
+      "syntheticReason": "backgrounded 卡断言需要真实移交：sleep 10 提供稳定的点击窗口，移交后按钮消失与提示在场由投影保证。"
+    },
+    {
+      "id": "bt-edges-vis-bg-continue",
+      "description": "BT03 相位 3：移交后合成结果回灌 → 模型同 turn 继续的 continuation 文本。",
+      "kind": "main",
+      "source": "synthetic",
+      "timingPolicy": "fast-text",
+      "syntheticReason": "相位 3 收口哨兵；保证后续 wake fixture 按序消费。"
+    },
+    {
+      "id": "bt-edges-vis-bg-wake",
+      "description": "BT03 相位 3：后台命令自然完成后的 backgroundResult wake 回复（用例排水）。",
+      "kind": "main",
+      "source": "synthetic",
+      "timingPolicy": "fast-text",
+      "syntheticReason": "排水哨兵：确保相位 3 结束时没有遗留后台工作污染同 spec 后续用例；通知请求由 runtime 真实产生。"
+    },
+    {
+      "id": "bt-edges-vis-cancel-tool-call",
+      "description": "BT03 反向对照：Bash tool_use，移交后验证 Task Island 行是唯一剩余入口。",
+      "kind": "main",
+      "source": "synthetic",
+      "timingPolicy": "fast-text",
+      "syntheticReason": "反向对照需要一次真实移交：backgrounded 卡按钮关闭后，Task Island bash 行保留 running 态。"
+    },
+    {
+      "id": "bt-edges-vis-cancel-continue",
+      "description": "BT03 反向对照：移交后合成结果回灌 → 模型同 turn 继续的 continuation 文本。",
+      "kind": "main",
+      "source": "synthetic",
+      "timingPolicy": "fast-text",
+      "syntheticReason": "对照相的 continuation 必须被服务（合成结果回灌是真实管线请求），哨兵文本不参与断言但保证 replay 不落到 default 回退。"
+    },
+    {
+      "id": "bt-edges-vis-cancel-wake",
+      "description": "BT03 反向对照：后台命令自然完成后的 backgroundResult wake 回复（用例排水）。",
+      "kind": "main",
+      "source": "synthetic",
+      "timingPolicy": "fast-text",
+      "syntheticReason": "排水哨兵：确保反向对照结束时没有遗留后台工作；通知请求由 runtime 真实产生。"
+    }
+  ]
+}

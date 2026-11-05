@@ -433,6 +433,9 @@ interface BotTaskSelectionEntry {
   task: ZCodeTaskMeta;
   workspacePath: string;
   workspaceIdentity?: string;
+  /** [fork] 5/11: la task sale del árbol de proyectos; trae su mundo para el re-point del bind. */
+  projectId?: string | null;
+  hostId?: string;
 }
 
 interface BotWorkspaceSelectionEntry {
@@ -3664,6 +3667,8 @@ export function createBotsService(
         task,
         workspacePath: context.workspacePath,
         workspaceIdentity: context.workspaceIdentity,
+        projectId: task.projectId,
+        hostId: task.hostId,
       }));
   }
 
@@ -8079,6 +8084,25 @@ export function createBotsService(
     user: BotConfig,
     value: string,
   ): Promise<BotTaskSelectionEntry | null> {
+    // [fork] 5/11: un sid completo (sess_…) es globalmente único — se resuelve del
+    // árbol de proyectos por taskId EXACTO, sin el filtro de workspace/proyecto del
+    // contexto: los drafts (projectId null, ~/.zcode/workspace/draft-*) jamás entran
+    // al catálogo del bot y hoy responden "Task not found". readTree ya excluye las
+    // tasks borradas (deletedTasks solo a pedido explícito). No existe → la ley de
+    // siempre (workspace-scoped, numéricos y pending selections) decide.
+    if (value.startsWith("sess_")) {
+      const tree = await deps.projectService.readTree({ hostId: context.hostId });
+      const task = tree.tasks.find((item) => item.taskId === value);
+      if (task) {
+        return {
+          task,
+          workspacePath: task.workspacePath,
+          workspaceIdentity: task.workspaceIdentity,
+          projectId: task.projectId,
+          hostId: task.hostId,
+        };
+      }
+    }
     const entries = await listContextTaskSelectionEntries(context, user);
     // 旧菜单只解析 taskId，实际归属必须重读；snapshot 不得绕过项目与固定 cwd 边界。
     const pending = resolvePendingTaskSelectionEntry(message.actor, value);
@@ -8121,10 +8145,24 @@ export function createBotsService(
       // 但旧 task 输出仍会继续回到同一 bot 会话，用户会误以为消息串线。
       return { ok: false, refusals: [createOutbound(message.actor, msg(locale, blockReason))] };
     }
+    // [fork] 5/11: el bind re-apunta el contexto COMPLETO al mundo de la task —
+    // no solo activeTaskId (antes workspacePath/projectId quedaban apuntando al
+    // workspace VIEJO: una task de draft o de otro proyecto quedaba huérfana).
+    // Espejo mínimo de bindProject/workspace.set; al cruzar de workspace,
+    // workspaceId/additionalDirectories se resembran: un draft (projectId null)
+    // no tiene proyecto ni directorios propios y la identidad vuelve a la clave
+    // getWorkspaceKey(path, identity), como cualquier contexto sin proyecto.
+    const crossesWorkspace =
+      getWorkspaceKey(task.workspacePath, task.workspaceIdentity) !==
+      getWorkspaceKey(context.workspacePath, context.workspaceIdentity);
     const nextContext = {
       ...context,
       mode: "task" as const,
       activeTaskId: task.taskId,
+      workspacePath: task.workspacePath,
+      workspaceIdentity: task.workspaceIdentity,
+      projectId: taskEntry.projectId ?? null,
+      ...(crossesWorkspace ? { workspaceId: undefined, additionalDirectories: [] } : {}),
     } satisfies BotContextState;
     await writeContext(nextContext);
     if (context.activeTaskId !== nextContext.activeTaskId) stopGroupSynchronization(context);

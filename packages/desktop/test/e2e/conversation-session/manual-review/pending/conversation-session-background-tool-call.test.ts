@@ -110,13 +110,14 @@ describe("BT01/BT04 转入后台：Bash tool call demote 主链路与同 turn co
       30000,
     );
     const settleIndex = await findFirstUpstreamRequestIndex(settleQuery);
+    expect(settleIndex).not.toBeNull();
     // turn 不中断：continuation 请求先于任何 task-notification（不是 DT 式前台收口）。
     const continuationIndex = await findFirstUpstreamRequestIndex(
       {
         includes: [BT_MAIN_MARKER, BT_MAIN_TOOL_CALL_ID],
         excludes: [TITLE_SENTINEL, "<task-notification>", "CRITICAL: Respond with TEXT ONLY"],
       },
-      { afterIndex: settleIndex },
+      { afterIndex: settleIndex ?? undefined },
     );
     expect(continuationIndex).not.toBeNull();
     await waitForV4AssistantMessageContaining(BT_MAIN_CONTINUED_TEXT, 60000);

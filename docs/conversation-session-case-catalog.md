@@ -5619,3 +5619,31 @@ BG-P03 的剪枝（Ctrl+B 类前台转后台控制从 "unsupported product surfa
 | DT08 | session 仅有 detached turn（无其他 foreground work）               | 用户查看/误点主停止按钮        | stopExcludesBackgroundTurn                                     | 主停止按钮不可用（backgroundWork only）；stopTargetKind 不报告 detached turn；stop 请求为 noop，不影响 detached turn                                                           | accepted |
 | DT09 | backgroundTurn 执行中                                              | CLI restart                    | backgroundTurnDiesOnRestart                                    | detached turn 丢失，不自动恢复；session 冷恢复为 completed；transcript 保留已流出内容；无 ghost running 行                                                                     | accepted |
 | DT10 | backgroundTurn 执行中，turn 未完成                                 | 用户 fork 已完成稳定 assistant | forkDoesNotCopyBackgroundWork                                  | child 不复制 detached turn 与 pending result；父 session 的 turn 继续运行                                                                                                     | accepted |
+
+## BT. 运行中 Bash 转后台（Foreground→Background Tool Call，2026-11-05 accepted，OpenCode ctrl+b parity）
+
+owner 2026-11-05 裁决：复刻 OpenCode Ctrl+B —— 粒度是 TOOL CALL 不是 turn（DT 是另一粒度，
+二者共存）。运行中的 Bash 卡下方有 "Go to background" 按钮；点击后 tool call 以合成结果
+立即结算（进程不动），模型在同一 turn 继续下一步；命令完成时经既有 bash background 通知
+回流（backgroundResult wake / task-notification steer）。
+
+核心语义：
+
+- 走 `backgroundToolCall {toolCallId}` 命令（非 CAS）；adapter `requestBackgroundByToolCallId`
+  外部触发原子 `commitBackground`（永不 kill/abort 进程）；guard miss（未知/已终态）为 noop。
+- 所有 foreground Bash 以 lifecycle `manual` 模式包裹（无 deadline 计时器，timeout 语义
+  与裸 run 相同——这是 `sleep` 类命令可被转后台的前提；auto_on_timeout policy 不变）。
+- 合成结果带 `backgroundedByUser` 指令："User moved this command to the background.
+  It is still running. Do not wait, sleep, or poll for it. …" —— 模型不等待、不轮询。
+- 投影把 tool row 翻为 `backgrounded:true` + `workId`（exec_* taskId）+ `anchorRowId`；
+  卡按钮消失，kind label 加 `· Background`；backgroundWorks 出现 kind=bash 行
+  （Task Island + composer badge），取消走既有 `cancelBackgroundWork`。
+- `taskId !== toolCallId`（exec_uuid vs tool call id）：tracker 的 `BackgroundTaskStarted`
+  payload 自带 `toolCallId`，投影经 `toolRowIdByCallId` 关联行。
+
+| ID   | 前置状态                                        | 用户/系统事件                     | 规则命中                                  | 期望结果                                                                                                                                                          | Review        |
+| ---- | ----------------------------------------------- | --------------------------------- | ----------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------- |
+| BT01 | `running`，Bash tool call 执行中（如 sleep 15） | 用户点卡下方「Go to background」  | backgroundToolCallDemotion                | tool call 立即结算（合成结果），turn 不中断、模型继续输出；进程继续跑；行翻 `· Background`；backgroundWorks 出现 bash 行；完成时通知回流（wake/steer）           | pending       |
+| BT02 | BT01 后                                         | 重复点击 / 未知 toolCallId        | backgroundToolCallGuardNoop               | guard miss → V4CommandNoopError（"guard.stopTargetChanged"）；第二次命令 noop；只创建一个 background work                                                          | pending       |
+| BT03 | 卡已 success / 已 backgrounded / 非 bash 卡     | 查看按钮                          | backgroundToolCallAffordanceEdges         | 无按钮；backgrounded 卡显示 `· Background`；非 execute family 卡永不出现按钮                                                                                       | pending       |
+| BT04 | BT01 后                                         | 观察同一 turn 的后续模型内容      | backgroundToolCallContinuesTurn           | 合成结果后模型在同一 turn 继续产出（不 stall、不等待命令结束）                                                                                                    | pending       |

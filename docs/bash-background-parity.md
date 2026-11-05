@@ -74,12 +74,22 @@ BGV01–BGV06 验收见 [后台 Bash 输出详情](background-bash-output-detail
   `<task-type>`、split path、result 或 error 字段，只包含 `task-id`、可选 `tool-use-id`、
   `output-file`、`status` 和 `summary`。
 
+## 已支持（2026-11-05 BT 分组，OpenCode ctrl+b parity）
+
+- 手动把正在 foreground 执行的 Bash 转为 background：v4 命令
+  `backgroundToolCall {toolCallId}`（非 CAS）→ adapter `requestBackgroundByToolCallId`
+  外部触发原子 `commitBackground`（进程不动）→ tool call 以 `backgroundedByUser` 合成
+  结果立即结算（"User moved this command to the background. It is still running.
+  Do not wait, sleep, or poll for it. …"）→ 模型在同一 turn 继续下一步。所有 foreground
+  Bash 均以 lifecycle `manual` 模式包裹（无 deadline 计时器；timeout 语义与裸 run 相同）。
+- `backgroundedByUser` 的真实可达路径（UI 卡下方 "Go to background" 按钮，
+  `v4-tool-background-<toolCallId>`；投影把行翻成 `backgrounded:true` + `workId` +
+  `anchorRowId`，完成回流走既有 bash background 通知 → backgroundResult wake）。
+
 ## 暂不支持
 
-- 手动把正在 foreground 执行的 Bash 转为 background。
 - provider-visible `background_tasks` control request。
-- `backgroundedByUser` 的真实可达路径。
-- 2 秒后提示用户可手动 background 的 UI/UX。
+- 2 秒后提示用户可手动 background 的 UI/UX（我们的按钮常驻于运行中的卡下方）。
 - `CLAUDE_CODE_DISABLE_BACKGROUND_TASKS` 跨 Bash/Agent/schema 的全局能力开关。
 
 ## 多端边界

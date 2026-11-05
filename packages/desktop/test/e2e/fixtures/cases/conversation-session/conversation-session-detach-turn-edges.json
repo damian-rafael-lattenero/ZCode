@@ -1,0 +1,114 @@
+{
+  "version": 1,
+  "caseName": "conversation-session-detach-turn-edges",
+  "spec": "./test/e2e/conversation-session/conversation-session-detach-turn-edges.test.ts",
+  "providerFixtures": [
+    "./test/e2e/fixtures/upstream/common.json",
+    "./test/e2e/fixtures/upstream/conversation-session/conversation-session-detach-turn-edges.json"
+  ],
+  "fileFixtures": [
+    {
+      "path": ".zcode-e2e/conversation-session-detach-turn-edges/dt05-perm-output.txt",
+      "source": "created-by-provider-tool",
+      "description": "DT05 fixture 驱动的 Bash redirect 在权限批准后创建的目标文件（命令自带 mkdir -p，无需 spec 预建父目录）。"
+    }
+  ],
+  "requests": [
+    {
+      "id": "dt-edges-title-pending-perm",
+      "description": "E2E_DT_PENDING_PERM 会话首发的 case-local 标题生成响应。",
+      "kind": "common",
+      "source": "synthetic",
+      "timingPolicy": "fast-text",
+      "syntheticReason": "E2E_DT_PENDING_PERM 首发会触发默认 title sidecar；固定 case-local 标题响应，避免 default replay 回退 legacy provider-basic，并用该首发 marker 隔离跨 case 匹配。"
+    },
+    {
+      "id": "dt-edges-pending-perm-tool-call",
+      "description": "DT05：Bash redirect exact tool_use，触发权限弹窗后 turn 以 pending interaction 挂起。",
+      "kind": "main",
+      "source": "synthetic",
+      "timingPolicy": "fast-text",
+      "syntheticReason": "redirect 写文件强制 exact permission suggestion，稳定构造 demote 时存在 pending interaction 的前置状态。"
+    },
+    {
+      "id": "dt-edges-pending-perm-final",
+      "description": "DT05：批准权限后 tool_result 回灌 → detached turn 继续执行并收口的最终文本。",
+      "kind": "main",
+      "source": "synthetic",
+      "timingPolicy": "fast-text",
+      "syntheticReason": "demote 后 resolve 需要稳定收口哨兵，证明 turn 从 pending interaction 继续执行而不是被丢弃。"
+    },
+    {
+      "id": "dt-edges-pending-perm-wake",
+      "description": "DT05：detached turn 完成后的 backgroundResult wake 独立 product turn 回复。",
+      "kind": "main",
+      "source": "synthetic",
+      "timingPolicy": "fast-text",
+      "syntheticReason": "wake 轮只需稳定完成的可断言哨兵；通知请求本身由 runtime 的 backgroundResult 管线真实产生。"
+    },
+    {
+      "id": "dt-edges-title-cancel",
+      "description": "E2E_DT_CANCEL_MAIN 会话首发的 case-local 标题生成响应。",
+      "kind": "common",
+      "source": "synthetic",
+      "timingPolicy": "fast-text",
+      "syntheticReason": "E2E_DT_CANCEL_MAIN 首发会触发默认 title sidecar；固定 case-local 标题响应，避免 default replay 回退 legacy provider-basic，并用该首发 marker 隔离跨 case 匹配。"
+    },
+    {
+      "id": "upstream-dt-edges-cancel-controlled-stream",
+      "description": "DT07：受控慢流停在 mid-flight，等待 Task Island cancel 观察点完成后按用例取消。",
+      "kind": "main",
+      "source": "synthetic",
+      "timingPolicy": "controlled-stream",
+      "syntheticReason": "cancel 断言需要稳定的中流窗口（detached 行可见且轮未收口）；真实 provider 过快完成会让 cancelBackgroundWork 无可观察目标。releaseAfterChunks=3 在首段正文后 hold，cancel 由 UI 观察后执行，未释放尾段即被 abort。"
+    },
+    {
+      "id": "dt-edges-title-stop-exclude",
+      "description": "E2E_DT_STOP_EXCLUDE 会话首发的 case-local 标题生成响应。",
+      "kind": "common",
+      "source": "synthetic",
+      "timingPolicy": "fast-text",
+      "syntheticReason": "E2E_DT_STOP_EXCLUDE 首发会触发默认 title sidecar；固定 case-local 标题响应，避免 default replay 回退 legacy provider-basic，并用该首发 marker 隔离跨 case 匹配。"
+    },
+    {
+      "id": "upstream-dt-edges-stop-exclude-controlled-stream",
+      "description": "DT08：受控慢流停在 mid-flight，观察主停止按钮不可用后释放自然完成。",
+      "kind": "main",
+      "source": "synthetic",
+      "timingPolicy": "controlled-stream",
+      "syntheticReason": "stop 排除断言需要 detached turn 稳定运行且轮未收口的窗口；真实 provider 过快完成会让「仅有 detached turn」前置状态不可观察。releaseAfterChunks=3 在首段正文后 hold，观察点（stop 控件缺席、无 stop 命令）完成后释放自然收口。"
+    },
+    {
+      "id": "dt-edges-stop-exclude-wake",
+      "description": "DT08：释放后自然完成的 backgroundResult wake 独立 product turn 回复。",
+      "kind": "main",
+      "source": "synthetic",
+      "timingPolicy": "fast-text",
+      "syntheticReason": "wake 轮只需稳定完成的可断言哨兵，证明 stop 缺席不影响 detached turn 的 backgroundResult 收口。"
+    },
+    {
+      "id": "dt-edges-title-double",
+      "description": "E2E_DT_DOUBLE_DEMOTE 会话首发的 case-local 标题生成响应。",
+      "kind": "common",
+      "source": "synthetic",
+      "timingPolicy": "fast-text",
+      "syntheticReason": "E2E_DT_DOUBLE_DEMOTE 首发会触发默认 title sidecar；固定 case-local 标题响应，避免 default replay 回退 legacy provider-basic，并用该首发 marker 隔离跨 case 匹配。"
+    },
+    {
+      "id": "upstream-dt-edges-double-controlled-stream",
+      "description": "DT double-demote：受控慢流停在 mid-flight，同一帧连点两次「转入后台」后验证幂等。",
+      "kind": "main",
+      "source": "synthetic",
+      "timingPolicy": "controlled-stream",
+      "syntheticReason": "双击 demote 的幂等断言需要两次点击都发生在投影回流前的稳定中流窗口；真实 provider 过快完成会让第二次点击无可观察目标。"
+    },
+    {
+      "id": "dt-edges-double-wake",
+      "description": "DT double-demote：第二次点击为诚实 noop 后，detached turn 正常完成的 wake 回复。",
+      "kind": "main",
+      "source": "synthetic",
+      "timingPolicy": "fast-text",
+      "syntheticReason": "wake 哨兵证明重复 demote 被拒绝后原 turn 仍按 backgroundResult 语义收口，不产生第二条 detached 行或双份通知。"
+    }
+  ]
+}

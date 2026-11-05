@@ -38,6 +38,7 @@ interface GatedModelHarness {
   modelCalls: () => number;
   releaseModel: () => void;
   runtime: AgentRuntime;
+  sessionId: ReturnType<typeof createSessionId>;
 }
 
 /**
@@ -50,8 +51,9 @@ function createGatedRuntime(sessionKey: string): GatedModelHarness {
   const modelGate = new Promise<void>((resolve) => {
     releaseFirst = resolve;
   });
+  const sessionId = createSessionId(sessionKey);
   const runtime = new AgentRuntime(
-    createSessionId(sessionKey),
+    sessionId,
     {
       mode: "build",
       modelSelection: { providerId: "test-provider", modelId: "test-model" },
@@ -75,6 +77,7 @@ function createGatedRuntime(sessionKey: string): GatedModelHarness {
     modelCalls: () => modelCalls,
     releaseModel: releaseFirst,
     runtime,
+    sessionId,
   };
 }
 
@@ -283,8 +286,9 @@ describe("backgroundTurn demotion（DT01 原语语义）", () => {
     const modelGate = new Promise<void>((resolve) => {
       releaseFirst = resolve;
     });
+    const eventSessionId = createSessionId("background-turn-events");
     const runtime = new AgentRuntime(
-      createSessionId("background-turn-events"),
+      eventSessionId,
       { mode: "build", modelSelection: { providerId: "test-provider", modelId: "test-model" } },
       {
         eventStore,
@@ -316,7 +320,7 @@ describe("backgroundTurn demotion（DT01 原语语义）", () => {
 
     // beginDetachedTurnTracking 的事件是 await 链；轮询等它们落库。
     for (let attempt = 0; attempt < 500; attempt += 1) {
-      const events = await eventStore.getEvents(runtime.sessionId);
+      const events = await eventStore.getEvents(eventSessionId);
       if (
         events.some((event) => event.type === SessionEventType.BackgroundTurnDemoted) &&
         events.some(
@@ -330,7 +334,7 @@ describe("backgroundTurn demotion（DT01 原语语义）", () => {
       await new Promise((resolve) => setImmediate(resolve));
     }
 
-    const events = await eventStore.getEvents(runtime.sessionId);
+    const events = await eventStore.getEvents(eventSessionId);
     const demoted = events.find((event) => event.type === SessionEventType.BackgroundTurnDemoted);
     expect(demoted?.payload).toEqual({
       foregroundExecutionId,
@@ -359,7 +363,7 @@ describe("backgroundTurn demotion（DT01 原语语义）", () => {
       () => modelCalls >= 2 && runtime.getActiveTurnInfo() === undefined,
       "wake turn never settled",
     );
-    const completed = (await eventStore.getEvents(runtime.sessionId)).find(
+    const completed = (await eventStore.getEvents(eventSessionId)).find(
       (event) =>
         event.type === SessionEventType.BackgroundTaskCompleted &&
         (event.payload as { taskId?: string }).taskId === demote.workId,
@@ -554,12 +558,12 @@ function promptCommand(id: string, input: string): RuntimeCommand {
     priority: "next",
     reject: () => {},
     resolve: () => {},
-    traceContext: {
+      traceContext: {
       sessionId: "sess_background_turn_drain",
       spanId: `span_${id}`,
       traceId: "trace_background_turn_drain",
     },
-  } as RuntimeCommand;
+  } as unknown as RuntimeCommand;
 }
 
 describe("backgroundTurn queue drain hold（DT02）", () => {

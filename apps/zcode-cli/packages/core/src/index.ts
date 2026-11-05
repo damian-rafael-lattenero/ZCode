@@ -23,6 +23,7 @@ export { builtInTools, registerBuiltInTools } from "./tool/handlers/index.js";
 export {
   supportsBackgroundTaskWaiter,
   supportsBashBackgroundLifecycle,
+  supportsBashBackgroundRequestByToolCallId,
   type BackgroundTaskWaiterExecutionPort,
   type BashBackgroundLifecycleExecutionPort,
 } from "./tool/handlers/bash-background-lifecycle.js";

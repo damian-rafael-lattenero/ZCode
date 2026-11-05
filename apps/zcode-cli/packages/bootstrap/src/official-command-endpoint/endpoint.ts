@@ -22,6 +22,7 @@ import type {
 import {
   supportsBackgroundTaskWaiter,
   supportsBashBackgroundLifecycle,
+  supportsBashBackgroundRequestByToolCallId,
   type BackgroundTaskWaiterExecutionPort,
   type BashBackgroundLifecycleExecutionPort,
 } from "@zcode/core";
@@ -276,6 +277,12 @@ export function withOfficialCommandEnv(
     const runBash = port.runBashWithBackgroundLifecycle.bind(port);
     wrapped.runBashWithBackgroundLifecycle = async (request, lifecycle, runOptions) =>
       runBash(await withEnv(request), lifecycle, runOptions);
+  }
+  // BT（2026-11-05）：移交能力同样是鸭子类型探测的可选成员，漏传不会有类型错误——
+  // 丢 requestBackgroundByToolCallId 时 v4 backgroundToolCall 在桌面/带官方命令端点的
+  // 运行时里永远落到 unsupported fault（ack failed），卡上的「Go to background」全灭。
+  if (supportsBashBackgroundRequestByToolCallId(port)) {
+    wrapped.requestBackgroundByToolCallId = port.requestBackgroundByToolCallId.bind(port);
   }
   if (supportsBackgroundTaskWaiter(port)) {
     wrapped.waitForBackgroundTask = port.waitForBackgroundTask.bind(port);

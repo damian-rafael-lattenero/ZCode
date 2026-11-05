@@ -71,7 +71,7 @@
         "bodyExcludes": [
           "Generate a concise title",
           "CRITICAL: Respond with TEXT ONLY",
-          "<task-notification>"
+          "bt-main-wake-ok"
         ]
       },
       "response": {
@@ -97,7 +97,8 @@
       "match": {
         "method": "POST",
         "pathIncludes": "/messages",
-        "bodyIncludes": ["<task-notification>", "E2E_BT_MAIN"],
+        "bodyIncludes": ["E2E_BT_MAIN"],
+        "lastUserMessageIncludes": ["<task-notification>"],
         "bodyExcludes": ["Generate a concise title"]
       },
       "response": {
@@ -178,7 +179,7 @@
         "bodyExcludes": [
           "Generate a concise title",
           "CRITICAL: Respond with TEXT ONLY",
-          "<task-notification>"
+          "bt-continue-wake-ok"
         ]
       },
       "response": {
@@ -204,7 +205,8 @@
       "match": {
         "method": "POST",
         "pathIncludes": "/messages",
-        "bodyIncludes": ["<task-notification>", "E2E_BT_CONTINUE"],
+        "bodyIncludes": ["E2E_BT_CONTINUE"],
+        "lastUserMessageIncludes": ["<task-notification>"],
         "bodyExcludes": ["Generate a concise title"]
       },
       "response": {

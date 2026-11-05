@@ -14,7 +14,7 @@ import { mkdir, writeFile } from "node:fs/promises";
 import { clearAppData, clickTestIdByDom } from "#e2e/helpers/desktop-app";
 import { ensureToolCrossProductFullAccessMode } from "#e2e/helpers/conversation-session-tool-cross-product";
 import {
-  countUpstreamRequestsContainingAll,
+  countUpstreamRequests,
   waitForUpstreamRequest,
 } from "#e2e/helpers/conversation-session-network";
 import { resolveE2ERuntimePath } from "#e2e/helpers/e2e-runtime-paths";
@@ -39,6 +39,9 @@ import {
 
 const BT_EDGES_TIMEOUT_MS = 300000;
 const TITLE_SENTINEL = "Generate a concise title";
+// 通知以独立 user 消息进入最后一条消息；系统提示里的 `<task-notification>` 字样是
+// Bash 工具说明的固定文案，body 级匹配必误伤（见 wakeQuery）。
+const WAKE_LAST_USER_MESSAGE = "<task-notification>";
 const BT_HANDOFF_SENTENCE = "User moved this command to the background";
 
 const BT_DOUBLE_MARKER = "E2E_BT_DOUBLE";
@@ -145,7 +148,7 @@ describe("BT 边界：双击幂等（诚实 noop）与按钮可见性边界", ()
     await waitForUpstreamRequest(
       {
         includes: [BT_DOUBLE_TOOL_CALL_ID, BT_HANDOFF_SENTENCE],
-        excludes: [TITLE_SENTINEL, "<task-notification>", "CRITICAL: Respond with TEXT ONLY"],
+        excludes: [TITLE_SENTINEL, "CRITICAL: Respond with TEXT ONLY"],
       },
       "BT02 合成结果没有回灌，模型没有拿到继续指令",
       30000,
@@ -159,10 +162,7 @@ describe("BT 边界：双击幂等（诚实 noop）与按钮可见性边界", ()
 
     // 单一 wake：重复移交不产生第二条通知或第二个后台 work。
     await waitForUpstreamRequest(
-      {
-        includes: ["<task-notification>", BT_DOUBLE_MARKER],
-        excludes: [TITLE_SENTINEL],
-      },
+      wakeQuery(BT_DOUBLE_MARKER),
       "BT02 后台命令完成后没有发出 wake 请求",
       90000,
     );
@@ -173,9 +173,7 @@ describe("BT 边界：双击幂等（诚实 noop）与按钮可见性边界", ()
       "BT02 wake 收口后会话没有回到 idle",
       90000,
     );
-    expect(
-      await countUpstreamRequestsContainingAll(["<task-notification>", BT_DOUBLE_MARKER]),
-    ).toBe(1);
+    expect(await countWakeRequests(BT_DOUBLE_MARKER)).toBe(1);
     await browser.waitUntil(
       async () => (await getV4BackgroundWorks()).length === 0,
       { timeout: 30000, timeoutMsg: "BT02 wake 结算后 Task Island 没有移除 bash 后台行" },
@@ -230,10 +228,7 @@ describe("BT 边界：双击幂等（诚实 noop）与按钮可见性边界", ()
     // 排水：等 sleep 自然完成 → wake 收口；后台 work 行随结算移除。
     await waitForV4AssistantMessageContaining(BT_VIS_BG_TEXT, 60000);
     await waitForUpstreamRequest(
-      {
-        includes: ["<task-notification>", BT_VIS_BG_MARKER],
-        excludes: [TITLE_SENTINEL],
-      },
+      wakeQuery(BT_VIS_BG_MARKER),
       "BT03 相位 3 后台命令完成后没有发出 wake 请求",
       90000,
     );
@@ -275,10 +270,7 @@ describe("BT 边界：双击幂等（诚实 noop）与按钮可见性边界", ()
 
     // 排水：sleep 自然完成 → 单一 wake 收口，不留跨用例后台工作。
     await waitForUpstreamRequest(
-      {
-        includes: ["<task-notification>", BT_VIS_CANCEL_MARKER],
-        excludes: [TITLE_SENTINEL],
-      },
+      wakeQuery(BT_VIS_CANCEL_MARKER),
       "BT03 反向对照后台命令完成后没有发出 wake 请求",
       90000,
     );
@@ -295,6 +287,28 @@ describe("BT 边界：双击幂等（诚实 noop）与按钮可见性边界", ()
     );
   });
 });
+
+
+/**
+ * wake/通知请求锚定：`<task-notification>` 字样出现在每个请求的系统提示（Bash 工具
+ * 说明）里，body 级匹配必误伤；通知以独立 user 消息进入最后一条消息，必须用
+ * lastUserMessageIncludes 锚定（conversation-session-background.test.ts 同款口径）。
+ */
+function wakeQuery(marker: string) {
+  return {
+    includes: [marker],
+    lastUserMessageIncludes: [WAKE_LAST_USER_MESSAGE],
+    excludes: [TITLE_SENTINEL],
+  };
+}
+
+/** 已捕获的 wake/通知请求数（同上，按最后一条 user 消息锚定）。 */
+function countWakeRequests(marker: string): Promise<number> {
+  return countUpstreamRequests({
+    includes: [marker],
+    lastUserMessageIncludes: [WAKE_LAST_USER_MESSAGE],
+  });
+}
 
 /** 工具卡下「Go to background」按钮是否仍在 DOM（backgrounded/completed 后应消失）。 */
 function hasToolBackgroundButton(toolCallId: string): Promise<boolean> {

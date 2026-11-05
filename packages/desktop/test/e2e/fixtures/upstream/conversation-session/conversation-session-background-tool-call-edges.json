@@ -15,7 +15,10 @@
       "match": {
         "method": "POST",
         "pathIncludes": "/messages",
-        "bodyIncludes": ["Generate a concise title", "E2E_BT_DOUBLE"]
+        "bodyIncludes": [
+          "Generate a concise title",
+          "E2E_BT_DOUBLE"
+        ]
       },
       "response": {
         "statusCode": 200,
@@ -40,8 +43,13 @@
       "match": {
         "method": "POST",
         "pathIncludes": "/messages",
-        "lastUserMessageIncludes": ["E2E_BT_DOUBLE"],
-        "bodyExcludes": ["Generate a concise title", "CRITICAL: Respond with TEXT ONLY"]
+        "lastUserMessageIncludes": [
+          "E2E_BT_DOUBLE"
+        ],
+        "bodyExcludes": [
+          "Generate a concise title",
+          "CRITICAL: Respond with TEXT ONLY"
+        ]
       },
       "response": {
         "statusCode": 200,
@@ -67,11 +75,14 @@
       "match": {
         "method": "POST",
         "pathIncludes": "/messages",
-        "bodyIncludes": ["E2E_BT_DOUBLE", "toolu_bt_double_bash"],
+        "bodyIncludes": [
+          "E2E_BT_DOUBLE",
+          "toolu_bt_double_bash"
+        ],
         "bodyExcludes": [
           "Generate a concise title",
           "CRITICAL: Respond with TEXT ONLY",
-          "<task-notification>"
+          "bt-double-continued-ok"
         ]
       },
       "response": {
@@ -97,8 +108,15 @@
       "match": {
         "method": "POST",
         "pathIncludes": "/messages",
-        "bodyIncludes": ["<task-notification>", "E2E_BT_DOUBLE"],
-        "bodyExcludes": ["Generate a concise title"]
+        "bodyIncludes": [
+          "E2E_BT_DOUBLE"
+        ],
+        "bodyExcludes": [
+          "Generate a concise title"
+        ],
+        "lastUserMessageIncludes": [
+          "<task-notification>"
+        ]
       },
       "response": {
         "statusCode": 200,
@@ -122,7 +140,10 @@
       "match": {
         "method": "POST",
         "pathIncludes": "/messages",
-        "bodyIncludes": ["Generate a concise title", "E2E_BT_VISIBILITY"]
+        "bodyIncludes": [
+          "Generate a concise title",
+          "E2E_BT_VISIBILITY"
+        ]
       },
       "response": {
         "statusCode": 200,
@@ -147,8 +168,13 @@
       "match": {
         "method": "POST",
         "pathIncludes": "/messages",
-        "lastUserMessageIncludes": ["E2E_BT_VISIBILITY_ECHO"],
-        "bodyExcludes": ["Generate a concise title", "CRITICAL: Respond with TEXT ONLY"]
+        "lastUserMessageIncludes": [
+          "E2E_BT_VISIBILITY_ECHO"
+        ],
+        "bodyExcludes": [
+          "Generate a concise title",
+          "CRITICAL: Respond with TEXT ONLY"
+        ]
       },
       "response": {
         "statusCode": 200,
@@ -174,11 +200,14 @@
       "match": {
         "method": "POST",
         "pathIncludes": "/messages",
-        "bodyIncludes": ["E2E_BT_VISIBILITY_ECHO", "toolu_bt_vis_echo"],
+        "bodyIncludes": [
+          "E2E_BT_VISIBILITY_ECHO",
+          "toolu_bt_vis_echo"
+        ],
         "bodyExcludes": [
           "Generate a concise title",
           "CRITICAL: Respond with TEXT ONLY",
-          "<task-notification>"
+          "bt-vis-echo-ok"
         ]
       },
       "response": {
@@ -204,8 +233,13 @@
       "match": {
         "method": "POST",
         "pathIncludes": "/messages",
-        "lastUserMessageIncludes": ["E2E_BT_VISIBILITY_READ"],
-        "bodyExcludes": ["Generate a concise title", "CRITICAL: Respond with TEXT ONLY"]
+        "lastUserMessageIncludes": [
+          "E2E_BT_VISIBILITY_READ"
+        ],
+        "bodyExcludes": [
+          "Generate a concise title",
+          "CRITICAL: Respond with TEXT ONLY"
+        ]
       },
       "response": {
         "statusCode": 200,
@@ -231,11 +265,14 @@
       "match": {
         "method": "POST",
         "pathIncludes": "/messages",
-        "bodyIncludes": ["E2E_BT_VISIBILITY_READ", "toolu_bt_vis_read"],
+        "bodyIncludes": [
+          "E2E_BT_VISIBILITY_READ",
+          "toolu_bt_vis_read"
+        ],
         "bodyExcludes": [
           "Generate a concise title",
           "CRITICAL: Respond with TEXT ONLY",
-          "<task-notification>"
+          "bt-vis-read-ok"
         ]
       },
       "response": {
@@ -261,8 +298,13 @@
       "match": {
         "method": "POST",
         "pathIncludes": "/messages",
-        "lastUserMessageIncludes": ["E2E_BT_VISIBILITY_BG"],
-        "bodyExcludes": ["Generate a concise title", "CRITICAL: Respond with TEXT ONLY"]
+        "lastUserMessageIncludes": [
+          "E2E_BT_VISIBILITY_BG"
+        ],
+        "bodyExcludes": [
+          "Generate a concise title",
+          "CRITICAL: Respond with TEXT ONLY"
+        ]
       },
       "response": {
         "statusCode": 200,
@@ -288,11 +330,14 @@
       "match": {
         "method": "POST",
         "pathIncludes": "/messages",
-        "bodyIncludes": ["E2E_BT_VISIBILITY_BG", "toolu_bt_vis_bg"],
+        "bodyIncludes": [
+          "E2E_BT_VISIBILITY_BG",
+          "toolu_bt_vis_bg"
+        ],
         "bodyExcludes": [
           "Generate a concise title",
           "CRITICAL: Respond with TEXT ONLY",
-          "<task-notification>"
+          "bt-vis-bg-ok"
         ]
       },
       "response": {
@@ -318,8 +363,15 @@
       "match": {
         "method": "POST",
         "pathIncludes": "/messages",
-        "bodyIncludes": ["<task-notification>", "E2E_BT_VISIBILITY_BG"],
-        "bodyExcludes": ["Generate a concise title"]
+        "bodyIncludes": [
+          "E2E_BT_VISIBILITY_BG"
+        ],
+        "bodyExcludes": [
+          "Generate a concise title"
+        ],
+        "lastUserMessageIncludes": [
+          "<task-notification>"
+        ]
       },
       "response": {
         "statusCode": 200,
@@ -344,8 +396,13 @@
       "match": {
         "method": "POST",
         "pathIncludes": "/messages",
-        "lastUserMessageIncludes": ["E2E_BT_VISIBILITY_CANCEL"],
-        "bodyExcludes": ["Generate a concise title", "CRITICAL: Respond with TEXT ONLY"]
+        "lastUserMessageIncludes": [
+          "E2E_BT_VISIBILITY_CANCEL"
+        ],
+        "bodyExcludes": [
+          "Generate a concise title",
+          "CRITICAL: Respond with TEXT ONLY"
+        ]
       },
       "response": {
         "statusCode": 200,
@@ -371,11 +428,14 @@
       "match": {
         "method": "POST",
         "pathIncludes": "/messages",
-        "bodyIncludes": ["E2E_BT_VISIBILITY_CANCEL", "toolu_bt_vis_cancel"],
+        "bodyIncludes": [
+          "E2E_BT_VISIBILITY_CANCEL",
+          "toolu_bt_vis_cancel"
+        ],
         "bodyExcludes": [
           "Generate a concise title",
           "CRITICAL: Respond with TEXT ONLY",
-          "<task-notification>"
+          "bt-vis-cancel-continued-ok"
         ]
       },
       "response": {
@@ -401,8 +461,15 @@
       "match": {
         "method": "POST",
         "pathIncludes": "/messages",
-        "bodyIncludes": ["<task-notification>", "E2E_BT_VISIBILITY_CANCEL"],
-        "bodyExcludes": ["Generate a concise title"]
+        "bodyIncludes": [
+          "E2E_BT_VISIBILITY_CANCEL"
+        ],
+        "bodyExcludes": [
+          "Generate a concise title"
+        ],
+        "lastUserMessageIncludes": [
+          "<task-notification>"
+        ]
       },
       "response": {
         "statusCode": 200,

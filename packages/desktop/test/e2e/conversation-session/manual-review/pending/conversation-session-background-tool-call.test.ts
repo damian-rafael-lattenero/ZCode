@@ -14,7 +14,7 @@ import { TID_V4_TOOL_BACKGROUND, testId } from "@zcode/shared/test-ids";
 import { clearAppData, clickTestIdByDom } from "#e2e/helpers/desktop-app";
 import { ensureToolCrossProductFullAccessMode } from "#e2e/helpers/conversation-session-tool-cross-product";
 import {
-  countUpstreamRequestsContainingAll,
+  countUpstreamRequests,
   findFirstUpstreamRequestIndex,
   waitForUpstreamRequest,
 } from "#e2e/helpers/conversation-session-network";
@@ -40,6 +40,9 @@ import {
 
 const BT_TIMEOUT_MS = 300000;
 const TITLE_SENTINEL = "Generate a concise title";
+// 通知以独立 user 消息进入最后一条消息；系统提示里的 `<task-notification>` 字样是
+// Bash 工具说明的固定文案，body 级匹配必误伤（见 wakeQuery）。
+const WAKE_LAST_USER_MESSAGE = "<task-notification>";
 // 模型交接句的字面契约（bash-model-content.ts backgroundedByUser，不得改写）。
 const BT_HANDOFF_SENTENCE = "User moved this command to the background";
 
@@ -100,9 +103,11 @@ describe("BT01/BT04 转入后台：Bash tool call demote 主链路与同 turn co
     expect(ack.status).toBe("accepted");
 
     // tool call 立即结算：合成结果（含字面交接句）回灌进入下一次 provider 请求。
+    // 注意：`<task-notification>` 字样出现在每个请求的系统提示（Bash 工具说明）里，
+    // 任何 body 级排除/包含都会误伤；请求锚定用 includes 的唯一串 + lastUserMessageIncludes。
     const settleQuery = {
       includes: [BT_MAIN_TOOL_CALL_ID, BT_HANDOFF_SENTENCE],
-      excludes: [TITLE_SENTINEL, "<task-notification>", "CRITICAL: Respond with TEXT ONLY"],
+      excludes: [TITLE_SENTINEL, "CRITICAL: Respond with TEXT ONLY"],
     };
     await waitForUpstreamRequest(
       settleQuery,
@@ -115,7 +120,7 @@ describe("BT01/BT04 转入后台：Bash tool call demote 主链路与同 turn co
     const continuationIndex = await findFirstUpstreamRequestIndex(
       {
         includes: [BT_MAIN_MARKER, BT_MAIN_TOOL_CALL_ID],
-        excludes: [TITLE_SENTINEL, "<task-notification>", "CRITICAL: Respond with TEXT ONLY"],
+        excludes: [TITLE_SENTINEL, "CRITICAL: Respond with TEXT ONLY"],
       },
       { afterIndex: settleIndex ?? undefined },
     );
@@ -155,10 +160,7 @@ describe("BT01/BT04 转入后台：Bash tool call demote 主链路与同 turn co
 
     // ── 完成链路：进程自然退出 → task-notification → backgroundResult wake ──
     await waitForUpstreamRequest(
-      {
-        includes: ["<task-notification>", BT_MAIN_MARKER],
-        excludes: [TITLE_SENTINEL],
-      },
+      wakeQuery(BT_MAIN_MARKER),
       "BT01 后台命令完成后没有发出 task-notification wake 请求",
       90000,
     );
@@ -176,9 +178,7 @@ describe("BT01/BT04 转入后台：Bash tool call demote 主链路与同 turn co
       { timeout: 30000, timeoutMsg: "BT01 wake 结算后 Task Island 没有移除 bash 后台行" },
     );
     // 单次完成只产生一条通知请求（无重复 wake）。
-    expect(
-      await countUpstreamRequestsContainingAll(["<task-notification>", BT_MAIN_MARKER]),
-    ).toBe(1);
+    expect(await countWakeRequests(BT_MAIN_MARKER)).toBe(1);
   });
 
   it("BT04：移交后模型在同一 turn 继续产出（不等待、不轮询），continuation 先于 wake", async function () {
@@ -208,7 +208,7 @@ describe("BT01/BT04 转入后台：Bash tool call demote 主链路与同 turn co
     await waitForUpstreamRequest(
       {
         includes: [BT_CONTINUE_TOOL_CALL_ID, BT_HANDOFF_SENTENCE, "Do not wait, sleep, or poll"],
-        excludes: [TITLE_SENTINEL, "<task-notification>", "CRITICAL: Respond with TEXT ONLY"],
+        excludes: [TITLE_SENTINEL, "CRITICAL: Respond with TEXT ONLY"],
       },
       "BT04 合成结果没有携带字面交接句（do-not-wait 指令缺失）",
       30000,
@@ -220,16 +220,11 @@ describe("BT01/BT04 转入后台：Bash tool call demote 主链路与同 turn co
       60000,
     );
     // turn 已收口而后台命令仍在跑：此刻不可能有 wake 请求（顺序事实，不靠时序竞速）。
-    expect(
-      await countUpstreamRequestsContainingAll(["<task-notification>", BT_CONTINUE_MARKER]),
-    ).toBe(0);
+    expect(await countWakeRequests(BT_CONTINUE_MARKER)).toBe(0);
 
     // 排水：等 sleep 自然完成 → wake 独立收口，不留跨用例后台工作。
     await waitForUpstreamRequest(
-      {
-        includes: ["<task-notification>", BT_CONTINUE_MARKER],
-        excludes: [TITLE_SENTINEL],
-      },
+      wakeQuery(BT_CONTINUE_MARKER),
       "BT04 后台命令完成后没有发出 wake 请求",
       60000,
     );
@@ -249,4 +244,25 @@ function hasToolBackgroundButton(toolCallId: string): Promise<boolean> {
     (buttonTestId) => Boolean(document.querySelector(`[data-testid="${buttonTestId}"]`)),
     testId(TID_V4_TOOL_BACKGROUND, toolCallId),
   );
+}
+
+/**
+ * wake/通知请求锚定：`<task-notification>` 字样出现在每个请求的系统提示（Bash 工具
+ * 说明）里，body 级匹配必误伤；通知以独立 user 消息进入最后一条消息，必须用
+ * lastUserMessageIncludes 锚定（conversation-session-background.test.ts 同款口径）。
+ */
+function wakeQuery(marker: string) {
+  return {
+    includes: [marker],
+    lastUserMessageIncludes: [WAKE_LAST_USER_MESSAGE],
+    excludes: [TITLE_SENTINEL],
+  };
+}
+
+/** 已捕获的 wake/通知请求数（同上，按最后一条 user 消息锚定）。 */
+function countWakeRequests(marker: string): Promise<number> {
+  return countUpstreamRequests({
+    includes: [marker],
+    lastUserMessageIncludes: [WAKE_LAST_USER_MESSAGE],
+  });
 }

@@ -4727,6 +4727,7 @@ export class ProductProjection {
   private onBackgroundTaskLifecycle(event: SessionEvent): ConversationDelta[] {
     const payload = event.payload as {
       taskId?: string;
+      toolCallId?: string;
       toolName?: string;
       taskKind?: string;
       command?: string;
@@ -4776,6 +4777,23 @@ export class ProductProjection {
       existing?.title ||
       payload.toolName ||
       workId;
+    // BT（2026-11-05）：bash 事件携带 tracker 的 toolCallId；能对上工具行就把它翻成
+    // backgrounded 态（与 subagent backgrounding 的行模板一致），anchorRowId 锚到该行。
+    // backgrounded !== true 的幂等门使任意顺序/重复的生命周期事件只翻一次。
+    let toolRowFlip: ConversationDelta | undefined;
+    let anchorRowId: number | null = existing?.anchorRowId ?? null;
+    if (kind === "bash" && payload.toolCallId) {
+      const toolRow = this.findToolRow(payload.toolCallId);
+      if (toolRow && toolRow.backgrounded !== true) {
+        toolRowFlip = {
+          op: "row.upserted",
+          row: { ...toolRow, backgrounded: true as const, workId },
+        };
+        anchorRowId = toolRow.rowId;
+      } else if (toolRow) {
+        anchorRowId = toolRow.rowId;
+      }
+    }
     const next: BackgroundWorkSummary = {
       workId,
       kind,
@@ -4793,7 +4811,7 @@ export class ProductProjection {
         : existing?.blocked !== undefined
           ? { blocked: existing.blocked }
           : {}),
-      anchorRowId: existing?.anchorRowId ?? null,
+      anchorRowId,
       ...(payload.childSessionId
         ? { childSessionId: payload.childSessionId }
         : existing?.childSessionId
@@ -4802,6 +4820,7 @@ export class ProductProjection {
     };
     // 幂等：内容无变化不产 delta。
     if (
+      !toolRowFlip &&
       existing &&
       existing.status === next.status &&
       existing.title === next.title &&
@@ -4815,7 +4834,10 @@ export class ProductProjection {
     const backgroundWorks = existing
       ? prev.map((work) => (work.workId === workId ? next : work))
       : [...prev, next];
-    return [{ op: "state.updated", patch: { backgroundWorks } }];
+    return [
+      ...(toolRowFlip ? [toolRowFlip] : []),
+      { op: "state.updated", patch: { backgroundWorks } },
+    ];
   }
 
   // ── dwf 实时运行态：DynamicWorkflowRunProgress → workflowRuns 状态键 ──

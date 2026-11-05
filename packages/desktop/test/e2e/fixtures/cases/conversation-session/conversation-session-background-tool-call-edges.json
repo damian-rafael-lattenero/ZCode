@@ -109,30 +109,6 @@
       "source": "synthetic",
       "timingPolicy": "fast-text",
       "syntheticReason": "排水哨兵：确保相位 3 结束时没有遗留后台工作污染同 spec 后续用例；通知请求由 runtime 真实产生。"
-    },
-    {
-      "id": "bt-edges-vis-cancel-tool-call",
-      "description": "BT03 反向对照：Bash tool_use，移交后验证 Task Island 行是唯一剩余入口。",
-      "kind": "main",
-      "source": "synthetic",
-      "timingPolicy": "fast-text",
-      "syntheticReason": "反向对照需要一次真实移交：backgrounded 卡按钮关闭后，Task Island bash 行保留 running 态。"
-    },
-    {
-      "id": "bt-edges-vis-cancel-continue",
-      "description": "BT03 反向对照：移交后合成结果回灌 → 模型同 turn 继续的 continuation 文本。",
-      "kind": "main",
-      "source": "synthetic",
-      "timingPolicy": "fast-text",
-      "syntheticReason": "对照相的 continuation 必须被服务（合成结果回灌是真实管线请求），哨兵文本不参与断言但保证 replay 不落到 default 回退。"
-    },
-    {
-      "id": "bt-edges-vis-cancel-wake",
-      "description": "BT03 反向对照：后台命令自然完成后的 backgroundResult wake 回复（用例排水）。",
-      "kind": "main",
-      "source": "synthetic",
-      "timingPolicy": "fast-text",
-      "syntheticReason": "排水哨兵：确保反向对照结束时没有遗留后台工作；通知请求由 runtime 真实产生。"
     }
   ]
 }

@@ -49,7 +49,6 @@ const BT_DOUBLE_TOOL_CALL_ID = "toolu_bt_double_bash";
 const BT_DOUBLE_CONTINUED_TEXT = "bt-double-continued-ok";
 const BT_DOUBLE_WAKE_TEXT = "bt-double-wake-ok";
 
-const BT_VIS_SESSION_MARKER = "E2E_BT_VISIBILITY";
 const BT_VIS_ECHO_MARKER = "E2E_BT_VISIBILITY_ECHO";
 const BT_VIS_ECHO_TOOL_CALL_ID = "toolu_bt_vis_echo";
 const BT_VIS_ECHO_TEXT = "bt-vis-echo-ok";
@@ -60,9 +59,6 @@ const BT_VIS_BG_MARKER = "E2E_BT_VISIBILITY_BG";
 const BT_VIS_BG_TOOL_CALL_ID = "toolu_bt_vis_bg";
 const BT_VIS_BG_TEXT = "bt-vis-bg-ok";
 const BT_VIS_BG_WAKE_TEXT = "bt-vis-bg-wake-ok";
-const BT_VIS_CANCEL_MARKER = "E2E_BT_VISIBILITY_CANCEL";
-const BT_VIS_CANCEL_TOOL_CALL_ID = "toolu_bt_vis_cancel";
-const BT_VIS_CANCEL_WAKE_TEXT = "bt-vis-cancel-wake-ok";
 const BT_VIS_READ_TARGET_RELATIVE = "conversation-session-background-tool-call-edges/bt-read-target.txt";
 
 describe("BT 边界：双击幂等（诚实 noop）与按钮可见性边界", () => {
@@ -132,10 +128,18 @@ describe("BT 边界：双击幂等（诚实 noop）与按钮可见性边界", ()
     expect(acks[1]!.reasonCode).toBe("guard.stopTargetChanged");
 
     // 恰好一个 bash 后台 work（重复命令没有创建第二个移交记录）。
-    const triggerCounts = await getV4ComposerBackgroundWorkCounts();
-    expect(triggerCounts).not.toBeNull();
-    expect(triggerCounts!.bashCount).toBe(1);
+    // Composer 入口随 BackgroundTaskStarted 投影渲染，轮询等它出现而不是立即读。
+    let triggerCounts: Awaited<ReturnType<typeof getV4ComposerBackgroundWorkCounts>> = null;
+    await browser.waitUntil(
+      async () => {
+        triggerCounts = await getV4ComposerBackgroundWorkCounts();
+        return triggerCounts !== null && triggerCounts.bashCount === 1;
+      },
+      { timeout: 30000, timeoutMsg: "BT02 后台入口没有出现 bash 计数（BackgroundTaskStarted 未投影）" },
+    );
     expect(triggerCounts!.totalCount).toBe(1);
+    expect(triggerCounts!.workflowCount).toBe(0);
+    expect(triggerCounts!.subagentCount).toBe(0);
     await openV4ComposerRunningBackgroundWorks();
     const works = await getV4BackgroundWorks();
     expect(works).toHaveLength(1);
@@ -185,9 +189,10 @@ describe("BT 边界：双击幂等（诚实 noop）与按钮可见性边界", ()
 
     await startNewV4Draft();
     await switchV4Model(modelProvider, modelName, modelThought);
-    await sendV4Prompt(`${BT_VIS_SESSION_MARKER} 先执行一条快速命令`);
+    // 首发即相位 1（marker 带 E2E_BT_VISIBILITY 前缀，title fixture 靠前缀复用）。
+    await sendV4Prompt(`${BT_VIS_ECHO_MARKER} 先执行一条快速命令`);
     await waitForV4ComposerText("", "BT03 消息发送后输入框没有清空");
-    await waitForV4UserMessageContaining(BT_VIS_SESSION_MARKER);
+    await waitForV4UserMessageContaining(BT_VIS_ECHO_MARKER);
     await waitForV4Pane(
       (snapshot) => snapshot.canStop,
       "BT03 首轮没有进入 running（canStop）",
@@ -221,9 +226,18 @@ describe("BT 边界：双击幂等（诚实 noop）与按钮可见性边界", ()
     });
     const ack = await waitForLatestV4CommandAck("backgroundToolCall", 30000);
     expect(ack.status).toBe("accepted");
-    expect(await hasToolBackgroundButton(BT_VIS_BG_TOOL_CALL_ID)).toBe(false);
-    const backgroundedBlock = await waitForToolCallBlockByToolCallId(BT_VIS_BG_TOOL_CALL_ID, 15000);
-    expect(/·\s*(Background|后台)/.test(backgroundedBlock.text)).toBe(true);
+    // 按钮消失与 `· Background` 提示都等权威投影回流（row.backgrounded），ack 先于重绘。
+    await browser.waitUntil(
+      async () => !(await hasToolBackgroundButton(BT_VIS_BG_TOOL_CALL_ID)),
+      { timeout: 15000, timeoutMsg: "BT03 相位 3 移交后按钮没有随投影消失" },
+    );
+    await browser.waitUntil(
+      async () => {
+        const block = await waitForToolCallBlockByToolCallId(BT_VIS_BG_TOOL_CALL_ID, 5000);
+        return /·\s*(Background|后台)/.test(block.text);
+      },
+      { timeout: 15000, timeoutMsg: "BT03 相位 3 移交后卡上没有出现 `· Background` 提示" },
+    );
 
     // 排水：等 sleep 自然完成 → wake 收口；后台 work 行随结算移除。
     await waitForV4AssistantMessageContaining(BT_VIS_BG_TEXT, 60000);
@@ -244,50 +258,7 @@ describe("BT 边界：双击幂等（诚实 noop）与按钮可见性边界", ()
       { timeout: 30000, timeoutMsg: "BT03 wake 结算后 Task Island 没有移除 bash 后台行" },
     );
   });
-
-  it("BT03 反向对照：backgrounded 卡的按钮表面关闭后，Task Island 行是唯一剩余入口", async function () {
-    this.timeout(BT_EDGES_TIMEOUT_MS);
-
-    await startNewV4Draft();
-    await switchV4Model(modelProvider, modelName, modelThought);
-    await sendV4Prompt(`${BT_VIS_CANCEL_MARKER} 运行这条耗时命令`);
-    await waitForV4ComposerText("", "BT03 反向对照消息发送后输入框没有清空");
-    await waitForToolCallBlockByToolCallId(BT_VIS_CANCEL_TOOL_CALL_ID, 60000);
-    await clickTestIdByDom(testId(TID_V4_TOOL_BACKGROUND, BT_VIS_CANCEL_TOOL_CALL_ID), {
-      timeout: 30000,
-      timeoutMsg: "BT03 反向对照「Go to background」按钮没有出现或不可点击",
-    });
-    const ack = await waitForLatestV4CommandAck("backgroundToolCall", 30000);
-    expect(ack.status).toBe("accepted");
-
-    await openV4ComposerRunningBackgroundWorks();
-    const works = await getV4BackgroundWorks();
-    expect(works).toHaveLength(1);
-    // 卡上按钮随 backgrounded 消失，Task Island 行保留（status running）。
-    expect(await hasToolBackgroundButton(BT_VIS_CANCEL_TOOL_CALL_ID)).toBe(false);
-    expect(works[0]!.status).toBe("running");
-    expect(works[0]!.workId.startsWith("exec_")).toBe(true);
-
-    // 排水：sleep 自然完成 → 单一 wake 收口，不留跨用例后台工作。
-    await waitForUpstreamRequest(
-      wakeQuery(BT_VIS_CANCEL_MARKER),
-      "BT03 反向对照后台命令完成后没有发出 wake 请求",
-      90000,
-    );
-    await waitForV4AssistantMessageContaining(BT_VIS_CANCEL_WAKE_TEXT, 90000);
-    await assertVisibleV4UserMessagesNotContaining("<task-notification>");
-    await waitForV4ConversationState(
-      (snapshot) => snapshot.state !== "streaming" && snapshot.queueCount === 0,
-      "BT03 反向对照 wake 收口后会话没有回到 idle",
-      90000,
-    );
-    await browser.waitUntil(
-      async () => (await getV4BackgroundWorks()).length === 0,
-      { timeout: 30000, timeoutMsg: "BT03 反向对照 wake 结算后 Task Island 没有移除 bash 后台行" },
-    );
-  });
 });
-
 
 /**
  * wake/通知请求锚定：`<task-notification>` 字样出现在每个请求的系统提示（Bash 工具

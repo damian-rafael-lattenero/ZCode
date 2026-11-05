@@ -1,0 +1,223 @@
+{
+  "version": 1,
+  "caseName": "conversation-session-background-tool-call",
+  "spec": "./test/e2e/conversation-session/conversation-session-background-tool-call.test.ts",
+  "fixtures": [
+    {
+      "id": "bt-main-title",
+      "description": "E2E_BT_MAIN 会话首发的 case-local 标题生成响应。",
+      "metadata": {
+        "kind": "common",
+        "timingPolicy": "fast-text",
+        "source": "synthetic",
+        "syntheticReason": "E2E_BT_MAIN 首发会触发默认 title sidecar；固定 case-local 标题响应，避免 default replay 回退 legacy provider-basic，并用该首发 marker 隔离跨 case 匹配。"
+      },
+      "match": {
+        "method": "POST",
+        "pathIncludes": "/messages",
+        "bodyIncludes": ["Generate a concise title", "E2E_BT_MAIN"]
+      },
+      "response": {
+        "statusCode": 200,
+        "text": {
+          "id": "bt-main-title",
+          "inputTokens": 64,
+          "outputTokens": 8,
+          "text": "{\"title\":\"BT Main\"}"
+        }
+      }
+    },
+    {
+      "id": "bt-main-bash-tool-call",
+      "description": "BT01：Bash tool_use，启动真实 `sleep` 前台进程，为运行中 Bash 卡提供稳定 running 窗口。",
+      "metadata": {
+        "kind": "main",
+        "timingPolicy": "fast-text",
+        "source": "synthetic",
+        "syntheticReason": "BT 的运行窗口由真实 Bash 进程提供（manual lifecycle 无自动转后台期限，默认 timeout 120s 覆盖 sleep 20）；不需要 controlled-stream，移交动作直接落在真实执行相位。"
+      },
+      "maxMatches": 1,
+      "match": {
+        "method": "POST",
+        "pathIncludes": "/messages",
+        "lastUserMessageIncludes": ["E2E_BT_MAIN"],
+        "bodyExcludes": ["Generate a concise title", "CRITICAL: Respond with TEXT ONLY"]
+      },
+      "response": {
+        "statusCode": 200,
+        "toolUse": {
+          "id": "toolu_bt_main_bash",
+          "name": "Bash",
+          "input": {
+            "command": "sleep 20 && echo bt-main-sleep-done"
+          }
+        }
+      }
+    },
+    {
+      "id": "bt-main-continue",
+      "description": "BT01：移交后合成结果回灌 → 模型在同一 turn 继续输出的后续文本。",
+      "metadata": {
+        "kind": "main",
+        "timingPolicy": "fast-text",
+        "source": "synthetic",
+        "syntheticReason": "continuation 哨兵证明 tool call 结算后 turn 未中断、模型未等待后台命令；请求由 runtime 的真实回灌管线产生，matcher 靠 toolCallId 区分且显式排除 task-notification。"
+      },
+      "maxMatches": 1,
+      "match": {
+        "method": "POST",
+        "pathIncludes": "/messages",
+        "bodyIncludes": ["E2E_BT_MAIN", "toolu_bt_main_bash"],
+        "bodyExcludes": [
+          "Generate a concise title",
+          "CRITICAL: Respond with TEXT ONLY",
+          "bt-main-wake-ok"
+        ]
+      },
+      "response": {
+        "statusCode": 200,
+        "text": {
+          "id": "bt-main-continue",
+          "inputTokens": 140,
+          "outputTokens": 10,
+          "text": "bt-main-continued-ok"
+        }
+      }
+    },
+    {
+      "id": "bt-main-wake",
+      "description": "BT01：后台命令自然完成后 task-notification 触发的 backgroundResult wake 回复。",
+      "metadata": {
+        "kind": "main",
+        "timingPolicy": "fast-text",
+        "source": "synthetic",
+        "syntheticReason": "wake 轮只需稳定完成的可断言哨兵；通知请求本身由 runtime 的 backgroundResult 管线真实产生（sleep 20 退出后）。"
+      },
+      "maxMatches": 1,
+      "match": {
+        "method": "POST",
+        "pathIncludes": "/messages",
+        "bodyIncludes": ["E2E_BT_MAIN"],
+        "lastUserMessageIncludes": ["<task-notification>"],
+        "bodyExcludes": ["Generate a concise title"]
+      },
+      "response": {
+        "statusCode": 200,
+        "text": {
+          "id": "bt-main-wake",
+          "inputTokens": 180,
+          "outputTokens": 12,
+          "text": "bt-main-wake-ok"
+        }
+      }
+    },
+    {
+      "id": "bt-continue-title",
+      "description": "E2E_BT_CONTINUE 会话首发的 case-local 标题生成响应。",
+      "metadata": {
+        "kind": "common",
+        "timingPolicy": "fast-text",
+        "source": "synthetic",
+        "syntheticReason": "E2E_BT_CONTINUE 首发会触发默认 title sidecar；固定 case-local 标题响应，避免 default replay 回退 legacy provider-basic，并用该首发 marker 隔离跨 case 匹配。"
+      },
+      "match": {
+        "method": "POST",
+        "pathIncludes": "/messages",
+        "bodyIncludes": ["Generate a concise title", "E2E_BT_CONTINUE"]
+      },
+      "response": {
+        "statusCode": 200,
+        "text": {
+          "id": "bt-continue-title",
+          "inputTokens": 64,
+          "outputTokens": 8,
+          "text": "{\"title\":\"BT Continue\"}"
+        }
+      }
+    },
+    {
+      "id": "bt-continue-bash-tool-call",
+      "description": "BT04：Bash tool_use，启动真实 `sleep` 前台进程，验证移交后模型的 continuation 诚实性。",
+      "metadata": {
+        "kind": "main",
+        "timingPolicy": "fast-text",
+        "source": "synthetic",
+        "syntheticReason": "BT04 需要 turn 收口早于后台命令完成的确定性顺序（sleep 12 vs fast-text continuation），真实进程保证这一点而无需受控流。"
+      },
+      "maxMatches": 1,
+      "match": {
+        "method": "POST",
+        "pathIncludes": "/messages",
+        "lastUserMessageIncludes": ["E2E_BT_CONTINUE"],
+        "bodyExcludes": ["Generate a concise title", "CRITICAL: Respond with TEXT ONLY"]
+      },
+      "response": {
+        "statusCode": 200,
+        "toolUse": {
+          "id": "toolu_bt_continue_bash",
+          "name": "Bash",
+          "input": {
+            "command": "sleep 12 && echo bt-continue-sleep-done"
+          }
+        }
+      }
+    },
+    {
+      "id": "bt-continue-post-background",
+      "description": "BT04：移交后模型在同一 turn 产出的 continuation 文本（do-not-wait 指令被遵守）。",
+      "metadata": {
+        "kind": "main",
+        "timingPolicy": "fast-text",
+        "source": "synthetic",
+        "syntheticReason": "continuation 哨兵必须在任何 task-notification 之前出现，证明模型没有停在已移交的命令上；matcher 排除 task-notification 保证只在同 turn 命中。"
+      },
+      "maxMatches": 1,
+      "match": {
+        "method": "POST",
+        "pathIncludes": "/messages",
+        "bodyIncludes": ["E2E_BT_CONTINUE", "toolu_bt_continue_bash"],
+        "bodyExcludes": [
+          "Generate a concise title",
+          "CRITICAL: Respond with TEXT ONLY",
+          "bt-continue-wake-ok"
+        ]
+      },
+      "response": {
+        "statusCode": 200,
+        "text": {
+          "id": "bt-continue-post-background",
+          "inputTokens": 150,
+          "outputTokens": 10,
+          "text": "bt-continue-after-background-ok"
+        }
+      }
+    },
+    {
+      "id": "bt-continue-wake",
+      "description": "BT04：后台命令自然完成后 task-notification 触发的 backgroundResult wake 回复（用例排水）。",
+      "metadata": {
+        "kind": "main",
+        "timingPolicy": "fast-text",
+        "source": "synthetic",
+        "syntheticReason": "排水哨兵：确保用例结束时没有遗留后台工作污染同 spec 后续用例；通知请求由 runtime 真实产生。"
+      },
+      "maxMatches": 1,
+      "match": {
+        "method": "POST",
+        "pathIncludes": "/messages",
+        "bodyIncludes": ["E2E_BT_CONTINUE"],
+        "lastUserMessageIncludes": ["<task-notification>"],
+        "bodyExcludes": ["Generate a concise title"]
+      },
+      "response": {
+        "statusCode": 200,
+        "text": {
+          "id": "bt-continue-wake",
+          "inputTokens": 190,
+          "outputTokens": 12,
+          "text": "bt-continue-wake-ok"
+        }
+      }
+    }
+  ]
+}

@@ -315,7 +315,10 @@ export class AppErrorBoundary extends Component<AppErrorBoundaryProps, AppErrorB
 
   override componentDidCatch(error: unknown, errorInfo: ErrorInfo) {
     const normalizedError = normalizeError(error);
-    logger.error(
+    // [fork] lifecycle.error survives the production renderer gate (plain
+    // logger.* is a no-op in the packaged build) and lands in the main log —
+    // the owner's #301 crash was invisible because this used logger.error.
+    logger.lifecycle.error(
       "[AppErrorBoundary] React subtree crashed:",
       // Error 对象跨 preload 日志 bridge 序列化后会变成 {}，
       // 导致 Maximum update depth 等关键 message 丢失。这里显式展开可诊断字段。
@@ -389,7 +392,9 @@ export class ScopedErrorBoundary extends Component<
 
   override componentDidCatch(error: unknown, errorInfo: ErrorInfo) {
     const normalizedError = normalizeError(error);
-    logger.error(
+    // [fork] Same lifecycle channel as the root boundary: scope + component
+    // stack reach the main log in production, so a section crash names its fiber.
+    logger.lifecycle.error(
       `[ScopedErrorBoundary:${this.props.scope}] React subtree crashed:`,
       // Error 对象跨 preload 日志 bridge 序列化后会变成 {}，
       // 局部边界需要保留 message/stack 才能定位 UI 更新循环。

@@ -46,15 +46,25 @@ def build-bundle [repo: string]: nothing -> string {
     # este tramo — announce en cada fase larga; el announce nunca rompe).
     print "[fork] pnpm install --frozen-lockfile (node_modules contra el lock)..."
     announce "🚀 deploy fork — pnpm install --frozen-lockfile (tarda minutos)…"
-    ^$MISE exec -- node scripts/mise-run.mjs pnpm install --frozen-lockfile
+    let install: record = (do { ^$MISE exec -- node scripts/mise-run.mjs pnpm install --frozen-lockfile } | complete)
+    print $install.stdout
+    if $install.exit_code != 0 {
+        print -e $install.stderr
+        fail "[fork]" $"pnpm install falló \(exit ($install.exit_code)\)"
+    }
     print "[fork] bundle:desktop (ZCODE_ENV=production, no signing)..."
     announce "🚀 deploy fork — bundle:desktop (el tramo largo, ~10-15 min)…"
-    with-env {
+    let bundle: record = (with-env {
         ZCODE_ENV: "production"
         CSC_IDENTITY_AUTO_DISCOVERY: "false"
         ELECTRON_MIRROR: "https://artifacts.electronjs.org/"
     } {
-        ^$MISE exec -- node scripts/mise-run.mjs pnpm bundle:desktop
+        do { ^$MISE exec -- node scripts/mise-run.mjs pnpm bundle:desktop } | complete
+    })
+    print $bundle.stdout
+    if $bundle.exit_code != 0 {
+        print -e $bundle.stderr
+        fail "[fork]" $"bundle:desktop falló \(exit ($bundle.exit_code)\)"
     }
     let zips = (ls ($repo | path join "packages/desktop/dist")
         | where name =~ 'ZCode-.*-mac-arm64\.zip$'
@@ -125,7 +135,7 @@ def install-zip [repo: string, zip: string, keep_prev: bool]: nothing -> nothing
         print -e "[fork] WARN: Diff Ask bootstrap failed — install it manually (Plugins → Personal)"
     }
     ^open -a ZCode
-    announce $"✅ Fork instalado — versión ($version) — y app reabierta."
+    announce-loud $"🔥 <b>DEPLOY FORK COMPLETO</b> — versión ($version) instalada y app reabierta; verificá el canal 📡"
     print "[fork] done — verify: New tab → App plugins grid shows Diff Ask; bot turn works; /diff works."
 }
 

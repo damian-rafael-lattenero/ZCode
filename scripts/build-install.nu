@@ -45,7 +45,7 @@ def build-bundle [repo: string]: nothing -> string {
     # LOS TRAMOS MUDOS AL TELÉFONO (4/11: el owner leyó silencio 15 min en
     # este tramo — announce en cada fase larga; el announce nunca rompe).
     print "[fork] pnpm install --frozen-lockfile (node_modules contra el lock)..."
-    announce "🚀 deploy fork — pnpm install --frozen-lockfile (tarda minutos)…"
+    announce "🚀 deploy Fork ZCode — pnpm install --frozen-lockfile (tarda minutos)…"
     let install: record = (do { ^$MISE exec -- node scripts/mise-run.mjs pnpm install --frozen-lockfile } | complete)
     print $install.stdout
     if $install.exit_code != 0 {
@@ -53,7 +53,7 @@ def build-bundle [repo: string]: nothing -> string {
         fail "[fork]" $"pnpm install falló \(exit ($install.exit_code)\)"
     }
     print "[fork] bundle:desktop (ZCODE_ENV=production, no signing)..."
-    announce "🚀 deploy fork — bundle:desktop (el tramo largo, ~10-15 min)…"
+    announce "🚀 deploy Fork ZCode — bundle:desktop (el tramo largo, ~10-15 min)…"
     let bundle: record = (with-env {
         ZCODE_ENV: "production"
         CSC_IDENTITY_AUTO_DISCOVERY: "false"
@@ -72,7 +72,7 @@ def build-bundle [repo: string]: nothing -> string {
     if ($zips | is-empty) {
         fail "[fork]" "el build no produjo ningún ZCode-*-mac-arm64.zip"
     }
-    announce $"✅ deploy fork — build listo \(($zips | first).name | path basename\)"
+    announce $"✅ deploy Fork ZCode — build listo \(($zips | first).name | path basename\)"
     (($zips | first).name)
 }
 
@@ -135,7 +135,7 @@ def install-zip [repo: string, zip: string, keep_prev: bool]: nothing -> nothing
         print -e "[fork] WARN: Diff Ask bootstrap failed — install it manually (Plugins → Personal)"
     }
     ^open -a ZCode
-    announce-loud $"🔥 <b>DEPLOY FORK COMPLETO</b> — versión ($version) instalada y app reabierta; verificá el canal 📡"
+    announce-loud $"🔥 <b>DEPLOY FORK ZCODE COMPLETO</b> — versión ($version) instalada y app reabierta; verificá el canal 📡"
     print "[fork] done — verify: New tab → App plugins grid shows Diff Ask; bot turn works; /diff works."
 }
 

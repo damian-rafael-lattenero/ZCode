@@ -321,7 +321,18 @@ export function useDraftConfigControl(params: {
     if (
       firstSnapshot ||
       observedConfig.permissionGrantId !== previous.permissionGrantId ||
-      observedConfig.planTransitionId !== previous.planTransitionId
+      observedConfig.planTransitionId !== previous.planTransitionId ||
+      // [fork] THE MIRROR'S BASELINE MUST TRACK ITSELF (the owner's #301,
+      // 10/11): seenMode/seenPlan live inside observedConfig, but this write
+      // used to fire only on grant/transition changes. A runtime move WITHOUT
+      // a grant — the composer toggle's switchCollaborationMode — left the
+      // baseline stale, so runtimeModeMoved/runtimePlanMoved stayed true on
+      // EVERY render and the render-phase adoption wrote the draft forever
+      // (dev: "Too many re-renders", production: React #301 inside
+      // SessionPane). The seen values change exactly when the runtime moved:
+      // rewrite then, so each move adopts ONCE.
+      observedConfig.seenMode !== previous.seenMode ||
+      observedConfig.seenPlan !== previous.seenPlan
     ) {
       currentState = { ...currentState, observedConfig };
     }

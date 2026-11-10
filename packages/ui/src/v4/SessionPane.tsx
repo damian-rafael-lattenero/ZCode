@@ -4826,8 +4826,27 @@ export function SessionPane({
   const handleSwitchMode = useCallback(
     (mode: string) => {
       handleDraftSwitchMode(mode);
+      // THE MIRROR (owner, 10/11): the composer's plan toggle and the phone's
+      // /plan_mode are ONE switch — a live session dispatches the SAME v4
+      // command the bot's setMode is translated into
+      // (switchCollaborationMode; zcodeTaskServiceAdapter's setModeViaProtocol),
+      // and the SessionModeChanged projection carries the truth back to every
+      // client. OFF writes the bot's own law (ModeMenu.DEFAULT_MODE_ID = yolo,
+      // Full access — 4/11). A root draft has no session to switch: the draft
+      // alone arms the first submission (the prewarmed create path).
+      if (mode !== "plan" && mode !== "plan-off") return;
+      const target = sessionId ?? prewarmBindingRef.current?.sessionId ?? null;
+      if (!target) return;
+      const runtimeMode = mode === "plan" ? "plan" : "yolo";
+      void configCommandBarrier.enqueue(() =>
+        dispatchConfigCas(
+          "switchCollaborationMode",
+          { mode: runtimeMode },
+          { targetSessionId: target },
+        ),
+      );
     },
-    [handleDraftSwitchMode],
+    [configCommandBarrier, dispatchConfigCas, handleDraftSwitchMode, sessionId],
   );
 
   // context usage 面板的压缩入口（命令文本 = "/compact"，复用 slash 解析路径）。

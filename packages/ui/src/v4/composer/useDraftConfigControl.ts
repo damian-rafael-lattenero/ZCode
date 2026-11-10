@@ -148,6 +148,9 @@ interface ComposerState {
     sourceSessionId?: string;
     permissionGrantId?: string;
     planTransitionId?: string;
+    /** The runtime's plan/mode as of this snapshot — the mirror's "did it MOVE" baseline. */
+    seenMode?: string;
+    seenPlan?: boolean;
   };
   promotedSessionId?: string;
 }
@@ -274,14 +277,16 @@ export function useDraftConfigControl(params: {
   }
   if (sessionId && sessionConfig) {
     const previous = currentState.observedConfig;
-    const observedConfig = {
-      permissionGrantId: sessionConfig.permissionGrant?.interactionId,
-      planTransitionId: sessionConfig.planTransition?.toolCallId,
-    };
-    const firstSnapshot = !previous;
     const mode = submissionModeSchema.safeParse(sessionConfig.mode);
     const currentMode = mode.success && mode.data !== "plan" ? mode.data : "build";
     const currentPlan = resolveExecutionState(sessionConfig).planEnabled;
+    const observedConfig = {
+      permissionGrantId: sessionConfig.permissionGrant?.interactionId,
+      planTransitionId: sessionConfig.planTransition?.toolCallId,
+      seenMode: currentMode,
+      seenPlan: currentPlan,
+    };
+    const firstSnapshot = !previous;
     if (firstSnapshot && currentState.initialization === "session") {
       // 历史授权曾被当成新指令重放，覆盖最新确认模式。恢复直接采用当前事实，文字只恢复模型。
       draft = {
@@ -298,24 +303,20 @@ export function useDraftConfigControl(params: {
       const planChanged =
         observedConfig.planTransitionId &&
         observedConfig.planTransitionId !== previous.planTransitionId;
-      if (permissionChanged || planChanged)
+      // [fork] Espejo (4/11) + toggle law (10/11): the mirror adopts an EXTERNAL
+      // change only when the RUNTIME value itself moved since the last snapshot
+      // — a static runtime must never eat the draft's own pending toggle (the
+      // old value-mismatch sync reverted the owner's Plan tap before the send
+      // could apply it: the checkbox "didn't work"). Last writer = whoever
+      // moved the runtime: the phone's /plan_mode still lands here immediately.
+      const runtimeModeMoved = previous.seenMode !== undefined && currentMode !== previous.seenMode;
+      const runtimePlanMoved = previous.seenPlan !== undefined && currentPlan !== previous.seenPlan;
+      if (permissionChanged || planChanged || runtimeModeMoved || runtimePlanMoved)
         draft = {
           ...draft,
-          ...(permissionChanged ? { mode: currentMode } : {}),
-          ...(planChanged ? { planEnabled: currentPlan } : {}),
+          ...(permissionChanged || runtimeModeMoved ? { mode: currentMode } : {}),
+          ...(planChanged || runtimePlanMoved ? { planEnabled: currentPlan } : {}),
         };
-      // [fork] Espejo (4/11): un cliente EXTERNO (el canal del bot) puede cambiar
-      // modo/Plan; el v4 ya emite SessionModeChanged y la proyección actualiza
-      // snapshot.config — pero el draft lo ignoraba, así que el próximo send
-      // re-estampaba el valor viejo y «el estado no se guarda» (medido: plan del
-      // teléfono → full access al primer mensaje de la desktop). Adoptar la
-      // configuración canónica es idempotente: valores iguales no reescriben
-      // nada, el propio submit no produce bucle. Último escritor gana: si el
-      // usuario está eligiendo en el composer y llega un cambio externo, gana
-      // el externo (el espejo que pidió el dueño).
-      if (currentMode !== draft.mode || currentPlan !== (draft.planEnabled ?? false)) {
-        draft = { ...draft, mode: currentMode, planEnabled: currentPlan };
-      }
     }
     if (
       firstSnapshot ||

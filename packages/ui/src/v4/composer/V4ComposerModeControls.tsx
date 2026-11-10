@@ -1,5 +1,5 @@
 import { memo, useCallback, useMemo } from "react";
-import { LightbulbIcon, XIcon, ChevronDownIcon } from "lucide-react";
+import { LightbulbIcon, ChevronDownIcon } from "lucide-react";
 import {
   ZCODE_AGENT_PROVIDER,
   getZCodeAgentAvailableModes,
@@ -15,10 +15,8 @@ import {
   DropdownMenu,
   DropdownMenuTrigger,
   DropdownMenuContent,
-  DropdownMenuCheckboxItem,
   DropdownMenuRadioGroup,
   DropdownMenuRadioItem,
-  DropdownMenuSeparator,
 } from "@/components/ui/dropdown-menu.js";
 import { RollingToolbarLabel } from "@/chat-input-toolbar/RollingToolbarLabel.js";
 import { Button } from "@/components/ui/button.js";
@@ -42,7 +40,12 @@ import type { V4ComposerToolbarProps } from "@/v4/composer/V4ComposerToolbar.js"
 
 function noop(): void {}
 
-/** Plan 是独立勾选项，三种权限仍为单选；只编辑草稿，不向 Runtime 发切换命令。 */
+/**
+ * The composer's mode controls: a STANDALONE plan toggle (the owner's law,
+ * 10/11 — outside the permission menu, always speaking its state) plus the
+ * permission radio menu (build/yolo/guarded). Draft-only: neither writes to
+ * the runtime until the next submission carries the config.
+ */
 function V4ComposerModeSwitchImpl({
   provider,
   draftConfig,
@@ -80,10 +83,13 @@ function V4ComposerModeSwitchImpl({
     (draftConfig?.mode === "edit" ? { id: "edit", name: "Edit" } : undefined);
   const label = (mode: (typeof modes)[number]) =>
     getModeOptionDisplayLabel(intl, displayProvider, { value: mode.id, name: mode.name });
-  const plan = modes.find((mode) => mode.id === "plan")!;
-  const planLabel = label(plan);
-  // Plan 拆成独立勾选项后仍需保留原菜单说明，复用相同的国际化映射。
-  const planDescriptionId = getModeOptionDescriptionMessageId(displayProvider, { value: plan.id });
+  // THE OWNER'S LAW (10/11): plan lives OUTSIDE the permission menu — a
+  // standalone on/off toggle that always speaks its state, never a buried
+  // checkbox. The permission menu stays a pure radio group.
+  const planEnabled = draftConfig?.planEnabled ?? false;
+  const planToggleLabel = intl.formatMessage({
+    id: planEnabled ? "chat.toolbar.planToggle.on" : "chat.toolbar.planToggle.off",
+  });
   const modeOption = useMemo<ZCodeConfigOption>(
     () => ({
       id: "mode",
@@ -114,6 +120,28 @@ function V4ComposerModeSwitchImpl({
   const Icon = resolveModeOptionIcon(selected.id);
   return (
     <div className="flex min-w-0 items-center gap-1">
+      <Button
+        type="button"
+        variant="ghost"
+        size="sm"
+        disabled={disabled}
+        data-testid="v4-composer-plan-toggle"
+        data-composer-collapse-priority="2"
+        aria-pressed={planEnabled}
+        aria-label={planToggleLabel}
+        onClick={() => onSwitchMode(planEnabled ? "plan-off" : "plan")}
+        className={cn(
+          "group/plan h-7 gap-1 rounded-lg px-2 text-ui-base",
+          planEnabled
+            ? "text-icon-blue hover:text-icon-blue"
+            : "text-foreground-subtle hover:text-foreground-subtle",
+        )}
+      >
+        <LightbulbIcon className="size-4" />
+        <span className="inline group-data-[composer-compact=true]/plan:hidden">
+          {planToggleLabel}
+        </span>
+      </Button>
       <DropdownMenu
         open={activeConfigPicker === "mode"}
         onOpenChange={(open) => onConfigPickerOpenChange("mode", open)}
@@ -159,23 +187,6 @@ function V4ComposerModeSwitchImpl({
                 ?.focus();
           }}
         >
-          <DropdownMenuCheckboxItem
-            checked={draftConfig?.planEnabled ?? false}
-            onCheckedChange={(checked) => onSwitchMode(checked ? "plan" : "plan-off")}
-            data-testid={testId(TID_CHAT_MODE_SELECT_ITEM, "plan")}
-            className="min-h-13 items-start gap-3 py-2"
-          >
-            <LightbulbIcon className="mt-0.5 size-4.5 shrink-0" />
-            <span className="flex min-w-0 flex-col gap-0.5">
-              <span>{planLabel}</span>
-              {planDescriptionId && (
-                <span className="text-ui-sm text-foreground-subtle">
-                  {intl.formatMessage({ id: planDescriptionId })}
-                </span>
-              )}
-            </span>
-          </DropdownMenuCheckboxItem>
-          <DropdownMenuSeparator />
           <DropdownMenuRadioGroup value={selected.id} onValueChange={requestSwitchMode}>
             {permissions.map((mode) => {
               const ModeIcon = resolveModeOptionIcon(mode.id);
@@ -204,33 +215,6 @@ function V4ComposerModeSwitchImpl({
           </DropdownMenuRadioGroup>
         </DropdownMenuContent>
       </DropdownMenu>
-      {draftConfig?.planEnabled && (
-        <span data-testid="v4-composer-plan-marker" className="flex items-center gap-1">
-          <span
-            role="separator"
-            aria-orientation="vertical"
-            className="h-3 w-px shrink-0 bg-border"
-          />
-          <ControlHintTooltip title={intl.formatMessage({ id: "chat.plan.removeMarker" })}>
-            <Button
-              type="button"
-              variant="ghost"
-              size="sm"
-              disabled={disabled}
-              data-composer-collapse-priority="2"
-              onClick={() => onSwitchMode("plan-off")}
-              aria-label={intl.formatMessage({ id: "chat.plan.removeMarker" })}
-              className="group/plan h-7 gap-1 rounded-lg px-2 text-ui-base text-foreground-subtle hover:text-foreground-subtle data-[composer-compact=true]:w-7 data-[composer-compact=true]:px-0"
-            >
-              <LightbulbIcon className="size-4 group-hover/plan:hidden group-focus-visible/plan:hidden" />
-              <XIcon className="hidden size-4 group-hover/plan:block group-focus-visible/plan:block" />
-              <span className="inline group-data-[composer-compact=true]/plan:hidden">
-                {intl.formatMessage({ id: "mode.plan" })}
-              </span>
-            </Button>
-          </ControlHintTooltip>
-        </span>
-      )}
     </div>
   );
 }

@@ -85,9 +85,12 @@ function V4ComposerModeSwitchImpl({
     getModeOptionDisplayLabel(intl, displayProvider, { value: mode.id, name: mode.name });
   // THE OWNER'S LAW (10/11): plan lives OUTSIDE the permission menu — a
   // standalone on/off toggle that always speaks its state, never a buried
-  // checkbox. The permission menu stays a pure radio group.
+  // checkbox. The label stays fixed; the STATE is the color + strike
+  // (green/plain = active, red/struck = inactive — the owner's own design).
+  // The permission menu stays a pure radio group.
   const planEnabled = draftConfig?.planEnabled ?? false;
-  const planToggleLabel = intl.formatMessage({
+  const planLabel = intl.formatMessage({ id: "chat.toolbar.planToggle.label" });
+  const planStateLabel = intl.formatMessage({
     id: planEnabled ? "chat.toolbar.planToggle.on" : "chat.toolbar.planToggle.off",
   });
   const modeOption = useMemo<ZCodeConfigOption>(
@@ -128,18 +131,23 @@ function V4ComposerModeSwitchImpl({
         data-testid="v4-composer-plan-toggle"
         data-composer-collapse-priority="2"
         aria-pressed={planEnabled}
-        aria-label={planToggleLabel}
+        aria-label={planStateLabel}
         onClick={() => onSwitchMode(planEnabled ? "plan-off" : "plan")}
         className={cn(
           "group/plan h-7 gap-1 rounded-lg px-2 text-ui-base",
           planEnabled
-            ? "text-icon-blue hover:text-icon-blue"
-            : "text-foreground-subtle hover:text-foreground-subtle",
+            ? "text-success hover:text-success"
+            : "text-destructive hover:text-destructive",
         )}
       >
         <LightbulbIcon className="size-4" />
-        <span className="inline group-data-[composer-compact=true]/plan:hidden">
-          {planToggleLabel}
+        <span
+          className={cn(
+            "inline group-data-[composer-compact=true]/plan:hidden",
+            !planEnabled && "line-through",
+          )}
+        >
+          {planLabel}
         </span>
       </Button>
       <DropdownMenu

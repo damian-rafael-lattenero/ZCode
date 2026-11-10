@@ -6187,6 +6187,7 @@ const enUS: Record<string, string> = {
     "After compression, the context used by this conversation is still larger than the target model's available context after reserving maximum output. Model switching was canceled.",
   "chat.toolbar.mode.label": "Switch mode",
   // The composer's standalone plan toggle (outside the permission menu — always speaks its state)
+  "chat.toolbar.planToggle.label": "Plan Mode",
   "chat.toolbar.planToggle.on": "Plan mode active",
   "chat.toolbar.planToggle.off": "Plan mode inactive",
   // CUA composer entry button

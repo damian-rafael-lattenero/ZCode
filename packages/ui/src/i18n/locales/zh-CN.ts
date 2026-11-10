@@ -5790,6 +5790,7 @@ const zhCN: Record<string, string> = {
     "压缩完成后，当前会话已使用的上下文仍大于目标模型预留最大输出后的可用上下文，模型切换已取消。",
   "chat.toolbar.mode.label": "切换模式",
   // The composer's standalone plan toggle (outside the permission menu — always speaks its state)
+  "chat.toolbar.planToggle.label": "计划模式",
   "chat.toolbar.planToggle.on": "计划模式已开启",
   "chat.toolbar.planToggle.off": "计划模式未开启",
   // CUA 输入框常驻入口按钮

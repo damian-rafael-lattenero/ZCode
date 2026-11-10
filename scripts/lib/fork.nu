@@ -39,17 +39,21 @@ export def app-version []: nothing -> string {
 # transport: token/chat come from the config the poller itself reads. The
 # announcement NEVER breaks the caller (do -i + catch).
 export def announce [text: string]: nothing -> nothing {
-    send-telegram $text null
+    send-telegram $text
 }
 
 # THE LOUD VOICE (the owner's order, 10/11: «al finalizar cada script un
 # aviso bien llamativo»): HTML bold for the END of a deploy and for every
 # failure — the phone cannot skim past them. Same never-breaks contract.
 export def announce-loud [html: string]: nothing -> nothing {
-    send-telegram $html "HTML"
+    send-telegram --html $html
 }
 
-def send-telegram [text: string, parse_mode: string]: nothing -> nothing {
+# THE FLAG, NOT THE NULL (the owner's 10/11 triple silence): the previous
+# shape passed `null` into a string-typed param and nu-nightly REJECTS that
+# call AT PARSE — the script died at import, before its first print. A long
+# flag carries the parse-mode; no null crosses any signature.
+def send-telegram [text: string, --html]: nothing -> nothing {
     let cfg_path: string = ($nu.home-dir | path join ".zcode/telegram-remote.json")
     if not ($cfg_path | path exists) { return }
     try {
@@ -57,10 +61,10 @@ def send-telegram [text: string, parse_mode: string]: nothing -> nothing {
         let token: string = ($cfg.token? | default "")
         let chat: string = ($cfg.chat_id? | default "")
         if ($token | is-empty) or ($chat | is-empty) { return }
-        let body: string = if $parse_mode == null {
-            ({chat_id: $chat, text: $text} | to json)
+        let body: string = if $html {
+            ({chat_id: $chat, text: $text, parse_mode: "HTML"} | to json)
         } else {
-            ({chat_id: $chat, text: $text, parse_mode: $parse_mode} | to json)
+            ({chat_id: $chat, text: $text} | to json)
         }
         do -i {
             http post -m 10sec -t application/json $"https://api.telegram.org/bot($token)/sendMessage" $body -r | ignore

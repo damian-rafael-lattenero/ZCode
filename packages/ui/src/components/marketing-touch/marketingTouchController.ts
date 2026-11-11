@@ -1,6 +1,7 @@
 import { createStore } from "zustand/vanilla";
 import type { IMarketingTouchService } from "@zcode/services";
 import type {
+  Locale,
   ManualClaimPlanFailureReason,
   MarketingAction,
   MarketingDelivery,
@@ -62,7 +63,7 @@ export function createMarketingTouchController(options: {
     signal: AbortSignal,
     phase: (phase: MarketingTouchState["phase"]) => void,
   ) => Promise<MarketingActionResult>;
-  locale: "zh-CN" | "en-US";
+  locale: Locale;
   canOpen: () => boolean;
   refresh: () => void;
 }) {

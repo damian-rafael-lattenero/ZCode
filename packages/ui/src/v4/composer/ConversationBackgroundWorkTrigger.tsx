@@ -1,7 +1,7 @@
+import { SubagentCollectionIcon } from "@/components/workflow-timeline/WorkflowAgentFace.js";
 import { memo, useMemo } from "react";
 import {
   ActivityIcon,
-  BotIcon,
   MessageSquareTextIcon,
   SquareTerminalIcon,
   Workflow,
@@ -72,8 +72,7 @@ function ConversationBackgroundWorkTriggerImpl({
 }: ConversationBackgroundWorkTriggerProps) {
   const { intl } = useZCodeIntl();
   const counts = useMemo(
-    () =>
-      getComposerBackgroundWorkCounts(backgroundWorks, runningSubagentCount),
+    () => getComposerBackgroundWorkCounts(backgroundWorks, runningSubagentCount),
     [backgroundWorks, runningSubagentCount],
   );
 
@@ -149,7 +148,8 @@ function ConversationBackgroundWorkTriggerImpl({
           ) : null}
           {counts.subagentCount > 0 ? (
             <span className="inline-flex items-center gap-0.5">
-              <BotIcon className="size-3.5" />
+              {/* 覆盖头像默认 20px 最小尺寸，与紧凑标签保持一致。 */}
+              <SubagentCollectionIcon className="size-3.5 min-h-3.5! min-w-3.5!" />
               <span>{counts.subagentCount}</span>
             </span>
           ) : null}
@@ -174,6 +174,4 @@ function ConversationBackgroundWorkTriggerImpl({
   );
 }
 
-export const ConversationBackgroundWorkTrigger = memo(
-  ConversationBackgroundWorkTriggerImpl,
-);
+export const ConversationBackgroundWorkTrigger = memo(ConversationBackgroundWorkTriggerImpl);

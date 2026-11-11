@@ -93,20 +93,16 @@ export const sessionsIndexReconcileResultSchema = z
             .object({
               sessionId: z.string(),
               exists: z.literal(true),
+              parentSessionId: z.string().optional(),
               deleted: z.boolean(),
               title: z.string(),
               titleSource: sessionMetaStateSchema.shape.titleSource,
               createdAt: timestampSchema,
               updatedAt: timestampSchema,
               lastOutcome: z.enum(["completed", "error", "interrupted"]).optional(),
-              // [fork] A4 — persisted lineage, additive. The store row IS the only
-              // fork-wide source of a running subagent's owner: the child has no
-              // session record of its own, so its `parent_id` (and taskType, which
-              // proves the row is a subagent_child) must travel on the read that
-              // already answers "does this session exist". Old servers omit both
-              // (readers treat them as unknown); old readers never see new values
-              // because this is the same build's handshake-free RPC.
-              parentSessionId: z.string().optional(),
+              // [fork] A4 — additive lineage: `taskType` ("subagent_child") rides the
+              // same reconcile read; upstream's parentSessionId above covers the owner
+              // link. Old servers omit it (readers treat it as unknown).
               taskType: z.string().optional(),
             })
             .strict(),

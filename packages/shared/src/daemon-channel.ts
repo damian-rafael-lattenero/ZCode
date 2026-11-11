@@ -150,6 +150,17 @@ export type DaemonChannelQuery =
        * not_configured (medido en vivo 30/10).
        */
       taskId?: string;
+      /**
+       * [fork] The plan whose quota is being read (additive, 11/11): the
+       * bot's /plan rows show the quota OF EACH PLAN, not just the active
+       * one. Present → the accountAccess hint comes from THIS providerId
+       * and the taskId is no longer consulted; absent → the usual
+       * behavior. Advertised with the queries:quotaProvider capability —
+       * an old host ignores the field and answers the ACTIVE plan, and
+       * the bot (which reads the caps) never asks per-plan, so no row
+       * can ever show another plan's quota.
+       */
+      providerId?: string;
     }
   | { kind: "botStatus" }
   | {

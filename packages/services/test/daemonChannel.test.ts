@@ -232,6 +232,7 @@ describe("daemon local channel (B3a)", () => {
         "queries:modelSelection",
         "control:setModelSelection",
         "queries:contextWindow",
+        "queries:quotaProvider",
         "bind",
         "subagents",
       ]),
@@ -952,6 +953,34 @@ describe("daemon local channel (B3a)", () => {
       code: "internal",
       message: expect.stringContaining("steer to task-77 failed: no target for task-77"),
     });
+    client.destroy();
+  });
+
+  it("quota reads a REQUESTED plan's pools — the per-plan override (the /plan rows' quota)", async () => {
+    await startChannel();
+    const client = await connectAndHandshake();
+    const sendQuery = (id: string, query: unknown) =>
+      client.send({ type: "query", id, query } as never);
+    const queryResult = (id: string) =>
+      client.waitFor((message) => message.type === "query_result" && message.id === id);
+    (taskService.getTaskModelSelection as ReturnType<typeof vi.fn>).mockResolvedValue({
+      providerId: "account:zai-start-plan",
+      modelId: "GLM-5.3-Flash",
+      options: { reasoningLevel: "max" },
+    });
+    sendQuery("q10", { kind: "quota", providerId: "account:zai-individual-coding-plan" });
+    await queryResult("q10");
+    // the OVERRIDE wins: the hint comes from the requested providerId and
+    // the active selection is never consulted (the bot asks per plan row;
+    // an old host would answer the active plan — the caps gate says so)
+    expect(usageService.getEntitlementSnapshot).toHaveBeenCalledWith(
+      expect.objectContaining({
+        preferredProviderId: "account:zai-individual-coding-plan",
+        accountAccess: { type: "zhipu-account", family: "zai", planKind: "individual-coding-plan" },
+        allowDisabledPreferredProvider: true,
+      }),
+    );
+    expect(taskService.getTaskModelSelection).not.toHaveBeenCalled();
     client.destroy();
   });
 

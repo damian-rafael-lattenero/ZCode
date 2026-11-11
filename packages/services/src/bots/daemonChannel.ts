@@ -309,6 +309,10 @@ export function createDaemonLocalChannel(
     "queries:taskSnapshot",
     "queries:taskUsage",
     "queries:quota",
+    // [fork] additive 11/11: per-plan quota — the quota frame accepts a
+    // providerId overriding the active selection's (the bot's /plan rows
+    // ask each plan's quota before choosing one).
+    "queries:quotaProvider",
     "queries:botStatus",
     "queries:modelSelection",
     "queries:contextWindow",
@@ -632,16 +636,24 @@ export function createDaemonLocalChannel(
         // activa sale el providerId → el hint {mode: …} cuyo shape dispara la
         // resolución DINÁMICA del acceso real en el provider (resolveRequest-
         // AccountAccess). Sin hint, el camino Start Plan nunca entra y la
-        // respuesta es el mentiroso not_configured (medido en vivo 30/10).
-        const selection = query.taskId
-          ? await taskService.getTaskModelSelection({ taskId: query.taskId }).catch(() => null)
-          : null;
-        const hint = selection ? accountAccessHintFor(selection.providerId) : null;
+        // respuesta es el mentiroso not_configured (measured live 30/10).
+        // [fork] The per-plan override (additive, 11/11): when the frame
+        // carries a providerId, THAT plan's quota is the one being read —
+        // the accountAccess hint comes from it and the active selection is
+        // no longer consulted. Without it, the historical path: the active
+        // conversation's provider decides.
+        const requested = query.providerId?.trim();
+        const selection =
+          !requested && query.taskId
+            ? await taskService.getTaskModelSelection({ taskId: query.taskId }).catch(() => null)
+            : null;
+        const providerId = requested || selection?.providerId;
+        const hint = providerId ? accountAccessHintFor(providerId) : null;
         return deps.usageStatsService.getEntitlementSnapshot({
           ...(query.invalidateBalanceCache ? { invalidateBalanceCache: true } : {}),
-          ...(selection && hint
+          ...(providerId && hint
             ? {
-                preferredProviderId: selection.providerId,
+                preferredProviderId: providerId,
                 accountAccess: hint,
                 allowDisabledPreferredProvider: true,
               }

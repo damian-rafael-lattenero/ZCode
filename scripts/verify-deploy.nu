@@ -20,7 +20,7 @@
 # Migrated from verify-deploy.sh on 2026-11-02. Typed; the interpreter is
 # pinned by the shebang.
 
-use lib/fork.nu *
+use lib/fork-ops.nu *
 
 const APP = "/Applications/ZCode.app"
 const BUNDLE = "/Applications/ZCode.app/Contents/Resources/glm/zcode.cjs"

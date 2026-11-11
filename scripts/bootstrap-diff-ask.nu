@@ -22,7 +22,7 @@
 #
 # Migrated from bootstrap-diff-ask.sh on 2026-11-02.
 
-use lib/fork.nu *
+use lib/fork-ops.nu *
 
 const HELPER = "/Applications/ZCode.app/Contents/Frameworks/ZCode Helper.app/Contents/MacOS/ZCode Helper"
 const RUNTIME = "/Applications/ZCode.app/Contents/Resources/glm/zcode.cjs"

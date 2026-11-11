@@ -6,7 +6,7 @@
 #
 # Migrated from sync-upstream.sh on 2026-11-02.
 
-use lib/fork.nu *
+use lib/fork-ops.nu *
 
 const MISE = "/opt/homebrew/bin/mise"
 

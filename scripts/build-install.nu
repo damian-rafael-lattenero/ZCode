@@ -28,7 +28,7 @@
 # job (`launchctl submit`), not Python's start_new_session: same guarantee
 # (own session, survives the caller) with one less language.
 
-use lib/fork.nu *
+use lib/fork-ops.nu *
 
 const MISE = "/opt/homebrew/bin/mise"
 const WAITER_LABEL = "com.zcode.fork-swap-waiter"

@@ -9,7 +9,7 @@
 # It waits for ZCode to quit, then installs the zip with --yes (which
 # reopens the app and announces the swap).
 
-use lib/fork.nu *
+use lib/fork-ops.nu *
 
 def main [
     --zip: string      # the zip to install

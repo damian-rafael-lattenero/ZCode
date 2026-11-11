@@ -11,7 +11,10 @@ export def log [prefix: string, msg: string]: nothing -> nothing {
 
 export def fail [prefix: string, msg: string]: nothing -> nothing {
     print -e $"($prefix) FAIL: ($msg)"
-    announce-loud $"❌ <b>DEPLOY FORK FALLÓ</b> — ($msg) (el deploy log tiene los detalles)"
+    # The owner's law (2026-11-11 incident): parens inside an interpolated
+    # string are SUBEXPRESSIONS — `(...)` with prose ran external `el` and the
+    # failure announce itself crashed. Plain words after the em-dash, no parens.
+    announce-loud $"❌ <b>DEPLOY FORK FALLÓ</b> — ($msg) — mirá la salida del script"
     exit 1
 }
 

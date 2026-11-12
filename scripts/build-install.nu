@@ -120,9 +120,26 @@ def install-zip [repo: string, zip: string, keep_prev: bool]: nothing -> nothing
         rm -rf "/Applications/ZCode.app"
     }
     ^ditto $app "/Applications/ZCode.app"
-    # Locally built bundles carry no quarantine xattr; ad-hoc sign for
-    # consistency.
-    do -i { ^codesign --force --deep --sign - "/Applications/ZCode.app" | ignore }
+    # THE KEYCHAIN LAW (12/11): an ad-hoc build is a "different app" to
+    # macOS on every rebuild → the login-password prompt for the app's own
+    # stored secrets (Chromium Safe Storage). The STABLE self-signed
+    # identity (scripts/make-signing-identity.nu, one-time setup) keeps the
+    # same designated requirement across builds: one «Siempre permitir» and
+    # the prompt never returns. No identity → ad-hoc (the old behavior).
+    let sign_id: string = "ZCode Local Signing"
+    let has_id: bool = (do { ^security find-identity -v -p codesigning } | complete | get stdout | str contains $sign_id)
+    if $has_id {
+        let signed: record = (do { ^codesign --force --deep --sign $sign_id "/Applications/ZCode.app" } | complete)
+        if $signed.exit_code != 0 {
+            print -e $"[fork] WARN: stable signing failed — the Keychain will ask again: ($signed.stderr | str trim)"
+            do -i { ^codesign --force --deep --sign - "/Applications/ZCode.app" | ignore }
+        } else {
+            print $"[fork] signed with the stable identity «($sign_id)»"
+        }
+    } else {
+        print -e "[fork] WARN: no stable signing identity — run scripts/make-signing-identity.nu once to stop the Keychain prompts"
+        do -i { ^codesign --force --deep --sign - "/Applications/ZCode.app" | ignore }
+    }
     let version = (app-version)
     print $"[fork] installed: ($version) at /Applications/ZCode.app"
     # FORK CHANGE (damian): ship with Diff Ask — ensure its marketplace +

@@ -10,12 +10,17 @@ export const DEV_ELECTRON_APP_BUNDLE_ID = "dev.zcode.app.development";
 // v4: signing policy changed (ad-hoc -> stable identity); cached v3 copies
 // must regenerate so they stop re-prompting for the credential keychain item.
 export const DEV_ELECTRON_BUNDLE_FORMAT = 4;
-// Same self-signed identity as scripts/build-install.nu: a stable designated
-// requirement means ONE keychain «Always Allow» covers every rebuild.
+// Same identity family as scripts/build-install.nu. The APPLE-ISSUED
+// identity (free Apple ID -> Personal Team) is preferred: its signature
+// carries a real TeamIdentifier, so ONE keychain «Always Allow» registers
+// teamid:<TEAM> in the item's partition list and every later build matches
+// (the per-deploy prompt dies). The local self-signed identity is the
+// fallback; ad-hoc is last resort.
+const APPLE_IDENTITY_PREFIX = '"Apple Development:';
 const STABLE_SIGNING_IDENTITY = "ZCode Local Signing";
 const execFileAsync = promisify(execFile);
 
-async function hasStableSigningIdentity() {
+async function pickSigningIdentity() {
   try {
     const { stdout } = await execFileAsync("/usr/bin/security", [
       "find-identity",
@@ -23,19 +28,27 @@ async function hasStableSigningIdentity() {
       "-p",
       "codesigning",
     ]);
-    return stdout.includes(STABLE_SIGNING_IDENTITY);
+    const appleLine = stdout
+      .split("\n")
+      .find((line) => line.includes(APPLE_IDENTITY_PREFIX));
+    if (appleLine) {
+      const quoted = appleLine.match(/"[^"]+"/);
+      if (quoted) return quoted[0].slice(1, -1);
+    }
+    if (stdout.includes(STABLE_SIGNING_IDENTITY)) return STABLE_SIGNING_IDENTITY;
   } catch {
-    return false;
+    // keychain unavailable: fall through to ad-hoc
   }
+  return "-";
 }
 
 async function signDevElectronApp(appPath) {
   // Electron 42 起通知要求有效签名；原 npm runtime 签名可能不完整，修改身份后也必须重签。
-  // Prefer the STABLE identity when present: ad-hoc signing changes the cdhash
+  // Prefer the APPLE identity when present: ad-hoc signing changes the cdhash
   // on every copy, so each dev launch re-prompts for the "ZCode Credential
   // Encryption" keychain item with the login password (the 12/11 dialog that
-  // blocked phone work). Machines without the identity keep the ad-hoc fallback.
-  const identity = (await hasStableSigningIdentity()) ? STABLE_SIGNING_IDENTITY : "-";
+  // blocked phone work).
+  const identity = await pickSigningIdentity();
   await execFileAsync("/usr/bin/codesign", [
     "--deep",
     "--force",

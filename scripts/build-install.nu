@@ -131,7 +131,18 @@ def install-zip [repo: string, zip: string, keep_prev: bool]: nothing -> nothing
     # preserves TCC grants and keeps one coherent identity. The REAL
     # silence path is the ITEM: recreate it ACL-less via /usr/bin/security
     # (the Claude-Code pattern) — runbook, one interactive password.
-    let sign_id: string = "ZCode Local Signing"
+    # Prefer the APPLE-ISSUED identity when present: its signature carries
+    # a real TeamIdentifier, so the ONE keychain Always Allow registers
+    # teamid:<TEAM> in the item's partition list and every later build
+    # matches — the per-deploy prompt DIES (the local self-signed identity
+    # cannot: securityd matches it by cdhash). Matched by NAME PREFIX so a
+    # certificate renewal keeps working; the local identity stays as the
+    # fallback for machines without the (free) Apple ID cert.
+    let apple_id: string = (do { ^security find-identity -v -p codesigning } | complete | get stdout
+        | lines | where {|l| $l =~ '"Apple Development:' } | first | default ""
+        | parse -r '\d\) [0-9A-F]+ "(?<n>[^"]+)"' | get 0.n? | default "")
+    let sign_id: string = (if ($apple_id | is-not-empty) { $apple_id } else { "ZCode Local Signing" })
+    print $"[fork] signing with «($sign_id)»"
     let has_id: bool = (do { ^security find-identity -v -p codesigning } | complete | get stdout | str contains $sign_id)
     if $has_id {
         let signed: record = (do { ^codesign --force --deep --sign $sign_id "/Applications/ZCode.app" } | complete)
@@ -141,14 +152,19 @@ def install-zip [repo: string, zip: string, keep_prev: bool]: nothing -> nothing
         } else {
             # THE DR GUARD: an install silently degrading to ad-hoc (the
             # 12/11 finding) loses TCC grants — verify the requirement
-            # anchors to the identity's leaf hash before declaring victory.
-            let leaf: string = (do { ^security find-identity -v -p codesigning } | complete | get stdout
-                | parse -r '(?<h>[0-9A-Fa-f]{40}) "ZCode Local Signing"' | get 0.h? | default "")
+            # anchors to a real identity before declaring victory.
             let dr: string = (do { ^codesign -d -r- "/Applications/ZCode.app" } | complete | get stdout)
-            if ($leaf != "") and ($dr | str downcase | str contains ($leaf | str downcase)) {
-                print $"[fork] signed with the stable identity «($sign_id)» — DR anchor verified"
+            let anchored: string = (if ($dr | str contains "anchor apple generic") {
+                "apple teamid"
+            } else if ($dr | str contains 'certificate leaf = H"') {
+                "local identity"
             } else {
-                print -e "[fork] WARN: the DR does NOT anchor to the stable identity — investigate before relaunching"
+                "AD-HOC"
+            })
+            if $anchored == "AD-HOC" {
+                print -e "[fork] WARN: the installed app is AD-HOC signed — TCC grants lost, keychain prompts every launch"
+            } else {
+                print $"[fork] signed with ($anchored) — DR verified"
             }
         }
     } else {

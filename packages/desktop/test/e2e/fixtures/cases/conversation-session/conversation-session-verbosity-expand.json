@@ -1,0 +1,36 @@
+{
+  "version": 1,
+  "caseName": "conversation-session-verbosity-expand",
+  "spec": "./test/e2e/conversation-session/conversation-session-verbosity-expand.test.ts",
+  "providerFixtures": [
+    "./test/e2e/fixtures/upstream/common.json",
+    "./test/e2e/fixtures/upstream/conversation-session/conversation-session-verbosity-expand.json"
+  ],
+  "fileFixtures": [],
+  "requests": [
+    {
+      "id": "conversation-session-verbosity-expand-title",
+      "description": "Case-local title response for the first verbosity turn.",
+      "kind": "common",
+      "source": "synthetic",
+      "timingPolicy": "fast-text",
+      "syntheticReason": "The first turn triggers the default title sidecar; pin a case-local title response and isolate it with the case marker."
+    },
+    {
+      "id": "conversation-session-verbosity-expand-turn",
+      "description": "Thinking block plus final answer so reasoning collapse state is assertable.",
+      "kind": "main",
+      "source": "synthetic",
+      "timingPolicy": "fast-text",
+      "syntheticReason": "Deterministic reasoning row plus final answer; the test drives the verbosity picker and asserts retroactive and born-expanded states."
+    },
+    {
+      "id": "conversation-session-verbosity-expand-auxiliary",
+      "description": "Catch-all response for auxiliary prompts without the case marker.",
+      "kind": "common",
+      "source": "synthetic",
+      "timingPolicy": "fast-text",
+      "syntheticReason": "Keeps non-turn prompts from failing replay matching."
+    }
+  ]
+}

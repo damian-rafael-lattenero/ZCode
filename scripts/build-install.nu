@@ -120,21 +120,36 @@ def install-zip [repo: string, zip: string, keep_prev: bool]: nothing -> nothing
         rm -rf "/Applications/ZCode.app"
     }
     ^ditto $app "/Applications/ZCode.app"
-    # THE KEYCHAIN LAW (12/11): an ad-hoc build is a "different app" to
-    # macOS on every rebuild → the login-password prompt for the app's own
-    # stored secrets (Chromium Safe Storage). The STABLE self-signed
-    # identity (scripts/make-signing-identity.nu, one-time setup) keeps the
-    # same designated requirement across builds: one «Siempre permitir» and
-    # the prompt never returns. No identity → ad-hoc (the old behavior).
+    # THE KEYCHAIN LAW (12/11, CORRECTED by the web — hermes-agent #91115):
+    # macOS adjudicates keychain access by the item's PARTITION LIST, which
+    # accumulates the requesting binaries' CDSHASH — not the designated
+    # requirement. Every deploy changes the cdhash → one login-password
+    # prompt per deploy EVEN with a stable identity (three machines and a
+    # controlled relaunch-vs-update experiment confirm it; the official
+    # Z.ai app never prompted because its Developer-ID teamid matched the
+    # partition). The stable identity is still worth signing with: it
+    # preserves TCC grants and keeps one coherent identity. The REAL
+    # silence path is the ITEM: recreate it ACL-less via /usr/bin/security
+    # (the Claude-Code pattern) — runbook, one interactive password.
     let sign_id: string = "ZCode Local Signing"
     let has_id: bool = (do { ^security find-identity -v -p codesigning } | complete | get stdout | str contains $sign_id)
     if $has_id {
         let signed: record = (do { ^codesign --force --deep --sign $sign_id "/Applications/ZCode.app" } | complete)
         if $signed.exit_code != 0 {
-            print -e $"[fork] WARN: stable signing failed — the Keychain will ask again: ($signed.stderr | str trim)"
+            print -e $"[fork] WARN: stable signing failed — TCC grants lost, rebuild the identity: ($signed.stderr | str trim)"
             do -i { ^codesign --force --deep --sign - "/Applications/ZCode.app" | ignore }
         } else {
-            print $"[fork] signed with the stable identity «($sign_id)»"
+            # THE DR GUARD: an install silently degrading to ad-hoc (the
+            # 12/11 finding) loses TCC grants — verify the requirement
+            # anchors to the identity's leaf hash before declaring victory.
+            let leaf: string = (do { ^security find-identity -v -p codesigning } | complete | get stdout
+                | parse -r '(?<h>[0-9A-Fa-f]{40}) "ZCode Local Signing"' | get 0.h? | default "")
+            let dr: string = (do { ^codesign -d -r- "/Applications/ZCode.app" } | complete | get stdout)
+            if ($leaf != "") and ($dr | str downcase | str contains ($leaf | str downcase)) {
+                print $"[fork] signed with the stable identity «($sign_id)» — DR anchor verified"
+            } else {
+                print -e "[fork] WARN: the DR does NOT anchor to the stable identity — investigate before relaunching"
+            }
         }
     } else {
         print -e "[fork] WARN: no stable signing identity — run scripts/make-signing-identity.nu once to stop the Keychain prompts"

@@ -7,17 +7,40 @@ export const DEV_ELECTRON_PROTOCOL_SCHEME = "zcode";
 export const DEV_ELECTRON_APP_NAME = "ZCode Dev";
 export const DEV_ELECTRON_APP_BUNDLE_ID = "dev.zcode.app.development";
 // 副本布局版本，见 prepareDevElectronAppBundle 中的指纹说明。
-export const DEV_ELECTRON_BUNDLE_FORMAT = 3;
+// v4: signing policy changed (ad-hoc -> stable identity); cached v3 copies
+// must regenerate so they stop re-prompting for the credential keychain item.
+export const DEV_ELECTRON_BUNDLE_FORMAT = 4;
+// Same self-signed identity as scripts/build-install.nu: a stable designated
+// requirement means ONE keychain «Always Allow» covers every rebuild.
+const STABLE_SIGNING_IDENTITY = "ZCode Local Signing";
 const execFileAsync = promisify(execFile);
+
+async function hasStableSigningIdentity() {
+  try {
+    const { stdout } = await execFileAsync("/usr/bin/security", [
+      "find-identity",
+      "-v",
+      "-p",
+      "codesigning",
+    ]);
+    return stdout.includes(STABLE_SIGNING_IDENTITY);
+  } catch {
+    return false;
+  }
+}
 
 async function signDevElectronApp(appPath) {
   // Electron 42 起通知要求有效签名；原 npm runtime 签名可能不完整，修改身份后也必须重签。
-  // 仅对 ignored 的开发副本做 ad-hoc 签名，正式发布仍走现有证书、公证流程。
+  // Prefer the STABLE identity when present: ad-hoc signing changes the cdhash
+  // on every copy, so each dev launch re-prompts for the "ZCode Credential
+  // Encryption" keychain item with the login password (the 12/11 dialog that
+  // blocked phone work). Machines without the identity keep the ad-hoc fallback.
+  const identity = (await hasStableSigningIdentity()) ? STABLE_SIGNING_IDENTITY : "-";
   await execFileAsync("/usr/bin/codesign", [
     "--deep",
     "--force",
     "--sign",
-    "-",
+    identity,
     "--preserve-metadata=entitlements,flags,runtime",
     appPath,
   ]);

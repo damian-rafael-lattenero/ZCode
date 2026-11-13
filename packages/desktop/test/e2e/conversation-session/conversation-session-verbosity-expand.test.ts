@@ -8,10 +8,13 @@ import {
 } from "@zcode/shared/test-ids";
 import type { MessageStreamVerbosity } from "@zcode/shared";
 import { clearAppData, readSettings } from "#e2e/helpers/desktop-app";
+import { ensureToolCrossProductFullAccessMode } from "#e2e/helpers/conversation-session-tool-cross-product";
+import { restartIntoWorkspace } from "#e2e/helpers/model-provider-restart";
 import {
   clickV4Stop,
   getV4PaneSnapshot,
   prepareV4ConversationE2E,
+  selectV4TaskById,
   sendV4Prompt,
   waitForV4AssistantMessageContaining,
   waitForV4Pane,
@@ -93,8 +96,99 @@ describe("Verbosity verbose and Expand everything drive reasoning collapse", () 
     expect(state.count).toBeGreaterThanOrEqual(1);
     expect(state.expanded).toBe("true");
     expect(state.contentDisplayed).toBe(true);
+
+    // Park the preference at the owner's exact persisted state (verbose + expand
+    // everything) so the cold-resume case below boots with it already set.
+    await selectVerbosityThroughPicker("verbose");
+  });
+
+  it("live running bash card and streaming reasoning stay expanded under the preference", async function () {
+    this.timeout(TURN_TIMEOUT_MS);
+    // The turn requests a real 12s local Bash run; assert inside that running
+    // window (the owner's exact complaint: the live card stays collapsed).
+    await ensureToolCrossProductFullAccessMode();
+    await selectVerbosityThroughPicker("verbose");
+    await setExpandEverythingThroughPicker(true);
+
+    // The live marker is a standalone token (not nested inside CASE_MARKER) so
+    // the case-local fixture match needles can distinguish it from plain turns.
+    await sendV4Prompt("E2E_VERBOSE_LIVE run sleep and reply");
+    await waitForV4TimelineContaining("E2E_VERBOSE_LIVE");
+    await browser.waitUntil(
+      async () =>
+        (await readLatestBashCardState()).count > 0 && (await getV4PaneSnapshot()).canStop,
+      {
+        timeout: 30000,
+        timeoutMsg: `the live bash card did not appear while running: ${JSON.stringify(
+          await collectLiveTurnDiagnostics(),
+        ).slice(0, 1800)}`,
+      },
+    );
+    const card = await readLatestBashCardState();
+    expect(card.expanded).toBe("true");
+    const reasoning = await readLatestReasoningState();
+    expect(reasoning.count).toBeGreaterThanOrEqual(1);
+    expect(reasoning.expanded).toBe("true");
+    await waitForTurnIdle();
+  });
+
+  it("cold resume with the preference already set reopens the old turn expanded", async function () {
+    this.timeout(TURN_TIMEOUT_MS);
+    const sessionId = (await getV4PaneSnapshot()).sessionId;
+    expect(sessionId).toBeTruthy();
+
+    await restartIntoWorkspace();
+    await selectV4TaskById(sessionId!);
+    await waitForV4TimelineContaining(CASE_MARKER);
+    await browser.pause(300);
+
+    const group = await readLatestHistoryGroupState();
+    expect(group.count).toBeGreaterThanOrEqual(1);
+    expect(group.expanded).toBe("true");
+    const state = await readLatestReasoningState();
+    expect(state.count).toBeGreaterThanOrEqual(1);
+    expect(state.expanded).toBe("true");
+    expect(state.contentDisplayed).toBe(true);
   });
 });
+
+async function collectLiveTurnDiagnostics(): Promise<unknown> {
+  return browser.execute(() => {
+    const toolNames = Array.from(document.querySelectorAll<HTMLElement>("[data-tool-name]")).map(
+      (element) => element.getAttribute("data-tool-name") ?? "",
+    );
+    return {
+      canStop: Boolean(document.querySelector('[data-testid="v4-stop"]')),
+      timelineTail: document.querySelector('[data-testid="v4-timeline"]')?.innerText.slice(-500),
+      toolNames,
+    };
+  });
+}
+
+async function readLatestBashCardState(): Promise<{
+  count: number;
+  expanded: string | null;
+  cardHtml?: string;
+  triggerHtml?: string;
+}> {
+  const state = (await browser.execute(() => {
+    const cards = Array.from(document.querySelectorAll<HTMLElement>('[data-tool-name="Bash"]'));
+    const last = cards.at(-1);
+    const trigger = last?.querySelector<HTMLElement>('[data-testid^="tool-summary-trigger-"]');
+    return {
+      count: cards.length,
+      expanded: trigger?.getAttribute("aria-expanded") ?? null,
+      cardHtml: last?.outerHTML.slice(0, 700) ?? "",
+      triggerHtml: trigger?.outerHTML.slice(0, 400) ?? "",
+    };
+  })) as { count: number; expanded: string | null; cardHtml: string; triggerHtml: string };
+  if (state.expanded === null && state.count > 0) {
+    throw new Error(
+      `bash card trigger has no aria-expanded: ${JSON.stringify(state).slice(0, 1200)}`,
+    );
+  }
+  return state;
+}
 
 async function waitForTurnIdle(): Promise<void> {
   await browser.waitUntil(async () => !(await getV4PaneSnapshot()).canStop, {
@@ -172,34 +266,48 @@ async function selectVerbosityThroughPicker(mode: MessageStreamVerbosity): Promi
     await browser.keys("Escape");
     return;
   }
-  const item = await $(`[data-testid="${testId(TID_V4_VERBOSITY_OPTION, mode)}"]`);
-  await item.waitForClickable({ timeout: 5000 });
-  await item.click();
-  await browser.waitUntil(
-    async () => (await control.getAttribute("data-verbosity")) === mode,
-    {
-      timeout: 10000,
-      timeoutMsg: `verbosity control did not switch to ${mode}`,
-    },
-  );
+  // Radix remounts portal menu items on focus/scroll; the click target can vanish
+  // between waitForClickable and click. Retry open+click like the upstream helper.
+  const optionTestId = testId(TID_V4_VERBOSITY_OPTION, mode);
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    const clicked = await browser.execute((currentTestId) => {
+      const item = document.querySelector<HTMLElement>(`[data-testid="${currentTestId}"]`);
+      if (!item) {
+        return false;
+      }
+      item.click();
+      return true;
+    }, optionTestId);
+    if (clicked) {
+      await browser.waitUntil(
+        async () => (await control.getAttribute("data-verbosity")) === mode,
+        {
+          timeout: 10000,
+          timeoutMsg: `verbosity control did not switch to ${mode}`,
+        },
+      );
+      return;
+    }
+    await browser.pause(250);
+    await openVerbosityMenu();
+  }
+  throw new Error(`verbosity option ${mode} never appeared in the open menu`);
 }
 
 async function setExpandEverythingThroughPicker(enabled: boolean): Promise<void> {
+  // The persisted user-scope settings are the source of truth; Radix dropdown
+  // checkbox items do not expose aria-checked, so only interact on a mismatch.
+  const settings = await readSettings();
+  if (Boolean(settings?.messageStreamExpandedByDefault) === enabled) {
+    return;
+  }
   await openVerbosityMenu();
   const toggle = await $(`[data-testid="${TID_V4_VERBOSITY_EXPAND_TOGGLE}"]`);
   await toggle.waitForClickable({ timeout: 5000 });
-  const checked = (await toggle.getAttribute("aria-checked")) === "true";
-  if (checked !== enabled) {
-    await toggle.click();
-  } else {
-    await browser.keys("Escape");
-    return;
-  }
-  // The Radix menu closes after the click, so confirm through the persisted
-  // user-scope settings the picker writes to.
+  await toggle.click();
   await browser.waitUntil(async () => {
-    const settings = await readSettings();
-    return Boolean(settings?.messageStreamExpandedByDefault) === enabled;
+    const next = await readSettings();
+    return Boolean(next?.messageStreamExpandedByDefault) === enabled;
   }, {
     timeout: 10000,
     timeoutMsg: `expand-everything setting did not persist to ${enabled}`,

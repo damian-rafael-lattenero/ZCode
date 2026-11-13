@@ -25,6 +25,22 @@
       "syntheticReason": "Deterministic reasoning row plus final answer; the test drives the verbosity picker and asserts retroactive and born-expanded states."
     },
     {
+      "id": "conversation-session-verbosity-expand-live-bash",
+      "description": "Thinking then a real sleep-12 Bash tool_use so the live card stays running.",
+      "kind": "main",
+      "source": "synthetic",
+      "timingPolicy": "fast-text",
+      "syntheticReason": "Streams reasoning then requests a real 12s local Bash run; the live running card is asserted inside that window."
+    },
+    {
+      "id": "conversation-session-verbosity-expand-live-final",
+      "description": "Final thinking plus text after the sleep tool_result.",
+      "kind": "main",
+      "source": "synthetic",
+      "timingPolicy": "fast-text",
+      "syntheticReason": "Responds to the follow-up request carrying the sleep tool_result so the turn can finish."
+    },
+    {
       "id": "conversation-session-verbosity-expand-auxiliary",
       "description": "Catch-all response for auxiliary prompts without the case marker.",
       "kind": "common",

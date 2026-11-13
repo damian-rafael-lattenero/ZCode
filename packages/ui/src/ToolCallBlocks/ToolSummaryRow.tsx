@@ -1,5 +1,14 @@
 import { useBottomFollowingScroll } from "@/mentions/components/scrollMask.js";
-import { useContext, useId, useState, type KeyboardEvent, type ReactNode } from "react";
+import {
+  useContext,
+  useEffect,
+  useId,
+  useRef,
+  useState,
+  useSyncExternalStore,
+  type KeyboardEvent,
+  type ReactNode,
+} from "react";
 import { BrainIcon, ChevronRightIcon } from "lucide-react";
 import { testId, TID_TOOL_SUMMARY_TRIGGER } from "@zcode/shared/test-ids";
 import { cn } from "@/components/lib/utils.js";
@@ -9,6 +18,10 @@ import {
   CollapsibleTrigger,
 } from "@/components/ui/collapsible.js";
 import { QueuedSummaryContent } from "@/ToolCallBlocks/QueuedSummaryContent.js";
+import {
+  getConversationExpandDefaultSnapshot,
+  subscribeConversationExpandDefault,
+} from "@/ToolCallBlocks/conversationExpandDefaultStore.js";
 
 import {
   SummaryIconOnlyContext,
@@ -279,7 +292,23 @@ export function ConsecutiveSummaryGroup({
   lastRowId: number;
   hasActiveItem: boolean;
 }) {
-  const [open, setOpen] = useState(false);
+  // 「默认展开全部」偏好（spec：docs/specs/conversation-verbosity-views.md §2）：
+  // 思考+工具的连续摘要组与 ToolLayout 卡同语义——初始态随偏好，手动开合只在
+  // 本代际内有效，epoch 翻转时重置回新默认值。此前硬编码 useState(false) 使
+  // verbose/Expand-everything 对 CoT 摘要组完全无效（owner 12/12 报告的根因）。
+  const { defaultOpen: expandAllDefaultOpen, epoch: expandAllDefaultEpoch } = useSyncExternalStore(
+    subscribeConversationExpandDefault,
+    getConversationExpandDefaultSnapshot,
+    getConversationExpandDefaultSnapshot,
+  );
+  const [open, setOpen] = useState(expandAllDefaultOpen);
+  const previousDefaultOpenEpochRef = useRef(expandAllDefaultEpoch);
+  useEffect(() => {
+    if (previousDefaultOpenEpochRef.current !== expandAllDefaultEpoch) {
+      previousDefaultOpenEpochRef.current = expandAllDefaultEpoch;
+      setOpen(expandAllDefaultOpen);
+    }
+  }, [expandAllDefaultEpoch, expandAllDefaultOpen]);
   const contentId = useId();
   const scroll = useBottomFollowingScroll(open, children);
   const boundary = useContext(SummaryGroupBoundaryContext);

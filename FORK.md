@@ -148,9 +148,11 @@ files, so plugin releases don't need an app rebuild.
 - Plugin-only iteration (no app rebuild): `npm run build` + version bump in the
   plugin repo + commit + push, then `./scripts/bootstrap-diff-ask.nu`.
 - Gotcha (2026-10-24): the marketplace scan validates EVERYTHING inside the
-  source directory (`.gitignore` is ignored) — keep heavy files (e.g. the old
-  341 MB asar backup, now at `~/zcode-official-backup/zcode-diff-ask-tools-backup/`)
-  out of the plugin repo root, or updates die with `plugin_marketplace_invalid`.
+  source directory (`.gitignore` is ignored) — keep heavy files out of the
+  plugin repo root, or updates die with `plugin_marketplace_invalid`. (The old
+  341 MB asar backup that motivated this note lived at
+  `~/zcode-official-backup/zcode-diff-ask-tools-backup/` until the whole stash
+  was deleted 2026-11-13; asar patching is retired.)
 
 ## Build notes
 
@@ -169,9 +171,11 @@ files, so plugin releases don't need an app rebuild.
 
 The official app is always re-downloadable (verify sha512 against
 `update-info.json`, extract with `ditto -x -k`, atomic `mv` into
-`/Applications`). The official 3.16.3 bundle that the fork replaced was kept at
-`~/zcode-official-backup/ZCode-3.16.3-official.app` (outside `/Applications`
-so LaunchServices does not see two `dev.zcode.app` bundles).
+`/Applications`). The old local backup stash (`~/zcode-official-backup/` —
+official 3.16.3/3.17.2 bundles + a previous fork build) was **deleted
+2026-11-13** as stale; the rollback path is simply re-downloading the official
+bundle (outside `/Applications` first, so LaunchServices does not see two
+`dev.zcode.app` bundles).
 
 ## Ledger (installed builds)
 

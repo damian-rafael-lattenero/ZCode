@@ -78,3 +78,6 @@ __pycache__/
 
 # 本地 Agent 会话状态目录（CLI/桌面端写入，纯本地数据不入库；也让 pre-push 的 affected UT 检查保持工作区干净）
 .zcode/
+
+# CR-01：afterPack 生成的 NSIS helper define，按架构命名，不得入库
+packages/desktop/build/generated/

@@ -90,7 +90,7 @@ BGV01–BGV06 验收见 [后台 Bash 输出详情](background-bash-output-detail
 
 - provider-visible `background_tasks` control request。
 - 2 秒后提示用户可手动 background 的 UI/UX（我们的按钮常驻于运行中的卡下方）。
-- `CLAUDE_CODE_DISABLE_BACKGROUND_TASKS` 跨 Bash/Agent/schema 的全局能力开关。
+- 跨 Bash/Agent/schema 的全局后台任务开关。
 
 ## 多端边界
 

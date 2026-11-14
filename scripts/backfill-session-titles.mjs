@@ -62,8 +62,46 @@ function stripHookInjectedContext(input) {
   return stripped.length > 0 ? stripped : input.trim();
 }
 
+// Bot-mirror sessions carry their context prepended as PLAIN text (no tags): brain memory
+// blobs, hook echoes, environment headers. Drop LEADING paragraph chunks that carry one of
+// the known context markers; keep the rest (the user's actual query, possibly multi-chunk).
+const CONTEXT_CHUNK_MARKERS = [
+  "Contexto de memoria (agent-brain",
+  "🧠 Recent brain memory",
+  "⚖️ Permanent laws",
+  "SessionStart hook additional context",
+  "UserPromptSubmit hook additional context",
+  "PreToolUse:Write hook additional context",
+  "You have been invoked in the following environment",
+  "You are powered by the model named",
+  "Workspace: default",
+];
+
+function stripPrependedContextChunks(input) {
+  const chunks = input.split(/\n\n+/);
+  let index = 0;
+  while (
+    index < chunks.length &&
+    CONTEXT_CHUNK_MARKERS.some((marker) => chunks[index].includes(marker))
+  ) {
+    index += 1;
+  }
+  const kept = chunks.slice(index).join("\n\n").trim();
+  return kept.length > 0 ? kept : input.trim();
+}
+
+// The title request leaves the machine — never let credentials ride along with it.
+function redactSecrets(input) {
+  return input
+    .replace(/\b\d{8,10}:[A-Za-z0-9_-]{30,}\b/g, "[redacted]") // bot tokens (123456:AA...)
+    .replace(/\b(sk|xoxb|xoxp|ghp|gho|github_pat|oc_sk)_[A-Za-z0-9_-]{20,}\b/g, "[redacted]")
+    .replace(/\bBearer\s+[A-Za-z0-9._-]{20,}\b/g, "Bearer [redacted]");
+}
+
 function normalizeTitleInput(input) {
-  const normalized = stripHookInjectedContext(input).replace(/\s+/g, " ");
+  const normalized = redactSecrets(
+    stripPrependedContextChunks(stripHookInjectedContext(input)),
+  ).replace(/\s+/g, " ");
   return normalized.length > MAX_TITLE_INPUT_CHARS
     ? normalized.slice(0, MAX_TITLE_INPUT_CHARS)
     : normalized;
@@ -208,11 +246,33 @@ const candidates = db
   )
   .all();
 
+// Newer sessions record the submitted input in session_input (payload.text); older ones keep
+// the content inline in the message row. Mirror the runtime's short-input gate: a greeting
+// like "hola" is already a readable title — the title material is the first SUBSTANTIVE query.
+const MIN_INPUT_CHARS_FOR_TITLE = 10;
+
+const sessionInputs = db.prepare(
+  `SELECT json_extract(payload, '$.text') AS text FROM session_input
+   WHERE session_id = ? AND status = 'promoted' AND json_extract(payload, '$.text') IS NOT NULL
+   ORDER BY admitted_sequence ASC`,
+);
 const firstUserMessage = db.prepare(
   `SELECT m.data FROM message m
    WHERE m.session_id = ? AND json_extract(m.data, '$.role') = 'user'
    ORDER BY m.time_created ASC, m.id ASC LIMIT 1`,
 );
+
+function resolveTitleSourceInput(sessionId) {
+  for (const inputRow of sessionInputs.all(sessionId)) {
+    if (typeof inputRow.text === "string" && inputRow.text.trim().length >= MIN_INPUT_CHARS_FOR_TITLE) {
+      return inputRow.text;
+    }
+  }
+  const messageRow = firstUserMessage.get(sessionId);
+  if (!messageRow) return null;
+  const content = JSON.parse(messageRow.data).content ?? "";
+  return typeof content === "string" && content.trim().length > 0 ? content : null;
+}
 
 const updateTitle = db.prepare(
   `UPDATE session SET title = ?, title_source = 'generated', time_title_updated = ?
@@ -230,14 +290,13 @@ let failed = 0;
 for (const session of candidates) {
   const label = `${session.id.slice(0, 18)}…`;
   try {
-    const row = firstUserMessage.get(session.id);
-    const content = row ? (JSON.parse(row.data).content ?? "") : "";
-    if (typeof content !== "string" || content.trim().length === 0) {
-      console.log(`SKIP ${label} no usable first user message`);
+    const sourceInput = resolveTitleSourceInput(session.id);
+    if (!sourceInput) {
+      console.log(`SKIP ${label} no usable first user input`);
       skipped += 1;
       continue;
     }
-    const input = normalizeTitleInput(content);
+    const input = normalizeTitleInput(sourceInput);
     if (input.length === 0) {
       console.log(`SKIP ${label} empty title input after strip`);
       skipped += 1;

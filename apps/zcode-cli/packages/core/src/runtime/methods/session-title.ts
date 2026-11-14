@@ -73,7 +73,7 @@ export async function waitForPreAnswerTitleGeneration(
             turnSignal.addEventListener("abort", onTurnAbort, { once: true });
           })
         : turnSignal?.aborted
-          ? Promise.resolve("cancelled")
+          ? Promise.resolve<PreAnswerTitleWait>("cancelled")
           : undefined;
     return await Promise.race([
       start.done.then(() => "settled" as const),

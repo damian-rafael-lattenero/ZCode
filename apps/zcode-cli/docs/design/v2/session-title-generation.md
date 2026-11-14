@@ -108,6 +108,19 @@ headless `--prompt` 和 `--target` 不传 `titleGeneration`，因此不会多发
 2. 如果没有 `model.lite`，使用当前默认/main provider/model。
 3. 两种情况下 event 中的 `modelRef.role` 都是 `lite`，表示请求用途是轻量 sidecar。
 
+FORK CHANGE (damian): the user config file (`~/.zcode/cli/config.json`) can pin
+the sidecar model independently of the session model:
+
+```json
+{ "titleGeneration": { "provider": "ollama", "model": "qwen2.5:3b" } }
+```
+
+The pin only REDIRECTS the model (explicit host `modelSelection` still wins,
+and the file never enables/disables generation — the host opt-in boundary is
+untouched). Project-scope config files cannot carry the key. With a local
+provider that needs no runtime-header refresh, the title fires immediately at
+the first prompt instead of waiting for the turn to complete.
+
 provider options 与最终 provider/model 对齐；`model.lite` 没有配置时复用默认/main provider options。发送标题请求前会做 title 专用转换：
 
 - 保留 endpoint、apiFormat、metadata、extra body 中与连接或非思考行为有关的字段。

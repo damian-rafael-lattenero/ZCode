@@ -49,6 +49,7 @@ Oct 2026); instead the change lives in source, as a normal git commit.
 | Workflows siempre disponibles | `2ac70c51` | El gateway ya no puede apagar los planes; Skill tolera `prefijo:nombre` |
 | Telemetría viva para el bot | `1e4f7413`, `4b46d692`, `d4f231bc` | Sidecars live-io: CoT en vivo + tool-args componiéndose |
 | Deploy verificado | `f6659e93`, `40f0c958`, `d1c0b9f5` | Runbook, `verify-deploy.nu` con markers, build-install `--yes/--when-quit/--zip` |
+| Title model pin (local titles) | `2d22d330` | `titleGeneration {provider, model}` in `~/.zcode/cli/config.json` redirects the title sidecar to a dedicated model (e.g. local Ollama `qwen2.5:3b`); host still controls enablement, project scope excluded |
 
 Detalle histórico (los primeros cambios):
 

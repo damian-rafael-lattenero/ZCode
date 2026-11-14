@@ -108,6 +108,7 @@ Title rules:
 - Use the user's primary language.
 - Describe the user's primary task or topic, not its answer or outcome.
 - Aim for 5 words; never more than 7.
+- Use lowercase for every word.
 - Separate words with underscores instead of spaces.
 - Keep it recognizable in a session list.
 - Preserve important proper nouns, file names, APIs, and technology names.
@@ -341,8 +342,41 @@ function stripHookInjectedContext(input: string): string {
   return stripped.length > 0 ? stripped : input.trim();
 }
 
+// The Kotlin mirror bot prepends its brain-memory context as PLAIN text (no tags), so the
+// tagged-block strip above never sees it and bot-born titles come out as infrastructure
+// prose. Drop LEADING paragraph chunks that carry one of the known context markers; keep
+// the rest (the user's actual query, possibly multi-chunk). Same marker list as the
+// backfill tool (scripts/backfill-session-titles.mjs) — keep the two in sync.
+const CONTEXT_CHUNK_MARKERS: readonly string[] = [
+  "Contexto de memoria (agent-brain",
+  "🧠 Recent brain memory",
+  "⚖️ Permanent laws",
+  "SessionStart hook additional context",
+  "UserPromptSubmit hook additional context",
+  "PreToolUse:Write hook additional context",
+  "You have been invoked in the following environment",
+  "You are powered by the model named",
+  "Workspace: default",
+];
+
+function stripPrependedContextChunks(input: string): string {
+  const chunks = input.split(/\n\n+/);
+  let index = 0;
+  while (
+    index < chunks.length &&
+    CONTEXT_CHUNK_MARKERS.some((marker) => chunks[index].includes(marker))
+  ) {
+    index += 1;
+  }
+  const kept = chunks.slice(index).join("\n\n").trim();
+  return kept.length > 0 ? kept : input.trim();
+}
+
 export function normalizeTitleInput(input: string): string {
-  const normalized = stripHookInjectedContext(input).replace(/\s+/g, " ");
+  const normalized = stripPrependedContextChunks(stripHookInjectedContext(input)).replace(
+    /\s+/g,
+    " ",
+  );
   return normalized.length > MAX_TITLE_INPUT_CHARS
     ? normalized.slice(0, MAX_TITLE_INPUT_CHARS)
     : normalized;
@@ -374,14 +408,19 @@ function cleanGeneratedTitle(raw: string): string | null {
 }
 
 // The prompt rules are advisory; small local models may ignore them, so the
-// 7-word cap and the underscore word separator are enforced deterministically.
-// CJK titles carry neither spaces nor underscores and pass through as one word.
+// all-lowercase form, the 7-word cap and the underscore word separator are
+// enforced deterministically. CJK titles carry neither spaces nor underscores
+// and pass through as one word.
 function formatTitleWords(title: string): string {
   const words = title
     .split(/\s+/)
     .join("_")
     .split("_")
-    .map((word) => word.replace(/[.。!！?？:：,，;；]+$/g, ""))
+    .map((word) =>
+      word
+        .replace(/[.。!！?？:：,，;；]+$/g, "")
+        .toLowerCase(),
+    )
     .filter((word) => word.length > 0);
   return words.slice(0, MAX_TITLE_WORDS).join("_");
 }

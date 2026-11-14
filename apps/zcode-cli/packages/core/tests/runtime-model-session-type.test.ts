@@ -116,7 +116,7 @@ describe("runtime model session attribution", () => {
           querySource,
           traceContext: createRootTraceContext({ sessionId: runtime.getSessionId() }),
         });
-        expect(candidate?.title).toBe("Session_title");
+        expect(candidate?.title).toBe("session_title");
       }
       expect(
         seen.map((context) => [context.modelRequestSessionType, context.metadata?.querySource]),

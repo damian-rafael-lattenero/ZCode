@@ -378,6 +378,23 @@ export interface IZCodeTaskService {
     expectedForegroundExecutionId?: string;
   }): Promise<void>;
 
+  /**
+   * [fork] Demote of the running primaryTurn (v4 `backgroundTurn`, the
+   * desktop's "go to background"). The turn keeps executing — this NEVER
+   * aborts the model stream or an in-flight tool execution — it only stops
+   * being the foreground owner of the session. Non-CAS (no baseRevision):
+   * `expectedForegroundExecutionId` is the stop-style courtesy guard. An
+   * idle session, or one whose foreground execution no longer matches, is a
+   * noop ACK with reasonCode "guard.stopTargetChanged" — never an error and
+   * never a kill.
+   */
+  backgroundTurn(params: {
+    taskId: string;
+    expectedForegroundExecutionId?: string;
+    workspacePath?: string;
+    workspaceIdentity?: string;
+  }): Promise<{ status: "accepted" | "duplicate" | "noop"; reasonCode?: string }>;
+
   /** 执行 agent 内建 /compact 命令；手机 replayable 仍经 shared host 路由。 */
   compactSession(params: {
     taskId: string;

@@ -97,6 +97,7 @@ describe("BOT-E2E-SC-01 Feishu streaming card lifecycle", () => {
       respondPermission: async () => true,
       respondElicitation: async () => true,
       stopGeneration: async () => undefined,
+      backgroundTurn: async () => ({ status: "accepted" as const }),
       onDynamicTaskEvent:
         (params: Record<string, unknown>) =>
         (listener: (event: ZCodeStreamEvent) => Promise<void> | void) => {

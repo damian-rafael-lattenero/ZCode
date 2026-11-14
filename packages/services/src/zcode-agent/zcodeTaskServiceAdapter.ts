@@ -2468,6 +2468,56 @@ export function createZCodeTaskServiceAdapter(
       });
     },
 
+    // [fork] v4 backgroundTurn — demote of the running primaryTurn (the
+    // desktop's "go to background"). Non-CAS (createHostCommandEnvelope does
+    // not demand baseRevision); expectedForegroundExecutionId is the
+    // stop-style courtesy guard. The CLI answers noop on idle/mismatch
+    // ("guard.stopTargetChanged") and NEVER aborts the model stream.
+    async backgroundTurn(params): Promise<{
+      status: "accepted" | "duplicate" | "noop";
+      reasonCode?: string;
+    }> {
+      const startedAt = Date.now();
+      const target = params.workspacePath
+        ? {
+            taskId: params.taskId,
+            workspacePath: params.workspacePath,
+            workspaceIdentity: params.workspaceIdentity,
+          }
+        : getTaskTarget(params.taskId);
+      logger.info(undefined, "ZCode task facade backgroundTurn demote", {
+        taskId: params.taskId,
+        workspaceIdentity: target.workspaceIdentity ?? null,
+        workspaceKey: resolveWorkspaceKey(target),
+        workspacePath: target.workspacePath,
+      });
+      const ack = await options.zcodeAgentService.sendConversationCommandV4({
+        workspacePath: target.workspacePath,
+        workspaceIdentity: target.workspaceIdentity,
+        envelope: createHostCommandEnvelope({
+          type: "backgroundTurn",
+          payload: params.expectedForegroundExecutionId
+            ? { expectedForegroundExecutionId: params.expectedForegroundExecutionId }
+            : {},
+          sessionId: params.taskId,
+        }),
+      });
+      assertV4CommandAckOk("backgroundTurn", ack, `session=${params.taskId}`);
+      logger.info(undefined, "ZCode task facade backgroundTurn ACK", {
+        durationMs: Date.now() - startedAt,
+        status: ack.status,
+        reasonCode: ack.reasonCode ?? null,
+        taskId: params.taskId,
+        workspaceIdentity: target.workspaceIdentity ?? null,
+        workspaceKey: resolveWorkspaceKey(target),
+        workspacePath: target.workspacePath,
+      });
+      if (ack.status === "noop") return { status: "noop", reasonCode: ack.reasonCode };
+      if (ack.status === "accepted" || ack.status === "duplicate") return { status: ack.status };
+      // Unreachable: assertV4CommandAckOk already threw on rejected/stale/failed.
+      throw new ZCodeV4CommandRejectedError("backgroundTurn", ack, `session=${params.taskId}`);
+    },
+
     async compactSession(params) {
       // v4 compact 是 CAS 命令（必带 v4 conversation revision
       // 的 baseRevision），而本 facade 的 expectedRevision 是旧协议 stateRevision——

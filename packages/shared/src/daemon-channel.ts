@@ -213,6 +213,26 @@ export type DaemonChannelQuery =
       workspaceIdentity?: string;
     }
   | {
+      /**
+       * [fork] backgroundTurn (additive, 14/11 — "go to background" from the
+       * phone): demote of the RUNNING primaryTurn (the same v4
+       * `backgroundTurn` command the desktop composer button sends). The turn
+       * keeps executing — the model stream and any in-flight tool are NEVER
+       * aborted — it only stops being the foreground owner of the session.
+       * Non-CAS: `expectedForegroundExecutionId` is the stop-style courtesy
+       * guard (mismatch/idle → noop ACK). Success mirrors `stop`:
+       * `{ backgrounded: ["<taskId>"] }`; a noop answers
+       * `{ backgrounded: [], reasonCode: "<ack.reasonCode>" }` (e.g.
+       * "guard.stopTargetChanged"). Old servers answer `unknown_query`.
+       */
+      kind: "backgroundTurn";
+      taskId: string;
+      /** Foreground execution identity observed by the caller (stop-style guard). */
+      expectedForegroundExecutionId?: string;
+      workspacePath?: string;
+      workspaceIdentity?: string;
+    }
+  | {
       kind: "contextWindow";
       taskId: string;
       workspacePath?: string;

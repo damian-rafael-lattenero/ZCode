@@ -488,6 +488,43 @@ describe("daemon local channel (B3a)", () => {
     client.destroy();
   });
 
+  it("backgroundTurn demotes the running turn through the task service", async () => {
+    await startChannel();
+    const client = await connectAndHandshake();
+    const sendQuery = (id: string, query: unknown) =>
+      client.send({ type: "query", id, query } as never);
+    const queryResult = (id: string) =>
+      client.waitFor((message) => message.type === "query_result" && message.id === id);
+
+    sendQuery("b1", { kind: "backgroundTurn", taskId: "task-1" });
+    const result = await queryResult("b1");
+    expect(result).toMatchObject({ type: "query_result", result: { backgrounded: ["task-1"] } });
+    expect(taskService.backgroundTurn).toHaveBeenCalledWith({ taskId: "task-1" });
+    client.destroy();
+  });
+
+  it("backgroundTurn answers the noop ACK honestly (guard.stopTargetChanged)", async () => {
+    await startChannel();
+    const client = await connectAndHandshake();
+    vi.mocked(taskService.backgroundTurn).mockResolvedValueOnce({
+      status: "noop",
+      reasonCode: "guard.stopTargetChanged",
+    });
+    client.send({
+      type: "query",
+      id: "b2",
+      query: { kind: "backgroundTurn", taskId: "task-1" },
+    } as never);
+    const result = await client.waitFor(
+      (message) => message.type === "query_result" && message.id === "b2",
+    );
+    expect(result).toMatchObject({
+      type: "query_result",
+      result: { backgrounded: [], reasonCode: "guard.stopTargetChanged" },
+    });
+    client.destroy();
+  });
+
   it("setMode (A4) switches the conversation mode through the task service", async () => {
     await startChannel();
     const client = await connectAndHandshake();

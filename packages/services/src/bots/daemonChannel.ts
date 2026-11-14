@@ -213,6 +213,9 @@ const KNOWN_QUERY_KINDS = new Set([
   "setModelSelection",
   "stop",
   "stopAll",
+  // [fork] "go to background" — demote of the running primaryTurn (v4
+  // backgroundTurn); the turn keeps executing, ownership moves to background.
+  "backgroundTurn",
   "compact",
   "contextWindow",
   // [fork] A4 — el /mode del bot (plan 🗺 / yolo 🔓).
@@ -736,6 +739,23 @@ export function createDaemonLocalChannel(
           ...(query.instructions ? { instructions: query.instructions } : {}),
           ...(query.expectedRevision !== undefined ? { expectedRevision: query.expectedRevision } : {}),
         });
+      }
+      case "backgroundTurn": {
+        // [fork] "go to background" (v4 backgroundTurn): demote of the RUNNING
+        // primaryTurn — the turn keeps executing, only foreground ownership
+        // moves. Non-CAS; idle/mismatch comes back as a noop ACK (the CLI's
+        // "guard.stopTargetChanged") instead of an error, and the wire result
+        // mirrors stop's: `{ backgrounded: [...] }` on success, an empty list
+        // + reasonCode on the noop.
+        const ack = await taskService.backgroundTurn({
+          taskId: query.taskId,
+          ...(query.expectedForegroundExecutionId
+            ? { expectedForegroundExecutionId: query.expectedForegroundExecutionId }
+            : {}),
+        });
+        return ack.status === "noop"
+          ? { backgrounded: [], reasonCode: ack.reasonCode ?? "guard.stopTargetChanged" }
+          : { backgrounded: [query.taskId] };
       }
       case "contextWindow": {
         let workspacePath = query.workspacePath;

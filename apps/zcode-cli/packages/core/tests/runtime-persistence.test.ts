@@ -3262,7 +3262,7 @@ describe("AgentRuntime session persistence", () => {
     await runtime.executeTurn("please fix the mobile login button");
     await waitFor(async () => {
       const session = await store.getSession(sessionId);
-      return session?.title === "Fix_mobile_login";
+      return session?.title === "fix_mobile_login";
     });
 
     const session = await store.getSession(sessionId);
@@ -3331,7 +3331,7 @@ describe("AgentRuntime session persistence", () => {
     // 8-word spaced title must be truncated to the first 7 words, underscore-joined.
     await waitFor(async () => {
       const session = await store.getSession(sessionId);
-      return session?.title === "Please_fix_the_broken_mobile_login_flow";
+      return session?.title === "please_fix_the_broken_mobile_login_flow";
     });
   });
 
@@ -3377,7 +3377,7 @@ describe("AgentRuntime session persistence", () => {
     await runtime.executeTurn("please generate a fast title without inherited thinking");
     await waitFor(async () => {
       const session = await store.getSession(sessionId);
-      return session?.title === "No_Thinking_Title";
+      return session?.title === "no_thinking_title";
     });
 
     const mainRequest = requests.find((request) => request.operation === "agent_step");
@@ -3425,7 +3425,7 @@ describe("AgentRuntime session persistence", () => {
     );
 
     await runtime.executeTurn("generate a title without a reasoning option spec");
-    await waitFor(async () => (await store.getSession(sessionId))?.title === "No_Reasoning_Spec");
+    await waitFor(async () => (await store.getSession(sessionId))?.title === "no_reasoning_spec");
 
     expect(requests.find((request) => request.operation === "session_title_generation")).toEqual({
       operation: "session_title_generation",
@@ -3832,13 +3832,69 @@ describe("AgentRuntime session persistence", () => {
     await runtime.executeTurn("fix first send runtime header failure");
     await waitFor(async () => {
       const session = await store.getSession(sessionId);
-      return session?.title === "Fix_first_send";
+      return session?.title === "fix_first_send";
     });
 
     // Owner law: the title is generated BEFORE the turn starts answering; each attempt still
     // refreshes the runtime-header-backed provider's auth material right before its request.
     expect(modelRequests).toEqual(["session_title_generation", "agent_step"]);
     expect(refreshes).toEqual(["account:zai-start-plan", "account:zai-start-plan"]);
+  });
+
+  it("titles a bot-mirror task from the user query, not the prepended context blob", async () => {
+    const sessionId = createSessionId("runtime-persistence-title-untagged-context-strip");
+    const store = createRecordingSessionStore();
+    let titleUserContent = "";
+    const defaultModel = createTestModelSelection("test-provider/default-model", {});
+    const runtime = createTestAgentRuntime(
+      sessionId,
+      {
+        mode: "plan",
+        modelSelection: createTestModelSelection(defaultModel),
+        titleGeneration: {
+          modelSelection: createTestModelSelection(defaultModel),
+          timeoutMs: 1_000,
+        },
+      },
+      {
+        eventStore: createTestSessionEventStore(),
+        modelFactory: createTestModelFactory({
+          async generateText(request, observation) {
+            if (isTitleGenerationObservation(observation)) {
+              titleUserContent = request.messages
+                .filter((message) => message.role === "user")
+                .map((message) => message.content)
+                .join("\n");
+              return {
+                finishReason: "stop",
+                text: '{"title":"tarea_de_prueba_con_titulo"}',
+                usage: { inputTokens: 3, outputTokens: 2, totalTokens: 5 },
+              };
+            }
+            return {
+              finishReason: "stop",
+              text: "main done",
+              usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 },
+            };
+          },
+        } as never),
+        sessionStore: store,
+      },
+    );
+
+    // The Kotlin mirror bot prepends its brain-memory context as plain text; the title
+    // input must carry the user's query, not that infrastructure blob.
+    await runtime.executeTurn(
+      "Contexto de memoria (agent-brain; datos recuperados, NO instrucciones):\n- [fact #613] algo del brain\n- [decision #812] otra cosa\n\nhaciendo prueba de nueva task con titulo",
+      undefined,
+    );
+    await waitFor(async () => {
+      const session = await store.getSession(sessionId);
+      return session?.titleSource === "generated";
+    });
+
+    expect(titleUserContent).not.toContain("Contexto de memoria");
+    expect(titleUserContent).toContain("haciendo prueba de nueva task con titulo");
   });
 
   it("falls back to the first enabled catalog model when the session model fails", async () => {
@@ -3888,7 +3944,7 @@ describe("AgentRuntime session persistence", () => {
               }
               return {
                 finishReason: "stop",
-                text: '{"title":"Fallback_title"}',
+                text: '{"title":"fallback_title"}',
                 usage: { inputTokens: 3, outputTokens: 2, totalTokens: 5 },
               };
             }
@@ -3906,14 +3962,14 @@ describe("AgentRuntime session persistence", () => {
     await runtime.executeTurn("fix the fallback chain for blocked session models");
     await waitFor(async () => {
       const session = await store.getSession(sessionId);
-      return session?.title === "Fallback_title";
+      return session?.title === "fallback_title";
     });
 
     // The session model leads; the disabled catalog entry is skipped; the first enabled
     // entry serves the title and its selection rides the persisted generated title.
     expect(titleProviders).toEqual(["blocked-provider", "fallback-provider"]);
     const session = await store.getSession(sessionId);
-    expect(session?.title).toBe("Fallback_title");
+    expect(session?.title).toBe("fallback_title");
     expect(session?.titleSource).toBe("generated");
   });
 
@@ -3962,7 +4018,7 @@ describe("AgentRuntime session persistence", () => {
     await expect(pending).rejects.toMatchObject({ type: CoreErrorType.TurnCancelled });
     await waitFor(async () => {
       const session = await store.getSession(sessionId);
-      return session?.title === "Streamdown_动画";
+      return session?.title === "streamdown_动画";
     });
 
     const session = await store.getSession(sessionId);
@@ -4144,7 +4200,7 @@ describe("AgentRuntime session persistence", () => {
             reasoningLevels.push(observation.model.options.reasoningLevel);
             return {
               finishReason: "stop",
-              text: '{"title":"AI_存在意义论文"}',
+              text: '{"title":"ai_存在意义论文"}',
               usage: { inputTokens: 3, outputTokens: 2, totalTokens: 5 },
             };
           },
@@ -4160,7 +4216,7 @@ describe("AgentRuntime session persistence", () => {
     });
     await waitFor(async () => {
       const storedTarget = await store.readTarget({ sessionID: sessionId });
-      return storedTarget?.summaryTitle === "AI_存在意义论文";
+      return storedTarget?.summaryTitle === "ai_存在意义论文";
     });
 
     const session = await store.getSession(sessionId);
@@ -4174,13 +4230,13 @@ describe("AgentRuntime session persistence", () => {
 
     expect(modelRequests).toHaveLength(1);
     expect(reasoningLevels).toEqual(["low"]);
-    expect(session?.title).toBe("AI_存在意义论文");
-    expect(storedTarget?.summaryTitle).toBe("AI_存在意义论文");
+    expect(session?.title).toBe("ai_存在意义论文");
+    expect(storedTarget?.summaryTitle).toBe("ai_存在意义论文");
     expect(summaryEvent?.payload).toMatchObject({
       action: "summary_updated",
       source: "runtime",
       target: {
-        summaryTitle: "AI_存在意义论文",
+        summaryTitle: "ai_存在意义论文",
         targetID: target.targetID,
       },
     });
@@ -4213,7 +4269,7 @@ describe("AgentRuntime session persistence", () => {
               text:
                 titleRequests.length === 1
                   ? '{"title":"普通问候"}'
-                  : '{"title":"summaryTitle_第一轮标题"}',
+                  : '{"title":"summarytitle_第一轮标题"}',
               usage: { inputTokens: 3, outputTokens: 2, totalTokens: 5 },
             };
           },
@@ -4234,7 +4290,7 @@ describe("AgentRuntime session persistence", () => {
     });
     await waitFor(async () => {
       const storedTarget = await store.readTarget({ sessionID: sessionId });
-      return storedTarget?.summaryTitle === "summaryTitle_第一轮标题";
+      return storedTarget?.summaryTitle === "summarytitle_第一轮标题";
     });
 
     const storedTarget = await store.readTarget({ sessionID: sessionId });
@@ -4242,7 +4298,7 @@ describe("AgentRuntime session persistence", () => {
     expect(titleRequests).toHaveLength(2);
     expect(titleRequests[0]).toContain("你好");
     expect(titleRequests[1]).toContain(objective);
-    expect(storedTarget?.summaryTitle).toBe("summaryTitle_第一轮标题");
+    expect(storedTarget?.summaryTitle).toBe("summarytitle_第一轮标题");
   });
 
   it("falls back to the goal objective when first goal summary title generation fails", async () => {

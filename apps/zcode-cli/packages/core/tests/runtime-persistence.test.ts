@@ -3773,8 +3773,8 @@ describe("AgentRuntime session persistence", () => {
     expect(modelRequestOperations).toEqual(["agent_step"]);
   });
 
-  it("defers runtime-header-backed session title generation until after the main request", async () => {
-    const sessionId = createSessionId("runtime-persistence-title-runtime-headers-deferred");
+  it("generates the runtime-header-backed session title before the main request", async () => {
+    const sessionId = createSessionId("runtime-persistence-title-runtime-headers-pre-answer");
     const store = createRecordingSessionStore();
     const modelRequests: string[] = [];
     const refreshes: string[] = [];
@@ -3835,8 +3835,86 @@ describe("AgentRuntime session persistence", () => {
       return session?.title === "Fix_first_send";
     });
 
-    expect(modelRequests).toEqual(["agent_step", "session_title_generation"]);
+    // Owner law: the title is generated BEFORE the turn starts answering; each attempt still
+    // refreshes the runtime-header-backed provider's auth material right before its request.
+    expect(modelRequests).toEqual(["session_title_generation", "agent_step"]);
     expect(refreshes).toEqual(["account:zai-start-plan", "account:zai-start-plan"]);
+  });
+
+  it("falls back to the first enabled catalog model when the session model fails", async () => {
+    const sessionId = createSessionId("runtime-persistence-title-candidate-chain");
+    const store = createRecordingSessionStore();
+    const titleProviders: string[] = [];
+    const defaultModel = createTestModelSelection("blocked-provider/blocked-model", {});
+    const runtime = createTestAgentRuntime(
+      sessionId,
+      {
+        mode: "plan",
+        modelSelection: createTestModelSelection(defaultModel),
+        titleGeneration: {
+          modelSelection: createTestModelSelection(defaultModel),
+          timeoutMs: 1_000,
+        },
+      },
+      {
+        eventStore: createTestSessionEventStore(),
+        modelCatalogPort: {
+          listModels: () => [
+            {
+              providerId: "blocked-provider",
+              modelId: "blocked-model",
+              reasoningLevels: [],
+              current: true,
+            },
+            {
+              providerId: "disabled-provider",
+              modelId: "disabled-model",
+              reasoningLevels: [],
+              disabledReason: "no key configured",
+            },
+            {
+              providerId: "fallback-provider",
+              modelId: "fallback-model",
+              reasoningLevels: [],
+            },
+          ],
+        },
+        modelFactory: createTestModelFactory({
+          async generateText(_request, observation) {
+            if (isTitleGenerationObservation(observation)) {
+              titleProviders.push(String(observation.model.providerId));
+              if (observation.model.providerId === "blocked-provider") {
+                throw new Error("request has been blocked due to unusual activity.");
+              }
+              return {
+                finishReason: "stop",
+                text: '{"title":"Fallback_title"}',
+                usage: { inputTokens: 3, outputTokens: 2, totalTokens: 5 },
+              };
+            }
+            return {
+              finishReason: "stop",
+              text: "main done",
+              usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 },
+            };
+          },
+        } as never),
+        sessionStore: store,
+      },
+    );
+
+    await runtime.executeTurn("fix the fallback chain for blocked session models");
+    await waitFor(async () => {
+      const session = await store.getSession(sessionId);
+      return session?.title === "Fallback_title";
+    });
+
+    // The session model leads; the disabled catalog entry is skipped; the first enabled
+    // entry serves the title and its selection rides the persisted generated title.
+    expect(titleProviders).toEqual(["blocked-provider", "fallback-provider"]);
+    const session = await store.getSession(sessionId);
+    expect(session?.title).toBe("Fallback_title");
+    expect(session?.titleSource).toBe("generated");
   });
 
   it("starts generated title after the first user query even when the main turn is cancelled", async () => {

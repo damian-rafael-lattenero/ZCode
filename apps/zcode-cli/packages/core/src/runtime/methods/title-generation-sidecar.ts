@@ -55,6 +55,41 @@ const TITLE_GENERATION_TIMEOUT_MS = 60_000;
 const MAX_TITLE_INPUT_CHARS = 1_200;
 const MAX_TITLE_CHARS = 100;
 const MAX_TITLE_WORDS = 7;
+// Candidate chain cap: the session model leads, at most 2 catalog models follow. Every extra
+// candidate is one more isolated small request to a provider; an unbounded chain only widens
+// the WAF "unusual activity" false-positive surface.
+const MAX_TITLE_MODEL_CANDIDATES = 3;
+
+/**
+ * Title candidate chain (pure): the session model first — it is the first model in the system
+ * with known-available tokens (the current turn just ran on it); enabled models from the host
+ * catalog follow in live order. A present `disabledReason` means the host deems the entry
+ * unusable (no key configured, policy-disabled, ...); skip it. Catalog entries matching the
+ * session model's provider×model are deduplicated.
+ */
+function resolveTitleCandidateSelections(
+  runtime: AgentRuntimeInternal,
+  primary: ModelSelection | undefined,
+): ModelSelection[] {
+  const candidates: ModelSelection[] = [];
+  const pushUnique = (selection: ModelSelection | undefined): void => {
+    if (!selection) return;
+    if (candidates.length >= MAX_TITLE_MODEL_CANDIDATES) return;
+    const isDuplicate = candidates.some(
+      (candidate) =>
+        candidate.providerId === selection.providerId && candidate.modelId === selection.modelId,
+    );
+    if (isDuplicate) return;
+    candidates.push(cloneModelSelection(selection));
+  };
+  pushUnique(primary);
+  for (const entry of runtime.modelCatalogPort?.listModels() ?? []) {
+    if (candidates.length >= MAX_TITLE_MODEL_CANDIDATES) break;
+    if (entry.disabledReason) continue;
+    pushUnique({ providerId: entry.providerId, modelId: entry.modelId });
+  }
+  return candidates;
+}
 
 // 标题 sidecar 的 user message 是原始 query，弱约束时模型可能把它当成对话请求直接回答。
 // system prompt 必须明确 query 只作为标题素材，并禁止回答或执行；首句保持稳定供旧 model-io 识别。
@@ -89,6 +124,7 @@ export async function generateTitleCandidate(
     querySource: string;
     traceContext: TraceContext;
     modelContext?: TitleModelContext;
+    abortSignal?: AbortSignal;
   },
 ): Promise<{ modelSelection: ModelSelection; title: string; traceContext: TraceContext } | null> {
   const titleTelemetry = this.agentTelemetry.detached({
@@ -124,17 +160,67 @@ async function generateTitleCandidateImpl(
     querySource: string;
     traceContext: TraceContext;
     modelContext?: TitleModelContext;
+    abortSignal?: AbortSignal;
   },
 ): Promise<{ modelSelection: ModelSelection; title: string; traceContext: TraceContext } | null> {
   const context = options.modelContext ?? retainTitleModelContext(this);
-  const requestedModelSelection = context.selection;
-  if (!requestedModelSelection) return null;
+  const candidates = resolveTitleCandidateSelections(this, context.selection);
+  if (candidates.length === 0) return null;
+  // Titles survive across turns but never outlive their runtime's shutdown; the timeout and
+  // shutdown share the real request cancellation chain. An externally injected pre-answer
+  // abort joins the same chain: abort is a non-recoverable cancellation and never falls
+  // through to the next candidate.
+  const titleAbortSignal = AbortSignal.any([
+    this.shutdownSignal,
+    AbortSignal.timeout(positiveTimeoutMs(this.config.titleGeneration?.timeoutMs)),
+    ...(options.abortSignal ? [options.abortSignal] : []),
+  ]);
+  titleAbortSignal.throwIfAborted();
+  // first-success-of semantics: try the session model first (its failures are mostly
+  // provider-side throttling/WAF blocks), errors fall through candidates in order, and the
+  // last error is rethrown when every candidate failed. A candidate that answers but yields
+  // no usable title returns null directly — swapping candidates for cleanable output would
+  // only multiply the request count.
+  let lastError: unknown = new Error("No title model candidate produced a result.");
+  for (const candidate of candidates) {
+    try {
+      return await attemptTitleWithModel.call(this, input, options, {
+        selection: candidate,
+        requestDependencies: context.requestDependencies,
+        abortSignal: titleAbortSignal,
+      });
+    } catch (error) {
+      if (titleAbortSignal.aborted) throw error;
+      lastError = error;
+    }
+  }
+  throw lastError;
+}
+
+/** 单个候选的一次标题尝试：事件、用量记录与取消语义都按这一次尝试独立记账。 */
+async function attemptTitleWithModel(
+  this: AgentRuntimeInternal,
+  input: string,
+  options: {
+    causation?: AgentTelemetryCausation;
+    messageID?: MessageId;
+    querySource: string;
+    traceContext: TraceContext;
+    modelContext?: TitleModelContext;
+    abortSignal?: AbortSignal;
+  },
+  attempt: {
+    selection: ModelSelection;
+    requestDependencies?: ModelRequestDependencies;
+    abortSignal: AbortSignal;
+  },
+): Promise<{ modelSelection: ModelSelection; title: string; traceContext: TraceContext } | null> {
   const baseModel = createRuntimeModel(this, {
-    selection: requestedModelSelection,
-    requestDependencies: context.requestDependencies,
+    selection: attempt.selection,
+    requestDependencies: attempt.requestDependencies,
   });
   const model = baseModel.bind(auxiliaryModelOptions(baseModel));
-  const modelSelection = cloneModelSelection(requestedModelSelection);
+  const modelSelection = cloneModelSelection(attempt.selection);
   const modelTraceContext = createChildTraceContext(options.traceContext, {
     attributes: {
       model: `${model.providerId}/${model.modelId}`,
@@ -158,12 +244,7 @@ async function generateTitleCandidateImpl(
   await this.appendEvent(modelRequestEvent, modelTraceContext);
   events.push(modelRequestEvent);
   const networkEventStartIndex = events.length;
-  // title 跨 turn 存活，但不能跨所属 runtime 的关闭；超时与关闭共用实际请求取消链。
-  const titleAbortSignal = AbortSignal.any([
-    this.shutdownSignal,
-    AbortSignal.timeout(positiveTimeoutMs(this.config.titleGeneration?.timeoutMs)),
-  ]);
-  titleAbortSignal.throwIfAborted();
+  const titleAbortSignal = attempt.abortSignal;
   const modelStartedAt = Date.now();
   using statusSink = this.createModelStatusSink(modelTraceContext, events);
   const invocationContext = {
@@ -251,8 +332,17 @@ async function generateTitleCandidateImpl(
   return { modelSelection, title, traceContext: modelTraceContext };
 }
 
+// UserPromptSubmit hooks inject laws/memory as <system-reminder> blocks INSIDE the first user
+// message; without this strip the title is born from that infrastructure prose (e.g. bot-mirror
+// tasks titled "Contexto de memoria (agent-brain...") instead of the user's actual query.
+// If stripping empties the input, keep the original — never an empty title source.
+function stripHookInjectedContext(input: string): string {
+  const stripped = input.replace(/<system-reminder>[\s\S]*?<\/system-reminder>/gi, "").trim();
+  return stripped.length > 0 ? stripped : input.trim();
+}
+
 export function normalizeTitleInput(input: string): string {
-  const normalized = input.trim().replace(/\s+/g, " ");
+  const normalized = stripHookInjectedContext(input).replace(/\s+/g, " ");
   return normalized.length > MAX_TITLE_INPUT_CHARS
     ? normalized.slice(0, MAX_TITLE_INPUT_CHARS)
     : normalized;

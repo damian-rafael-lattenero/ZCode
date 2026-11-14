@@ -238,14 +238,14 @@ export async function recordExternalUserPrompt(
     afterTurnBoundary: () => {
       // 首条 query 必须在 turnNumber 仍为 0 时启动标题 sidecar，否则首轮 gate 会把
       // 它误判为后续 turn，只生成 goal summaryTitle 而保留 first_input session title。
-      const titleGenerationStarted = maybeStartSessionTitleGeneration.call(
+      const titleGenerationStart = maybeStartSessionTitleGeneration.call(
         this,
         canonicalInput,
         messageId,
         traceContext,
         { goalSummaryTargetID: options?.goalSummaryTargetID },
       );
-      if (!titleGenerationStarted && options?.goalSummaryTargetID) {
+      if (!titleGenerationStart.started && options?.goalSummaryTargetID) {
         maybeStartGoalSummaryTitleGeneration.call(
           this,
           canonicalInput,

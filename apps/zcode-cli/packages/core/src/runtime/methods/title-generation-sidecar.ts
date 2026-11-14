@@ -86,7 +86,17 @@ function resolveTitleCandidateSelections(
   for (const entry of runtime.modelCatalogPort?.listModels() ?? []) {
     if (candidates.length >= MAX_TITLE_MODEL_CANDIDATES) break;
     if (entry.disabledReason) continue;
-    pushUnique({ providerId: entry.providerId, modelId: entry.modelId });
+    // Registry validation runs BEFORE the auxiliary bind lowers the reasoning level, so a
+    // model that requires one dies locally ("Reasoning level is required for ...") and the
+    // chain silently loses that candidate. Seed the catalog candidates with the entry's own
+    // default level; auxiliaryModelOptions still overrides it at bind time.
+    pushUnique({
+      providerId: entry.providerId,
+      modelId: entry.modelId,
+      ...(entry.defaultReasoningLevel
+        ? { options: { reasoningLevel: entry.defaultReasoningLevel } }
+        : {}),
+    });
   }
   return candidates;
 }

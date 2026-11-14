@@ -47,6 +47,7 @@ Title rules:
 - Use the user's primary language.
 - Describe the user's primary task or topic, not its answer or outcome.
 - Aim for 5 words; never more than 7.
+- Use lowercase for every word.
 - Separate words with underscores instead of spaces.
 - Keep it recognizable in a session list.
 - Preserve important proper nouns, file names, APIs, and technology names.
@@ -134,15 +135,15 @@ function parseTitleJson(text) {
   return null;
 }
 
-// The prompt rules are advisory; the 7-word cap and the underscore word separator are
-// enforced deterministically. CJK titles carry neither spaces nor underscores and pass
-// through as one word.
+// The prompt rules are advisory; the all-lowercase form, the 7-word cap and the underscore
+// word separator are enforced deterministically. CJK titles carry neither spaces nor
+// underscores and pass through as one word.
 function formatTitleWords(title) {
   const words = title
     .split(/\s+/)
     .join("_")
     .split("_")
-    .map((word) => word.replace(/[.。!！?？:：,，;；]+$/g, ""))
+    .map((word) => word.replace(/[.。!！?？:：,，;；]+$/g, "").toLowerCase())
     .filter((word) => word.length > 0);
   return words.slice(0, MAX_TITLE_WORDS).join("_");
 }

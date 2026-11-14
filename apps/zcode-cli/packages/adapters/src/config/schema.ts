@@ -227,16 +227,6 @@ const modelAnomalyGuardSchema = z.object({
   maxBudgetWarningsPerTurn: z.number().int().nonnegative().optional(),
 });
 
-// FORK CHANGE (damian): user-scope pin for the title-generation sidecar model
-// (e.g. local Ollama). Plain z.object (strips unknown inner keys) so a typo
-// inside this block can never fail the whole config-file load. Deliberately
-// NOT added to the project schema pick list: a repository must not redirect
-// title calls to its own endpoint.
-const titleGenerationSchema = z.object({
-  provider: z.string().min(1),
-  model: z.string().min(1),
-});
-
 // Hooks schema：
 // 理想态是 re-export shared/workspace-hook-config，但两个 pnpm workspace 解析出物理
 // 不同的 zod 实例（adapters 4.4.3 / shared 4.3.6）：shared schema 嵌入本包组合 schema
@@ -317,7 +307,6 @@ export const ZCodeConfigFileSchema = z
     toolConcurrency: toolConcurrencySchema.optional(),
     modelAnomalyGuard: modelAnomalyGuardSchema.optional(),
     hooks: hooksSchema.optional(),
-    titleGeneration: titleGenerationSchema.optional(),
   })
   .passthrough();
 
@@ -462,7 +451,6 @@ function parsedConfigFileToRuntimePatch(parsed: ZCodeConfigFile): RuntimeConfigP
   if (parsed.toolConcurrency) config.toolConcurrency = parsed.toolConcurrency;
   if (parsed.modelAnomalyGuard) config.modelAnomalyGuard = parsed.modelAnomalyGuard;
   if (parsed.hooks) config.hooks = parsed.hooks;
-  if (parsed.titleGeneration) config.titleGeneration = parsed.titleGeneration;
 
   return config;
 }

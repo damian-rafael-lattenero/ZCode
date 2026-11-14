@@ -69,6 +69,7 @@ import { appendInterruptMarker } from "./interrupt-marker.js";
 import {
   maybeStartDeferredSessionTitleGeneration,
   maybeStartSessionTitleGeneration,
+  waitForPreAnswerTitleGeneration,
 } from "./session-title.js";
 import type { RegularTurnLoopState } from "./turn-loop-state.js";
 import { finishOutputTokenRecovery } from "./turn-output-token-continuation.js";
@@ -802,17 +803,32 @@ export async function executeTurnCommand(
         if (options?.skipInputRecord !== true && options?.inputVisibility !== "model-only") {
           // 修复原因：标题生成以前等主 turn 成功后才启动，用户 stop/cancel 首轮请求时
           // generated title 永远没有机会发起。首条 query 持久化后即可异步生成，避免被主链路取消拖死。
-          const titleGenerationStarted = maybeStartSessionTitleGeneration.call(
+          // Owner's law: the title is generated BEFORE the turn starts answering — the loop
+          // waits for it within the pre-answer budget; on expiry the attempt is aborted and
+          // retried after the turn, so a slow title never delays the answer indefinitely.
+          const titleGenerationStart = maybeStartSessionTitleGeneration.call(
             this,
             displayInput,
             userMessageId,
             turnTraceContext,
             {
-              deferIfProviderRuntimeHeadersRefresh: true,
               offPeakExecutionId: options?.offPeakExecutionId,
             },
           );
-          shouldRetryTitleGenerationAfterTurn = !titleGenerationStarted;
+          const preAnswerWait = await waitForPreAnswerTitleGeneration(titleGenerationStart, {
+            budgetMs: this.config.titleGeneration?.preAnswerBudgetMs,
+            turnAbortSignal: turnAbortSignal,
+          });
+          if (preAnswerWait === "expired") {
+            titleGenerationStart.abort?.();
+            shouldRetryTitleGenerationAfterTurn = true;
+          } else {
+            // "cancelled" keeps the title running in the background like the old
+            // fire-and-forget flow (no retry: the turn is aborting anyway). Guard refusals
+            // (!started) keep the historical turn-end retry attempt.
+            shouldRetryTitleGenerationAfterTurn =
+              !titleGenerationStart.started && preAnswerWait !== "cancelled";
+          }
         }
         // Plugin reminder 必须在对应 user 消息写入历史和 session store 后再追加：
         // provider 形态因此稳定为 user → system，cold hydration 也按同一因果顺序恢复。

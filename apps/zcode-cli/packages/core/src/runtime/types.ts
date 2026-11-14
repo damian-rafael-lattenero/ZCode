@@ -220,6 +220,12 @@ export interface AgentRuntimeConfig {
     enabled?: boolean;
     modelSelection?: ModelSelection;
     timeoutMs?: number;
+    /**
+     * How long the first turn waits for the pre-answer title before starting the model loop.
+     * On expiry the in-flight attempt is aborted and retried after the turn; the answer is
+     * never held hostage by a slow title. Default 15s; <=0 disables the wait.
+     */
+    preAnswerBudgetMs?: number;
   };
   parentSessionId?: SessionId;
   taskType?: SessionTaskType;

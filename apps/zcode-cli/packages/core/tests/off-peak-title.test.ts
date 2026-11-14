@@ -47,7 +47,7 @@ describe("闲时默认标题请求", () => {
           "message" as never,
           runtime.rootTraceContext,
           { offPeakExecutionId: "execution" },
-        ),
+        ).started,
       ).toBe(true);
       const independent = retainTitleModelContext(internal);
       expect(independent.selection?.providerId).toBe("user");
@@ -81,8 +81,12 @@ describe("闲时默认标题请求", () => {
         createSessionId(`idle-title-${mode}`),
         {
           modelSelection: createTestModelSelection("user/normal"),
-          titleGeneration:
-            mode === "explicit" ? { modelSelection: createTestModelSelection("title/custom") } : {},
+          titleGeneration: {
+            // pre-answer budget 0 keeps the legacy fire-and-forget concurrency these cases
+            // exercise; the pre-answer sequencing has its own dedicated coverage.
+            preAnswerBudgetMs: 0,
+            ...(mode === "explicit" ? { modelSelection: createTestModelSelection("title/custom") } : {}),
+          },
           workingDirectory: "/workspace",
         },
         {
@@ -181,7 +185,7 @@ it("session shutdown aborts a running title request and drains its final writes"
   const started = Promise.withResolvers<AbortSignal>();
   const runtime = createTestAgentRuntime(
     createSessionId("shutdown-title"),
-    { mode: "yolo", compact: { enabled: false }, titleGeneration: {} },
+    { mode: "yolo", compact: { enabled: false }, titleGeneration: { preAnswerBudgetMs: 0 } },
     {
       sessionStore: createRecordingSubagentSessionStore(),
       eventStore: createTestSessionEventStore(),

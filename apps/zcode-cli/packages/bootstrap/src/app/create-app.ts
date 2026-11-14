@@ -409,17 +409,6 @@ export async function createZCodeApp(options: ZCodeAppOptions): Promise<ZCodeApp
         workspaceIdentity: options.runtimeConfig?.memory?.workspaceIdentity,
       });
     // 过去仅凭宿主目录注入 Gen UI 上下文，插件关闭后仍污染模型请求；复用已解析的插件启用态。
-    // FORK CHANGE (damian): one-line diagnostic for the title-model pin — the
-    // resolved titleGeneration is invisible from real host paths, and a silent
-    // fallback to the session model is exactly what the 2026-11-14 investigation
-    // could not separate. Logs all three inputs per app creation.
-    logger.info("Title generation runtime config resolved", {
-      event: "title_generation.config_resolved",
-      module: "bootstrap",
-      hostTitleGeneration: JSON.stringify(options.runtimeConfig?.titleGeneration ?? null),
-      fileTitleGeneration: JSON.stringify(configResult.config.titleGeneration ?? null),
-      resolvedTitleGeneration: JSON.stringify(runtimeConfig.titleGeneration ?? null),
-    });
     if (
       !pluginOutcome.plugins.some(
         (plugin) => plugin.id === OFFICIAL_VISUALIZE_PLUGIN_ID && plugin.enabled,

@@ -50,17 +50,6 @@ function createConfigResult() {
   });
 }
 
-/** Fork drill helper: simulate the user config file carrying the title model pin. */
-function withTitleGenerationPin(
-  base: ReturnType<typeof createConfigResult>,
-  pin: { provider: string; model: string },
-) {
-  return {
-    ...base,
-    config: { ...base.config, titleGeneration: pin },
-  };
-}
-
 function createMainOnlyConfigResult() {
   return createConfig({
     cliOverrides: {
@@ -351,101 +340,6 @@ describe("resolveAppRuntimeConfig", () => {
     });
 
     expect(resolved.runtimeConfig.titleGeneration).toEqual({ timeoutMs: 60_000 });
-  });
-
-  it("fills the title model selection from the user config file pin", () => {
-    const resolved = resolveAppRuntimeConfig({
-      cliStorageRoot: "/tmp/zcode-cli",
-      configResult: withTitleGenerationPin(createConfigResult(), {
-        provider: "ollama",
-        model: "qwen2.5:3b",
-      }),
-      options: {
-        runtimeConfig: {
-          titleGeneration: {},
-          workingDirectory,
-        },
-      },
-      workingDirectory,
-      subagentOutputRootDir: "/tmp/zcode-cli/agents",
-      subagentProfiles: [],
-    });
-
-    expect(resolved.runtimeConfig.titleGeneration).toEqual({
-      timeoutMs: 60_000,
-      modelSelection: { providerId: "ollama", modelId: "qwen2.5:3b" },
-    });
-  });
-
-  it("keeps an explicit host title model selection over the config file pin", () => {
-    const titleModelSelection = {
-      providerId: "builtin:title-provider",
-      modelId: "title-model",
-    };
-    const resolved = resolveAppRuntimeConfig({
-      cliStorageRoot: "/tmp/zcode-cli",
-      configResult: withTitleGenerationPin(createConfigResult(), {
-        provider: "ollama",
-        model: "qwen2.5:3b",
-      }),
-      options: {
-        runtimeConfig: {
-          titleGeneration: { modelSelection: titleModelSelection },
-          workingDirectory,
-        },
-      },
-      workingDirectory,
-      subagentOutputRootDir: "/tmp/zcode-cli/agents",
-      subagentProfiles: [],
-    });
-
-    expect(resolved.runtimeConfig.titleGeneration?.modelSelection).toEqual(titleModelSelection);
-  });
-
-  it("ignores the config file pin when the host disabled title generation", () => {
-    const resolved = resolveAppRuntimeConfig({
-      cliStorageRoot: "/tmp/zcode-cli",
-      configResult: withTitleGenerationPin(createConfigResult(), {
-        provider: "ollama",
-        model: "qwen2.5:3b",
-      }),
-      options: {
-        runtimeConfig: {
-          titleGeneration: { enabled: false },
-          workingDirectory,
-        },
-      },
-      workingDirectory,
-      subagentOutputRootDir: "/tmp/zcode-cli/agents",
-      subagentProfiles: [],
-    });
-
-    expect(resolved.runtimeConfig.titleGeneration).toEqual({
-      enabled: false,
-      timeoutMs: 60_000,
-    });
-  });
-
-  it("does not enable title generation from the config file pin alone", () => {
-    const resolved = resolveAppRuntimeConfig({
-      cliStorageRoot: "/tmp/zcode-cli",
-      configResult: withTitleGenerationPin(createConfigResult(), {
-        provider: "ollama",
-        model: "qwen2.5:3b",
-      }),
-      options: {
-        runtimeConfig: {
-          workingDirectory,
-        },
-      },
-      workingDirectory,
-      subagentOutputRootDir: "/tmp/zcode-cli/agents",
-      subagentProfiles: [],
-    });
-
-    // Host opt-in boundary: the file key only redirects the model, it never
-    // turns title generation on for hosts that stayed silent.
-    expect(resolved.runtimeConfig.titleGeneration).toBeUndefined();
   });
 
   it("preserves an explicit title generation timeout override", () => {

@@ -70,20 +70,7 @@ export function resolveAppRuntimeConfig(input: {
   // 让未配置 default 的用户在 switch/send 前就创建失败。未绑定 Runtime 可以存在，
   // 真正执行仍由 admission/ModelFactory 校验完整选择，不能在这里偷偷选择 Registry 首项。
   const requestedTitleGeneration = options.runtimeConfig?.titleGeneration;
-  // FORK CHANGE (damian): the user config file can pin the title sidecar to a
-  // dedicated model (e.g. local Ollama) so short summary titles stop riding the
-  // session model. The file key only REDIRECTS the model: hosts keep exclusive
-  // control over enabling title generation, so it is ignored when the host
-  // disabled titles or stayed silent (undefined keeps the host opt-in boundary).
-  const fileTitleModel =
-    requestedTitleGeneration === undefined || requestedTitleGeneration.enabled === false
-      ? undefined
-      : configResult.config.titleGeneration;
-  const requestedTitleModelSelection =
-    requestedTitleGeneration?.modelSelection ??
-    (fileTitleModel
-      ? { providerId: fileTitleModel.provider, modelId: fileTitleModel.model }
-      : undefined);
+  const requestedTitleModelSelection = requestedTitleGeneration?.modelSelection;
   const titleGeneration =
     requestedTitleGeneration === undefined
       ? undefined
@@ -95,9 +82,6 @@ export function resolveAppRuntimeConfig(input: {
           // 空 titleGeneration 表示启用默认标题生成，模型必须跟随会话当前模型。
           // 如果这里在草稿 session 创建时固化另一份标题模型，之后切模型只会更新主链路，
           // 首发时的 generate title sidecar 会继续使用切换前的旧 provider/model。
-          // FORK CHANGE (damian): an explicit host override or the user-file pin
-          // (fileTitleModel) MAY freeze a dedicated title model here — both are
-          // deliberate user-level intent, not a default picked in secret.
           ...(requestedTitleModelSelection
             ? {
                 modelSelection: requestedTitleModelSelection,

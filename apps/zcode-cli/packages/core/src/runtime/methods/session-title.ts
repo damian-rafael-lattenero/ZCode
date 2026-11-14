@@ -27,6 +27,66 @@ const GENERATED_TITLE_EXPECTED_SOURCES: readonly SessionTitleSource[] = [
   "generated",
 ];
 const MIN_GENERATED_TITLE_INPUT_CHARS = 10;
+// The first turn holds its model loop until the title settles or this budget expires; the
+// answer must never be held hostage by a slow title. On expiry the in-flight attempt is
+// aborted and retried after the turn.
+const DEFAULT_PRE_ANSWER_TITLE_BUDGET_MS = 15_000;
+
+/** Outcome of asking the first turn to wait for the pre-answer title. */
+export type PreAnswerTitleWait = "settled" | "expired" | "cancelled";
+
+export interface TitleGenerationStart {
+  started: boolean;
+  /** Settles when the whole title flow (generation + persistence) finishes; never rejects. */
+  done?: Promise<void>;
+  /** Aborts the in-flight attempt; clears the attempted guard so the turn-end retry may fire. */
+  abort?(): void;
+}
+
+/**
+ * Wait for the pre-answer title within the owner-visible budget. `"expired"` means the caller
+ * should abort the attempt (start.abort()) and retry after the turn; `"cancelled"` means the
+ * turn itself aborted while waiting — the title keeps running in the background, exactly like
+ * the old fire-and-forget flow.
+ */
+export async function waitForPreAnswerTitleGeneration(
+  start: TitleGenerationStart,
+  options: {
+    budgetMs?: number;
+    turnAbortSignal?: AbortSignal;
+  } = {},
+): Promise<PreAnswerTitleWait> {
+  if (!start.done) return "settled";
+  const budget = options.budgetMs ?? DEFAULT_PRE_ANSWER_TITLE_BUDGET_MS;
+  if (!Number.isFinite(budget) || budget <= 0) return "settled";
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  let onTurnAbort: (() => void) | undefined;
+  try {
+    const expired = new Promise<PreAnswerTitleWait>((resolve) => {
+      timer = setTimeout(() => resolve("expired"), budget);
+    });
+    const turnSignal = options.turnAbortSignal;
+    const cancelled =
+      turnSignal && !turnSignal.aborted
+        ? new Promise<PreAnswerTitleWait>((resolve) => {
+            onTurnAbort = () => resolve("cancelled");
+            turnSignal.addEventListener("abort", onTurnAbort, { once: true });
+          })
+        : turnSignal?.aborted
+          ? Promise.resolve<PreAnswerTitleWait>("cancelled")
+          : undefined;
+    return await Promise.race([
+      start.done.then(() => "settled" as const),
+      expired,
+      ...(cancelled ? [cancelled] : []),
+    ]);
+  } finally {
+    if (timer !== undefined) clearTimeout(timer);
+    if (onTurnAbort && options.turnAbortSignal) {
+      options.turnAbortSignal.removeEventListener("abort", onTurnAbort);
+    }
+  }
+}
 
 export function maybeStartSessionTitleGeneration(
   this: AgentRuntimeInternal,
@@ -34,13 +94,11 @@ export function maybeStartSessionTitleGeneration(
   messageID: MessageId,
   traceContext: TraceContext,
   options?: {
-    deferIfProviderRuntimeHeadersRefresh?: boolean;
     goalSummaryTargetID?: string;
     offPeakExecutionId?: string;
   },
-): boolean {
+): TitleGenerationStart {
   return maybeStartSessionTitleGenerationFromSeed.call(this, input, {
-    deferIfProviderRuntimeHeadersRefresh: options?.deferIfProviderRuntimeHeadersRefresh,
     goalSummaryTargetID: options?.goalSummaryTargetID,
     offPeakExecutionId: options?.offPeakExecutionId,
     messageID,
@@ -54,7 +112,7 @@ export function maybeStartDeferredSessionTitleGeneration(
   messageID: MessageId,
   traceContext: TraceContext,
   offPeakExecutionId?: string,
-): boolean {
+): TitleGenerationStart {
   return maybeStartSessionTitleGenerationFromSeed.call(this, input, {
     messageID,
     traceContext,
@@ -80,37 +138,33 @@ function maybeStartSessionTitleGenerationFromSeed(
   this: AgentRuntimeInternal,
   input: string,
   options: {
-    deferIfProviderRuntimeHeadersRefresh?: boolean;
     goalSummaryTargetID?: string;
     messageID?: MessageId;
     traceContext: TraceContext;
     bypassShortInputGuard?: boolean;
     offPeakExecutionId?: string;
   },
-): boolean {
+): TitleGenerationStart {
   if (
     !shouldAttemptSessionTitleGeneration(this, input, {
       bypassShortInputGuard: options.bypassShortInputGuard,
     })
   ) {
-    return false;
-  }
-  if (
-    options.deferIfProviderRuntimeHeadersRefresh &&
-    shouldDeferSessionTitleForRuntimeHeaders(this)
-  ) {
-    // 首条消息的 title generation 和主消息会共享同一个 runtimeModel。
-    // 需要刷新 runtime headers 的 provider 先让主 turn 发出去，再异步补标题。
-    return false;
+    return { started: false };
   }
   this.sessionTitleGenerationAttempted = true;
   // 标题任务会越过当前 Turn 的生命周期。入队时冻结 causation，避免后续 await、
   // 调度器或实现重构使后台 Trace 静默丢失指向触发 Span 的 Link。
   const causation = this.agentTelemetry.captureCausation();
   const modelContext = retainTitleModelContext(this, options.offPeakExecutionId);
+  // Pre-answer waiting: the first turn awaits `done` within its budget and calls abort() on
+  // expiry; aborting clears the attempted guard so the turn-end deferred retry can take over.
+  const preAnswerAbort = new AbortController();
+  let settled = false;
 
   const generation = generateAndPersistSessionTitle
     .call(this, input, options.messageID, options.traceContext, {
+      abortSignal: preAnswerAbort.signal,
       causation,
       modelContext,
       goalSummaryTargetID: options.goalSummaryTargetID,
@@ -132,8 +186,12 @@ function maybeStartSessionTitleGenerationFromSeed(
         });
       }
     })
-    .finally(() => modelContext.release());
-  void this.trackResidencyBlockingWork(generation).catch((error) => {
+    .finally(() => {
+      settled = true;
+      modelContext.release();
+    });
+  const tracked = this.trackResidencyBlockingWork(generation);
+  void tracked.catch((error) => {
     this.logger?.warn("Session title fallback persistence failed", {
       ...traceContextToLogContext(options.traceContext),
       errorMessage: error instanceof Error ? error.message : String(error),
@@ -142,7 +200,18 @@ function maybeStartSessionTitleGenerationFromSeed(
       status: "failed",
     });
   });
-  return true;
+  return {
+    abort: () => {
+      if (settled) return;
+      preAnswerAbort.abort();
+      this.sessionTitleGenerationAttempted = false;
+    },
+    done: tracked.then(
+      () => {},
+      () => {},
+    ),
+    started: true,
+  };
 }
 
 function shouldAttemptSessionTitleGeneration(
@@ -168,26 +237,13 @@ function shouldAttemptSessionTitleGeneration(
   );
 }
 
-function shouldDeferSessionTitleForRuntimeHeaders(runtime: AgentRuntimeInternal): boolean {
-  const runtimeHeadersPort = runtime.providerRuntimeHeadersPort;
-  if (!runtimeHeadersPort) return false;
-  const selection =
-    runtime.config.titleGeneration?.modelSelection ?? runtime.getSessionModelSelection();
-  if (!selection) return true;
-  return (
-    runtimeHeadersPort.shouldRefreshBeforeModelRequest?.({
-      providerId: selection.providerId,
-      modelId: selection.modelId,
-    }) ?? true
-  );
-}
-
 async function generateAndPersistSessionTitle(
   this: AgentRuntimeInternal,
   input: string,
   messageID: MessageId | undefined,
   traceContext: TraceContext,
   options: {
+    abortSignal?: AbortSignal;
     causation?: AgentTelemetryCausation;
     goalSummaryTargetID?: string;
     modelContext?: TitleModelContext;
@@ -231,6 +287,7 @@ async function generateAndPersistSessionTitle(
   }
 
   const generated = await generateTitleCandidate.call(this, input, {
+    abortSignal: options.abortSignal,
     causation: options.causation,
     modelContext: options.modelContext,
     messageID,

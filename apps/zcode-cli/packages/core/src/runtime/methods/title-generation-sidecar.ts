@@ -54,7 +54,7 @@ export const GOAL_SUMMARY_TITLE_QUERY_SOURCE = "goal_summary_title";
 const TITLE_GENERATION_TIMEOUT_MS = 60_000;
 const MAX_TITLE_INPUT_CHARS = 1_200;
 const MAX_TITLE_CHARS = 100;
-const MAX_TITLE_WORDS = 5;
+const MAX_TITLE_WORDS = 7;
 
 // 标题 sidecar 的 user message 是原始 query，弱约束时模型可能把它当成对话请求直接回答。
 // system prompt 必须明确 query 只作为标题素材，并禁止回答或执行；首句保持稳定供旧 model-io 识别。
@@ -72,7 +72,8 @@ CRITICAL:
 Title rules:
 - Use the user's primary language.
 - Describe the user's primary task or topic, not its answer or outcome.
-- Use at most 5 words.
+- Aim for 5 words; never more than 7.
+- Separate words with underscores instead of spaces.
 - Keep it recognizable in a session list.
 - Preserve important proper nouns, file names, APIs, and technology names.
 - Do not use generic titles such as "User Request", "Coding Task", or "Question".
@@ -276,22 +277,23 @@ function cleanGeneratedTitle(raw: string): string | null {
     .replace(/\s+/g, " ")
     .trim();
   if (!/[A-Za-z0-9\u3400-\u9fff]/.test(cleaned)) return null;
-  const capped = capTitleWords(cleaned);
+  const capped = formatTitleWords(cleaned);
   return capped.length > MAX_TITLE_CHARS
     ? `${capped.slice(0, MAX_TITLE_CHARS - 3).trim()}...`
     : capped;
 }
 
-// The prompt word cap is advisory; small local models may ignore it, so enforce
-// the 5-word law deterministically (whitespace split keeps CJK titles intact).
-function capTitleWords(title: string): string {
-  const words = title.split(" ");
-  if (words.length <= MAX_TITLE_WORDS) return title;
-  return words
-    .slice(0, MAX_TITLE_WORDS)
-    .join(" ")
-    .replace(/[.。!！?？:：,，;；]+$/g, "")
-    .trim();
+// The prompt rules are advisory; small local models may ignore them, so the
+// 7-word cap and the underscore word separator are enforced deterministically.
+// CJK titles carry neither spaces nor underscores and pass through as one word.
+function formatTitleWords(title: string): string {
+  const words = title
+    .split(/\s+/)
+    .join("_")
+    .split("_")
+    .map((word) => word.replace(/[.。!！?？:：,，;；]+$/g, ""))
+    .filter((word) => word.length > 0);
+  return words.slice(0, MAX_TITLE_WORDS).join("_");
 }
 
 function parseTitleJson(text: string): string | null {

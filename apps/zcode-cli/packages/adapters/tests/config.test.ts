@@ -858,6 +858,36 @@ describe("config adapters", () => {
     }
   });
 
+  it("loads the title generation model pin and strips unknown inner keys", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "zcode-config-"));
+    const path = join(dir, "config.json");
+
+    try {
+      await writeFile(
+        path,
+        JSON.stringify({
+          titleGeneration: { provider: "ollama", model: "qwen2.5:3b", timeoutMs: 5 },
+        }),
+      );
+
+      const result = loadFileConfig(path);
+
+      expect(result.loaded).toBe(true);
+      // Unknown inner keys are stripped, never fatal to the whole file load.
+      expect(result.config.titleGeneration).toEqual({
+        provider: "ollama",
+        model: "qwen2.5:3b",
+      });
+
+      // The same file parsed as project config must NOT carry the pin: a
+      // repository cannot redirect the user's title calls to its own endpoint.
+      const projectScoped = loadFileConfig(path, { scope: "project" });
+      expect(projectScoped.config.titleGeneration).toBeUndefined();
+    } finally {
+      await rm(dir, { force: true, recursive: true });
+    }
+  });
+
   it("loads skill/command enable overrides from file config", async () => {
     const dir = await mkdtemp(join(tmpdir(), "zcode-config-"));
     const path = join(dir, "config.json");

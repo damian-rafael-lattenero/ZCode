@@ -255,6 +255,13 @@ export interface RuntimeConfig {
     locale: UiLocale;
     theme: UiThemePreference;
   };
+  // FORK CHANGE (damian): user-file pin for the title-generation sidecar model
+  // (e.g. a local Ollama provider). Read-only key — hosts keep exclusive
+  // control over enabling title generation; this only redirects the model.
+  titleGeneration?: {
+    provider: string;
+    model: string;
+  };
 }
 
 export interface RuntimeConfigPatch {
@@ -274,6 +281,7 @@ export interface RuntimeConfigPatch {
   modelAnomalyGuard?: Partial<RuntimeConfig["modelAnomalyGuard"]>;
   hooks?: HooksRuntimeConfigPatch;
   ui?: Partial<RuntimeConfig["ui"]>;
+  titleGeneration?: RuntimeConfig["titleGeneration"];
 }
 
 export type SupportedLocale = "en-US" | "zh-CN";

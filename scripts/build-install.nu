@@ -66,7 +66,7 @@ def build-bundle [repo: string]: nothing -> string {
         print -e $bundle.stderr
         fail "[fork]" $"bundle:desktop falló \(exit ($bundle.exit_code)\)"
     }
-    let zips = (ls ($repo | path join "packages/desktop/dist")
+    let zips: table = (ls ($repo | path join "packages/desktop/dist")
         | where name =~ 'ZCode-.*-mac-arm64\.zip$'
         | sort-by modified -r)
     if ($zips | is-empty) {
@@ -86,7 +86,7 @@ def quit-zcode []: nothing -> nothing {
     announce "🔒 cerrando ZCode para el swap (~15 s)…"
     for attempt in 1..3 {
         do -i { ^osascript -e "quit app \"ZCode\"" }
-        mut dead = false
+        mut dead: bool = false
         for _ in 1..15 {
             sleep 1sec
             if not (zcode-running) {
@@ -104,14 +104,14 @@ def install-zip [repo: string, zip: string, keep_prev: bool]: nothing -> nothing
     if not (($zip | path type) == "file") {
         fail "[fork]" $"no existe el zip: ($zip)"
     }
-    let stage = ((mktemp -d) | path join "stage")
+    let stage: path = ((mktemp -d) | path join "stage")
     mkdir $stage
     ^ditto -x -k $zip $stage
-    let apps = (glob $"($stage)/ZCode*.app")
+    let apps: list<string> = (glob $"($stage)/ZCode*.app")
     if ($apps | is-empty) {
         fail "[fork]" $"no hay .app dentro de ($zip)"
     }
-    let app = ($apps | first)
+    let app: string = ($apps | first)
     if $keep_prev and (("/Applications/ZCode.app" | path type) == "dir") {
         rm -rf "/Applications/ZCode.prev.app"
         ^mv "/Applications/ZCode.app" "/Applications/ZCode.prev.app"
@@ -171,14 +171,14 @@ def install-zip [repo: string, zip: string, keep_prev: bool]: nothing -> nothing
         print -e "[fork] WARN: no stable signing identity — run scripts/make-signing-identity.nu once to stop the Keychain prompts"
         do -i { ^codesign --force --deep --sign - "/Applications/ZCode.app" | ignore }
     }
-    let version = (app-version)
+    let version: string = (app-version)
     print $"[fork] installed: ($version) at /Applications/ZCode.app"
     # FORK CHANGE (damian): ship with Diff Ask — ensure its marketplace +
     # install (runtime-resolved, optional: the fork degrades to stock git
     # review without it).
     print "[fork] ensuring the Diff Ask plugin..."
-    let bootstrap = ($repo | path join "scripts/bootstrap-diff-ask.nu")
-    let r = (do { ^$bootstrap } | complete)
+    let bootstrap: path = ($repo | path join "scripts/bootstrap-diff-ask.nu")
+    let r: record = (do { ^$bootstrap } | complete)
     if $r.exit_code != 0 {
         print -e "[fork] WARN: Diff Ask bootstrap failed — install it manually (Plugins → Personal)"
     }
@@ -188,10 +188,10 @@ def install-zip [repo: string, zip: string, keep_prev: bool]: nothing -> nothing
 }
 
 def arm-waiter [repo: string, zip: string, keep_prev: bool]: nothing -> nothing {
-    let waiter = ($repo | path join "scripts/build-install-waiter.nu")
+    let waiter: path = ($repo | path join "scripts/build-install-waiter.nu")
     do { ^launchctl remove $WAITER_LABEL } | complete | ignore
-    let base = ["submit" "-l" $WAITER_LABEL "--" $waiter "--zip" $zip]
-    let args = if $keep_prev { $base | append "--keep-prev" } else { $base }
+    let base: list<string> = ["submit" "-l" $WAITER_LABEL "--" $waiter "--zip" $zip]
+    let args: list<string> = if $keep_prev { $base | append "--keep-prev" } else { $base }
     ^launchctl ...$args
     print $"[fork] armed: swapping ($zip | path basename) the moment the app quits \(⌘Q — the rest is automatic; log: /tmp/fork_install.log\)"
 }
@@ -203,7 +203,7 @@ def main [
     --when-quit        # arm a launchd waiter that swaps the moment the app quits
     --zip: string      # install this zip instead of building (pair with --when-quit)
 ]: nothing -> nothing {
-    let repo = ($env.FILE_PWD | path dirname)
+    let repo: path = ($env.FILE_PWD | path dirname)
     cd $repo
 
     if not ($zip | is-empty) and not (($zip | path type) == "file") {
@@ -244,10 +244,10 @@ def main [
         return
     }
 
-    let stage = ((mktemp -d) | path join "stage")
+    let stage: path = ((mktemp -d) | path join "stage")
     mkdir $stage
     ^ditto -x -k $built $stage
-    let apps = (glob $"($stage)/ZCode*.app")
+    let apps: list<string> = (glob $"($stage)/ZCode*.app")
     if ($apps | is-empty) {
         fail "[fork]" $"no hay .app dentro de ($built)"
     }

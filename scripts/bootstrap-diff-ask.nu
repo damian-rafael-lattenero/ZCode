@@ -24,10 +24,10 @@
 
 use lib/fork-ops.nu *
 
-const HELPER = "/Applications/ZCode.app/Contents/Frameworks/ZCode Helper.app/Contents/MacOS/ZCode Helper"
-const RUNTIME = "/Applications/ZCode.app/Contents/Resources/glm/zcode.cjs"
-const MARKETPLACE_ID = "dev-zcode-diff-ask-5098ef5a"
-const PLUGIN_ID = "diff-ask@dev-zcode-diff-ask-5098ef5a"
+const HELPER: string = "/Applications/ZCode.app/Contents/Frameworks/ZCode Helper.app/Contents/MacOS/ZCode Helper"
+const RUNTIME: string = "/Applications/ZCode.app/Contents/Resources/glm/zcode.cjs"
+const MARKETPLACE_ID: string = "dev-zcode-diff-ask-5098ef5a"
+const PLUGIN_ID: string = "diff-ask@dev-zcode-diff-ask-5098ef5a"
 
 # The app's own runtime speaks the plugin CLI. ELECTRON_RUN_AS_NODE turns
 # the Helper into a plain Node process (the fork's documented trick).
@@ -45,8 +45,8 @@ def main []: nothing -> nothing {
         fail "[diff-ask]" $"($RUNTIME) missing — install the fork first \(scripts/build-install.nu\)"
     }
 
-    let local_repo = ($env.ZCODE_DIFF_ASK_REPO? | default ($nu.home-dir | path join "Projects/zcode-diff-ask"))
-    let src = if (($local_repo | path join "marketplace.json") | path exists) {
+    let local_repo: string = ($env.ZCODE_DIFF_ASK_REPO? | default ($nu.home-dir | path join "Projects/zcode-diff-ask"))
+    let src: string = if (($local_repo | path join "marketplace.json") | path exists) {
         print $"[diff-ask] source: local checkout ($local_repo)"
         $local_repo
     } else {

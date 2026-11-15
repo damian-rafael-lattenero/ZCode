@@ -22,14 +22,14 @@
 
 use lib/fork-ops.nu *
 
-const APP = "/Applications/ZCode.app"
-const BUNDLE = "/Applications/ZCode.app/Contents/Resources/glm/zcode.cjs"
-const ASAR = "/Applications/ZCode.app/Contents/Resources/app.asar"
-const DIST = "apps/zcode-cli/packages/cli/dist/zcode.cjs"
+const APP: string = "/Applications/ZCode.app"
+const BUNDLE: string = "/Applications/ZCode.app/Contents/Resources/glm/zcode.cjs"
+const ASAR: string = "/Applications/ZCode.app/Contents/Resources/app.asar"
+const DIST: string = "apps/zcode-cli/packages/cli/dist/zcode.cjs"
 # Build artifact (with its original mtime): the swap's ditto refreshes the
 # installed copy's mtime, so the age comparison must use the staging copy or
 # it always reports dist as "older".
-const STAGED_BUNDLE = "packages/desktop/bundled-agents/darwin-arm64/glm/zcode.cjs"
+const STAGED_BUNDLE: string = "packages/desktop/bundled-agents/darwin-arm64/glm/zcode.cjs"
 
 # Per-wave agent markers (CLI runtime). UI_MARKERS go to app.asar
 # (renderer + desktop services). Never cross the lists: a CLI marker is not
@@ -49,7 +49,7 @@ const UI_MARKERS: list<string> = [
 ]
 
 def grep-has [file: string, marker: string]: nothing -> bool {
-    let r = (do { with-env {LC_ALL: "C"} { ^grep -a -q $marker $file } } | complete)
+    let r: record = (do { with-env {LC_ALL: "C"} { ^grep -a -q $marker $file } } | complete)
     $r.exit_code == 0
 }
 
@@ -57,7 +57,7 @@ def check-markers [file: string, markers: list<string>, kind: string]: nothing -
     if not (($file | path type) == "file") {
         fail "[verify-deploy]" $"falta ($kind): ($file)"
     }
-    let missing = ($markers | where {|m| not (grep-has $file $m) })
+    let missing: list<string> = ($markers | where {|m| not (grep-has $file $m) })
     if ($missing | length) > 0 {
         fail "[verify-deploy]" $"($kind) sin marker: ($missing | str join ', ')"
     }
@@ -65,7 +65,7 @@ def check-markers [file: string, markers: list<string>, kind: string]: nothing -
 }
 
 def main []: nothing -> nothing {
-    let repo = ($env.FILE_PWD | path dirname)
+    let repo: path = ($env.FILE_PWD | path dirname)
     cd $repo
 
     print $"[verify-deploy] app: ($APP)"
@@ -76,7 +76,7 @@ def main []: nothing -> nothing {
     # Warn only about copies of the SAME product (dev.zcode.app); unrelated
     # personal tools with a similar name are not our business.
     for extra in (glob "/Applications/ZCode*.app" | where {|p| $p != $APP }) {
-        let bid = (do { ^defaults read $"($extra)/Contents/Info.plist" CFBundleIdentifier } | complete)
+        let bid: record = (do { ^defaults read $"($extra)/Contents/Info.plist" CFBundleIdentifier } | complete)
         if ($bid.exit_code == 0) and (($bid.stdout | str trim) == "dev.zcode.app") {
             print "[verify-deploy] WARN: hay apps ZCode extra \(Dock/Spotlight pueden abrir la vieja\):"
             print $"  - ($extra)"
@@ -95,17 +95,17 @@ def main []: nothing -> nothing {
     # When the app is launched from the Dock, argv[0] is just "ZCode" (no
     # full path), so pgrep -f/-x are unreliable. ps comm is the only stable
     # source.
-    let pids = (^ps -A -o pid=,comm= | lines | parse "{pid} {comm}" | where comm == ZCode | get pid)
+    let pids: list<string> = (^ps -A -o pid=,comm= | lines | parse "{pid} {comm}" | where comm == ZCode | get pid)
     if ($pids | is-empty) {
         print "[verify-deploy] note: ZCode no está corriendo — abrir y volver a correr este script"
         print "[verify-deploy] PASS"
         return
     }
-    let main_pid = ($pids | first)
-    let bundle_epoch = (^stat -f %m $BUNDLE | str trim | into int)
-    let start_line = (^ps -p $main_pid -o lstart= | str trim | str replace --all --regex '\s+' ' ')
-    let start = (do { ^date -j -f "%a %b %d %H:%M:%S %Y" $start_line +%s } | complete)
-    let start_epoch = if $start.exit_code == 0 { $start.stdout | str trim | into int } else { 0 }
+    let main_pid: string = ($pids | first)
+    let bundle_epoch: int = (^stat -f %m $BUNDLE | str trim | into int)
+    let start_line: string = (^ps -p $main_pid -o lstart= | str trim | str replace --all --regex '\s+' ' ')
+    let start: record = (do { ^date -j -f "%a %b %d %H:%M:%S %Y" $start_line +%s } | complete)
+    let start_epoch: int = if $start.exit_code == 0 { $start.stdout | str trim | into int } else { 0 }
     if ($start_epoch > 0) and ($start_epoch < $bundle_epoch) {
         fail "[verify-deploy]" $"la ZCode corriendo \(pid ($main_pid), iniciada ($start_line)\) es anterior al bundle instalado — hacer ⌘Q y reabrir"
     }

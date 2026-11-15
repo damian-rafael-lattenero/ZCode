@@ -15,7 +15,7 @@ def main [
     --zip: string      # the zip to install
     --keep-prev        # forward the previous-build flag
 ]: nothing -> nothing {
-    let repo = ($env.FILE_PWD | path dirname)
+    let repo: path = ($env.FILE_PWD | path dirname)
     if ($zip | is-empty) {
         fail "[waiter]" "--zip is required"
     }
@@ -24,8 +24,8 @@ def main [
         sleep 2sec
     }
     print "[waiter] app quit — swapping"
-    let installer = ($repo | path join "scripts/build-install.nu")
-    let args = ["--yes" "--zip" $zip]
-    let args = if $keep_prev { $args | append "--keep-prev" } else { $args }
+    let installer: path = ($repo | path join "scripts/build-install.nu")
+    let args: list<string> = ["--yes" "--zip" $zip]
+    let args: list<string> = if $keep_prev { $args | append "--keep-prev" } else { $args }
     ^$installer ...$args
 }

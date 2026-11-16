@@ -3,8 +3,16 @@
 import { createElement } from "react";
 import { cleanup, fireEvent, render, screen } from "./fork-testing";
 import { afterEach, describe, expect, it } from "vitest";
-import { TID_V4_TOOL_BACKGROUND, testId } from "@zcode/shared/test-ids";
+import {
+  TID_V4_TIMELINE_BACKGROUND_TURN,
+  TID_V4_TOOL_BACKGROUND,
+  testId,
+} from "@zcode/shared/test-ids";
+import type { TurnHeaderRow } from "@zcode/shared/zcode-protocol-v4";
 import { ToolCallBlock } from "@/ToolCallBlocks.js";
+import { canBackgroundToolCall } from "@/ToolCallBlocks/ToolBackgroundButton.js";
+import { canDemoteTurn, TurnBackgroundButton } from "@/v4/ConversationTurnGroup.js";
+import type { ConversationTurnRenderUnit } from "@/v4/conversationTurnRenderUnits.js";
 import { ZCodeIntlProvider } from "@/i18n/IntlProvider.js";
 import type { TaskChatToolCallTreeNode } from "@/lib/toolCallTree.js";
 
@@ -37,7 +45,8 @@ function executeNode(options: {
       toolName: "Bash",
       kind: "Bash",
       input: { command: "sleep 30" },
-      status: options.legacyStatus ?? (options.v4Status === "running" ? "in_progress" : "completed"),
+      status:
+        options.legacyStatus ?? (options.v4Status === "running" ? "in_progress" : "completed"),
       raw: {
         toolCallId: options.toolCallId,
         toolName: "Bash",
@@ -59,6 +68,46 @@ function renderBlock(node: TaskChatToolCallTreeNode, onBackgroundToolCall?: (id:
         workspacePath: "/tmp/workspace",
         ...(onBackgroundToolCall ? { onBackgroundToolCall } : {}),
       }),
+    ),
+  );
+}
+
+// Agent/Task top-level card: same raw bridge shape, kind normalized to the agent family.
+function agentNode(options: {
+  toolCallId: string;
+  v4Status: string;
+  backgrounded?: true;
+  legacyStatus?: string;
+}): TaskChatToolCallTreeNode {
+  return {
+    toolCall: {
+      toolId: options.toolCallId,
+      toolName: "Agent",
+      kind: "Agent",
+      input: { description: "Investigate the failure" },
+      status:
+        options.legacyStatus ?? (options.v4Status === "running" ? "in_progress" : "completed"),
+      raw: {
+        toolCallId: options.toolCallId,
+        toolName: "Agent",
+        v4Status: options.v4Status,
+        ...(options.backgrounded ? { backgrounded: true } : {}),
+      },
+    },
+    childToolCalls: [],
+  };
+}
+
+function turnWithOrigin(origin: string): Pick<ConversationTurnRenderUnit, "header"> {
+  return { header: { origin } as TurnHeaderRow };
+}
+
+function renderTurnPill(onBackgroundTurn?: () => void) {
+  return render(
+    createElement(
+      ZCodeIntlProvider,
+      { initialLocale: "en-US" },
+      createElement(TurnBackgroundButton, onBackgroundTurn ? { onBackgroundTurn } : {}),
     ),
   );
 }
@@ -89,11 +138,91 @@ describe("execute 卡的单工具「Go to background」（ctrl+b parity）", () 
 
   it("点击把该卡的 toolCallId 交给宿主分发器", () => {
     const dispatched: string[] = [];
-    renderBlock(
-      executeNode({ toolCallId: "tc-click", v4Status: "running" }),
-      (toolCallId) => dispatched.push(toolCallId),
+    renderBlock(executeNode({ toolCallId: "tc-click", v4Status: "running" }), (toolCallId) =>
+      dispatched.push(toolCallId),
     );
     fireEvent.click(screen.getByTestId(testId(TID_V4_TOOL_BACKGROUND, "tc-click")));
     expect(dispatched).toEqual(["tc-click"]);
+  });
+});
+
+describe("Agent card single-tool Go to background", () => {
+  it("renders the pill with the toolCallId test id when running, not backgrounded and handler present", () => {
+    renderBlock(agentNode({ toolCallId: "agent-live", v4Status: "running" }), () => {});
+    expect(screen.getByTestId(testId(TID_V4_TOOL_BACKGROUND, "agent-live"))).toBeTruthy();
+  });
+
+  it("renders no pill for a terminal (success) row", () => {
+    renderBlock(agentNode({ toolCallId: "agent-done", v4Status: "success" }), () => {});
+    expect(queryByTestId(testId(TID_V4_TOOL_BACKGROUND, "agent-done"))).toBeNull();
+  });
+
+  it("renders no pill once the projection flips the row to backgrounded", () => {
+    renderBlock(
+      agentNode({ toolCallId: "agent-bg", v4Status: "running", backgrounded: true }),
+      () => {},
+    );
+    expect(queryByTestId(testId(TID_V4_TOOL_BACKGROUND, "agent-bg"))).toBeNull();
+  });
+
+  it("renders no pill when the host does not inject the handler (read-only / runtime not ready)", () => {
+    renderBlock(agentNode({ toolCallId: "agent-ro", v4Status: "running" }));
+    expect(queryByTestId(testId(TID_V4_TOOL_BACKGROUND, "agent-ro"))).toBeNull();
+  });
+
+  it("click hands this card's toolCallId to the host dispatcher", () => {
+    const dispatched: string[] = [];
+    renderBlock(agentNode({ toolCallId: "agent-click", v4Status: "running" }), (toolCallId) =>
+      dispatched.push(toolCallId),
+    );
+    fireEvent.click(screen.getByTestId(testId(TID_V4_TOOL_BACKGROUND, "agent-click")));
+    expect(dispatched).toEqual(["agent-click"]);
+  });
+});
+
+describe("canBackgroundToolCall gate", () => {
+  it("requires a handler, a plain record, running v4 status and no prior background flip", () => {
+    expect(canBackgroundToolCall({ v4Status: "running" }, true, false)).toBe(true);
+    expect(canBackgroundToolCall({ v4Status: "running", backgrounded: true }, true, false)).toBe(
+      false,
+    );
+    expect(canBackgroundToolCall({ v4Status: "success" }, true, false)).toBe(false);
+    expect(canBackgroundToolCall({ v4Status: "running" }, false, false)).toBe(false);
+    expect(canBackgroundToolCall({ v4Status: "running" }, true, true)).toBe(false);
+    expect(canBackgroundToolCall(["running"], true, false)).toBe(false);
+    expect(canBackgroundToolCall("running", true, false)).toBe(false);
+    expect(canBackgroundToolCall(null, true, false)).toBe(false);
+  });
+});
+
+describe("canDemoteTurn gate", () => {
+  it("allows only regular user turns", () => {
+    expect(canDemoteTurn(turnWithOrigin("userInput"))).toBe(true);
+    expect(canDemoteTurn(turnWithOrigin("editRerun"))).toBe(true);
+    expect(canDemoteTurn(turnWithOrigin("backgroundResult"))).toBe(false);
+    expect(canDemoteTurn(turnWithOrigin("goalContinuation"))).toBe(false);
+    expect(canDemoteTurn(turnWithOrigin("workflowLaunch"))).toBe(false);
+    expect(canDemoteTurn({ header: undefined })).toBe(false);
+  });
+});
+
+describe("turn-level Go to background pill", () => {
+  it("renders the timeline pill when the handler is present", () => {
+    renderTurnPill(() => {});
+    expect(screen.getByTestId(TID_V4_TIMELINE_BACKGROUND_TURN)).toBeTruthy();
+  });
+
+  it("renders nothing when the handler is absent", () => {
+    renderTurnPill();
+    expect(queryByTestId(TID_V4_TIMELINE_BACKGROUND_TURN)).toBeNull();
+  });
+
+  it("click fires the handler", () => {
+    let clicks = 0;
+    renderTurnPill(() => {
+      clicks += 1;
+    });
+    fireEvent.click(screen.getByTestId(TID_V4_TIMELINE_BACKGROUND_TURN));
+    expect(clicks).toBe(1);
   });
 });

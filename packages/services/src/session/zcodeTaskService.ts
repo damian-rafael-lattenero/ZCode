@@ -395,6 +395,24 @@ export interface IZCodeTaskService {
     workspaceIdentity?: string;
   }): Promise<{ status: "accepted" | "duplicate" | "noop"; reasonCode?: string }>;
 
+  /**
+   * [fork] Hand ONE running tool call to the background (v4
+   * `backgroundToolCall`, the per-tool "go to background"). Different
+   * granularity from `backgroundTurn`: the tool call resolves at once with a
+   * synthetic result so the model continues in the same turn, while the
+   * execution keeps running; its output arrives later through the existing
+   * background-result notification. The runtime resolves the call's family
+   * from the toolCallId itself (foreground Bash process or in-flight Agent).
+   * Non-CAS: an unknown/settled/already-backgrounded tool call is a noop ACK
+   * with reasonCode "guard.stopTargetChanged" — never a kill.
+   */
+  backgroundToolCall(params: {
+    taskId: string;
+    toolCallId: string;
+    workspacePath?: string;
+    workspaceIdentity?: string;
+  }): Promise<{ status: "accepted" | "duplicate" | "noop"; reasonCode?: string }>;
+
   /** 执行 agent 内建 /compact 命令；手机 replayable 仍经 shared host 路由。 */
   compactSession(params: {
     taskId: string;

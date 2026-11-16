@@ -5243,12 +5243,15 @@ export class ProductProjection {
       existing?.title ||
       payload.toolName ||
       workId;
-    // BT（2026-11-05）：bash 事件携带 tracker 的 toolCallId；能对上工具行就把它翻成
+    // BT（2026-11-05）：生命周期事件携带 tracker 的 toolCallId；能对上工具行就把它翻成
     // backgrounded 态（与 subagent backgrounding 的行模板一致），anchorRowId 锚到该行。
     // backgrounded !== true 的幂等门使任意顺序/重复的生命周期事件只翻一次。
+    // BT 2.0（2026-11-16）：同一个翻转还覆盖运行中的 subagent——它的 subagent 行也带上
+    // backgrounded 事实，让 Agent 卡与 completion-blocking 门读同一份真值，而不是两份。
     let toolRowFlip: ConversationDelta | undefined;
+    let subagentRowFlip: ConversationDelta | undefined;
     let anchorRowId: number | null = existing?.anchorRowId ?? null;
-    if (kind === "bash" && payload.toolCallId) {
+    if ((kind === "bash" || kind === "subagent") && payload.toolCallId) {
       const toolRow = this.findToolRow(payload.toolCallId);
       if (toolRow && toolRow.backgrounded !== true) {
         toolRowFlip = {
@@ -5258,6 +5261,19 @@ export class ProductProjection {
         anchorRowId = toolRow.rowId;
       } else if (toolRow) {
         anchorRowId = toolRow.rowId;
+      }
+    }
+    if (kind === "subagent") {
+      // workId ≡ taskId ≡ agentId：subagent 行按 agentId 建索引。
+      const subagentRow = this.findSubagentRow(workId);
+      if (subagentRow && subagentRow.backgrounded !== true) {
+        subagentRowFlip = {
+          op: "row.upserted",
+          row: { ...subagentRow, backgrounded: true as const, workId },
+        };
+        if (anchorRowId === null) anchorRowId = subagentRow.rowId;
+      } else if (subagentRow && anchorRowId === null) {
+        anchorRowId = subagentRow.rowId;
       }
     }
     const next: BackgroundWorkSummary = {
@@ -5287,6 +5303,7 @@ export class ProductProjection {
     // 幂等：内容无变化不产 delta。
     if (
       !toolRowFlip &&
+      !subagentRowFlip &&
       existing &&
       existing.status === next.status &&
       existing.title === next.title &&
@@ -5302,6 +5319,7 @@ export class ProductProjection {
       : [...prev, next];
     return [
       ...(toolRowFlip ? [toolRowFlip] : []),
+      ...(subagentRowFlip ? [subagentRowFlip] : []),
       { op: "state.updated", patch: { backgroundWorks } },
     ];
   }

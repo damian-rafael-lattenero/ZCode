@@ -525,6 +525,53 @@ describe("daemon local channel (B3a)", () => {
     client.destroy();
   });
 
+  it("backgroundToolCall hands one running tool call off through the task service", async () => {
+    await startChannel();
+    const client = await connectAndHandshake();
+    const sendQuery = (id: string, query: unknown) =>
+      client.send({ type: "query", id, query } as never);
+    const queryResult = (id: string) =>
+      client.waitFor((message) => message.type === "query_result" && message.id === id);
+
+    sendQuery("btc1", {
+      kind: "backgroundToolCall",
+      taskId: "task-1",
+      toolCallId: "toolu_agent",
+    });
+    const result = await queryResult("btc1");
+    expect(result).toMatchObject({
+      type: "query_result",
+      result: { backgrounded: ["toolu_agent"] },
+    });
+    expect(taskService.backgroundToolCall).toHaveBeenCalledWith({
+      taskId: "task-1",
+      toolCallId: "toolu_agent",
+    });
+    client.destroy();
+  });
+
+  it("backgroundToolCall answers the noop ACK honestly (guard.stopTargetChanged)", async () => {
+    await startChannel();
+    const client = await connectAndHandshake();
+    vi.mocked(taskService.backgroundToolCall).mockResolvedValueOnce({
+      status: "noop",
+      reasonCode: "guard.stopTargetChanged",
+    });
+    client.send({
+      type: "query",
+      id: "btc2",
+      query: { kind: "backgroundToolCall", taskId: "task-1", toolCallId: "toolu_settled" },
+    } as never);
+    const result = await client.waitFor(
+      (message) => message.type === "query_result" && message.id === "btc2",
+    );
+    expect(result).toMatchObject({
+      type: "query_result",
+      result: { backgrounded: [], reasonCode: "guard.stopTargetChanged" },
+    });
+    client.destroy();
+  });
+
   it("setMode (A4) switches the conversation mode through the task service", async () => {
     await startChannel();
     const client = await connectAndHandshake();

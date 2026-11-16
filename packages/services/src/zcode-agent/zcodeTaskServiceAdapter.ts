@@ -2518,6 +2518,61 @@ export function createZCodeTaskServiceAdapter(
       throw new ZCodeV4CommandRejectedError("backgroundTurn", ack, `session=${params.taskId}`);
     },
 
+    // [fork] v4 backgroundToolCall — move ONE running tool call to the
+    // background (Bash process or in-flight Agent), the per-tool granularity
+    // of "go to background". Non-CAS; the tool call resolves at once with a
+    // synthetic result so the model continues in the same turn, and the
+    // execution itself keeps running. Unknown/settled/already-backgrounded
+    // calls answer noop ("guard.stopTargetChanged") — never a kill.
+    async backgroundToolCall(params): Promise<{
+      status: "accepted" | "duplicate" | "noop";
+      reasonCode?: string;
+    }> {
+      const startedAt = Date.now();
+      const target = params.workspacePath
+        ? {
+            taskId: params.taskId,
+            workspacePath: params.workspacePath,
+            workspaceIdentity: params.workspaceIdentity,
+          }
+        : getTaskTarget(params.taskId);
+      logger.info(undefined, "ZCode task facade backgroundToolCall handoff", {
+        taskId: params.taskId,
+        toolCallId: params.toolCallId,
+        workspaceIdentity: target.workspaceIdentity ?? null,
+        workspaceKey: resolveWorkspaceKey(target),
+        workspacePath: target.workspacePath,
+      });
+      const ack = await options.zcodeAgentService.sendConversationCommandV4({
+        workspacePath: target.workspacePath,
+        workspaceIdentity: target.workspaceIdentity,
+        envelope: createHostCommandEnvelope({
+          type: "backgroundToolCall",
+          payload: { toolCallId: params.toolCallId },
+          sessionId: params.taskId,
+        }),
+      });
+      assertV4CommandAckOk("backgroundToolCall", ack, `session=${params.taskId}`);
+      logger.info(undefined, "ZCode task facade backgroundToolCall ACK", {
+        durationMs: Date.now() - startedAt,
+        status: ack.status,
+        reasonCode: ack.reasonCode ?? null,
+        taskId: params.taskId,
+        toolCallId: params.toolCallId,
+        workspaceIdentity: target.workspaceIdentity ?? null,
+        workspaceKey: resolveWorkspaceKey(target),
+        workspacePath: target.workspacePath,
+      });
+      if (ack.status === "noop") return { status: "noop", reasonCode: ack.reasonCode };
+      if (ack.status === "accepted" || ack.status === "duplicate") return { status: ack.status };
+      // Unreachable: assertV4CommandAckOk already threw on rejected/stale/failed.
+      throw new ZCodeV4CommandRejectedError(
+        "backgroundToolCall",
+        ack,
+        `session=${params.taskId}`,
+      );
+    },
+
     async compactSession(params) {
       // v4 compact 是 CAS 命令（必带 v4 conversation revision
       // 的 baseRevision），而本 facade 的 expectedRevision 是旧协议 stateRevision——

@@ -821,14 +821,16 @@ export interface AgentRuntime {
     options?: BackgroundActiveForegroundExecutionOptions,
   ): BackgroundActiveForegroundExecutionResult;
   /**
-   * BT（2026-11-05）：把仍在跑的前台 Bash tool call 移交后台（OpenCode ctrl+b 复刻）。
-   * 身份守卫在 adapter 的 toolCallId 登记表（foreground + 未 aborted → 否则 noop，
-   * 绝不 abort）；命中后进程信号不动，tool call 以合成结果立即 resolve。
+   * BT（2026-11-05）：把仍在跑的前台 tool call 移交后台（OpenCode ctrl+b 复刻）。
+   * Bash：守卫在 adapter 的 toolCallId 登记表（foreground + 未 aborted → 否则 noop，
+   * 绝不 abort）；Agent：守卫在 runtime task registry（local_agent + parentToolCallId +
+   * 仍未后台 → 否则 noop）。命中后执行本体不动，tool call 以合成结果立即 resolve，
+   * 模型在同一 turn 继续。
    */
   backgroundRunningToolCall(
     toolCallId: string,
     options?: { traceContext?: TraceContext },
-  ): RuntimeBackgroundRunningToolCallResult;
+  ): Promise<RuntimeBackgroundRunningToolCallResult>;
   /** 未收口的 detached turn 是否存在（queue drain gate 与命令路由的权威事实）。 */
   hasUnsettledBackgroundTurn(): boolean;
   activatePausedTargetAfterResume(traceContext: TraceContext): Promise<SessionGoal | null>;

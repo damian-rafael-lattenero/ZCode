@@ -111,13 +111,23 @@ export interface ConversationRowRenderContext {
    */
   onCancelBackgroundWork?: (workId: string) => void;
   /**
-   * 把一条**运行中的工具调用**移交后台（v4 `backgroundToolCall {toolCallId}`），由宿主绑定
-   * dispatchCommand + sessionId。运行中的 Bash 卡用它做单卡粒度的「Go to background」
-   * （OpenCode ctrl+b parity）：与轮级 `onBackgroundTurn` 不同粒度——demote 的是单个
-   * tool call，不是整个 primaryTurn。投影把行翻成 `backgrounded: true, workId` 后入口
-   * 随之消失；只读会话宿主不注入即整卡无入口。
+   * Hand a **running tool call** to the background (v4 `backgroundToolCall {toolCallId}`),
+   * bound by the host to dispatchCommand + sessionId. A running Bash or Agent card uses it
+   * for the single-card "Go to background" pill (OpenCode ctrl+b parity). This is a
+   * different granularity from `onBackgroundTurn`: it detaches one tool call, not the whole
+   * primaryTurn. The projection flips the row to `backgrounded: true, workId` and the entry
+   * disappears; absence means the host does not inject it (read-only session / runtime not
+   * ready), so the card has no entry at all.
    */
   onBackgroundToolCall?: (toolCallId: string) => void;
+  /**
+   * Demote the whole **running primaryTurn** into a background turn (v4 `backgroundTurn`),
+   * bound by the host to dispatchCommand + sessionId. The turn pill uses it under the live
+   * loading tail; this is a different granularity from `onBackgroundToolCall`, which only
+   * detaches a single tool call. Absence means no entry is offered (read-only session /
+   * runtime not ready).
+   */
+  onBackgroundTurn?: () => void;
   /**
    * 工具卡页脚的 Resume：与详情页同一条
    * v4 `resumeWorkflowRun {workId ≡ runId}`。只读会话下宿主不注入。

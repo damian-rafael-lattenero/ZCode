@@ -3212,11 +3212,27 @@ export function SessionPane({
     [dispatchCommand, sessionId],
   );
 
-  // 单工具粒度的后台移交（ctrl+b parity）：与 handleBackgroundTurn 不同，toolCallId 由
-  // 运行中的行自己带来（哪张卡在跑只有卡片知道），pane 不做 activeWorks 查找；执行身份
-  // 与状态守卫由 runtime 按 toolCallId 自行解析。无乐观相位——卡片翻成后台态等权威投影
-  // （row.backgrounded / row.workId）回放（runtimeFactsAreAuthoritative）。
-  // 定义在 rowContext memo 之前（handleCancelBackgroundWork 同款约束）。
+  // Turn-level demotion (v4 `backgroundTurn`): detaches the whole running primaryTurn into a
+  // background turn. Different granularity from handleBackgroundToolCall below, which only
+  // detaches one tool call. Identity guard (expectedForegroundExecutionId) is optional and
+  // omitted here; the runtime answers noop (guard.stopTargetChanged) when idle and
+  // unsupported (fault.command.backgroundTurnUnsupported) for non-detachable turns.
+  // Defined before the rowContext memo (same constraint as handleCancelBackgroundWork).
+  const handleBackgroundTurn = useCallback(() => {
+    if (!sessionId) return;
+    logger.lifecycle.info("[v4-pane] backgroundTurn command dispatched", { sessionId });
+    void dispatchCommand("backgroundTurn", {}, sessionId).catch((error) => {
+      logger.lifecycle.warn(`[v4-pane] backgroundTurn failed: ${String(error)}`);
+    });
+  }, [dispatchCommand, sessionId]);
+
+  // Single-tool demotion (OpenCode ctrl+b parity): unlike handleBackgroundTurn above, the
+  // toolCallId comes from the running row itself (only the card knows which call is live), so
+  // the pane does not look it up in activeWorks; runtime resolves execution identity and state
+  // guards per toolCallId. No optimistic phase: the card flips to the background state only
+  // when the authoritative projection (row.backgrounded / row.workId) replays
+  // (runtimeFactsAreAuthoritative). Defined before the rowContext memo (same constraint as
+  // handleCancelBackgroundWork).
   const handleBackgroundToolCall = useCallback(
     (toolCallId: string) => {
       if (!sessionId) return;
@@ -3375,8 +3391,10 @@ export function SessionPane({
       onOpenWorkflowArtifact:
         runtimeReady && onOpenWorkflowArtifact ? handleOpenWorkflowArtifact : undefined,
       onCancelBackgroundWork: readOnly || !runtimeReady ? undefined : handleCancelBackgroundWork,
-      // 单工具后台移交（ctrl+b parity）：与 onCancelBackgroundWork 同两道门（只读、runtime
-      // 就绪）；缺席即运行中的 Bash 卡没有「Go to background」。
+      // Turn-level and single-tool background demotion share the same two gates (read-only,
+      // runtime ready). Absence removes the corresponding pill entirely: no turn pill under
+      // the live tail and no pill under a running Bash/Agent card.
+      onBackgroundTurn: readOnly || !runtimeReady ? undefined : handleBackgroundTurn,
       onBackgroundToolCall: readOnly || !runtimeReady ? undefined : handleBackgroundToolCall,
       // Resume 进入会话上下文的唯一供给点；灰度与只读两道门都在 resolveWorkflowResumeHandler 里，
       // 断在这里等于工具卡页脚与摘要卡的按钮一起消失。
@@ -3460,6 +3478,7 @@ export function SessionPane({
       readOnly,
       runtimeReady,
       handleCancelBackgroundWork,
+      handleBackgroundTurn,
       handleBackgroundToolCall,
       dynamicWorkflowEnabled,
       handleResumeWorkflowRun,

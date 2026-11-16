@@ -86,11 +86,44 @@ BGV01–BGV06 验收见 [后台 Bash 输出详情](background-bash-output-detail
   `v4-tool-background-<toolCallId>`；投影把行翻成 `backgrounded:true` + `workId` +
   `anchorRowId`，完成回流走既有 bash background 通知 → backgroundResult wake）。
 
+### 2026-11-16 — Agent leg and the turn-level entry (BT 2.0)
+
+- The SAME non-CAS v4 command `backgroundToolCall {toolCallId}` now also moves an
+  **in-flight subagent** to the background. The runtime resolves the family from the
+  tool call id itself: the Bash leg keeps its adapter handoff; the Agent leg looks up a
+  `local_agent` task in the runtime task registry by `parentToolCallId` and calls
+  `SubagentPort.backgroundTask`. The subagent runner's ownership race wins, the tool
+  call resolves at once with the existing `async_launched` output, and the parent turn
+  continues immediately; the child keeps running and its result arrives through the
+  existing `<task-notification>` / backgroundResult pipeline. Guard misses (unknown,
+  settled, already backgrounded, or an off-peak borrowed foreground agent) are NOOPs,
+  never aborts.
+- Projection: `BackgroundTaskStarted` with `taskKind "subagent"` flips both the Agent
+  tool row and the subagent row to `backgrounded: true` + `workId` (idempotent), and
+  anchors the background work to the tool row when present. The two rows therefore
+  share one truth: the agent card renders the handoff and the completion-blocking gate
+  stops counting the child.
+- Desktop affordance: the same pill (`v4-tool-background-<toolCallId>`) now renders
+  under running Agent/Task cards, not only under running Bash cards. The pill lives in
+  the shared `ToolBackgroundButton` component so both renderers use one gate
+  (`raw.v4Status === "running"`, not already backgrounded, not office mode).
+- Turn-level: the desktop entry for `backgroundTurn` is restored as a pill under the
+  live "Working" indicator (`v4-timeline-background-turn`), for `userInput`/`editRerun`
+  turns only. The runtime/protocol/facade are the same ones the phone already uses; the
+  turn keeps executing detached and its result arrives as a backgroundResult turn.
+- Phone: the daemon channel exposes the additive query
+  `{"kind":"backgroundToolCall","taskId":…,"toolCallId":…}` (same wire shape as
+  `backgroundTurn` but naming the tool call). The bot's live card renders the turn row
+  plus one `🌙 <agent>` row per open dispatch lane; the tap answers success
+  (`{backgrounded:[toolCallId]}`), an honest noop, or the host's error verbatim.
+
 ## 暂不支持
 
 - provider-visible `background_tasks` control request。
 - 2 秒后提示用户可手动 background 的 UI/UX（我们的按钮常驻于运行中的卡下方）。
-- 跨 Bash/Agent/schema 的全局后台任务开关。
+- A generic per-tool switch across every tool schema: Read/Write/Edit are deliberately
+  out — the model needs their result inside the same step — so per-tool backgrounding
+  stays limited to Bash and Agent/subagent runs.
 
 ## 多端边界
 

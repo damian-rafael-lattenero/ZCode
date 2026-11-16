@@ -59,6 +59,8 @@ import {
 } from "@zcode/contracts";
 import {
   subagentRuntimeConfigSchema,
+  // [fork] M5: the child session id convention (sess_subagent_<agentId>)
+  SUBAGENT_SESSION_PREFIX,
   DEFAULT_ZCODE_MODEL_CONTEXT_BUDGET_STRATEGY,
   ZCODE_SESSION_RUNTIME_PREFERENCES_REQUEST_TIMEOUT_MS,
   zcodeProtocolErrorCodes,
@@ -2225,6 +2227,14 @@ export async function subscribeSession(
   rawParams: unknown,
 ) {
   const params = parseParams(zcodeSessionSubscribeParamsSchema, rawParams);
+  // [fork] M5 — a CHILD session has no record (requireSession refuses it),
+  // yet its raw events already reach onSessionEvent with its own sessionId
+  // (the subagent wrapper notifies the parent runtime's external sinks).
+  // The subscription lands in the child registry: the child's frames then
+  // ride the legacy session/event stream exactly like a task's.
+  if (params.sessionId.startsWith(SUBAGENT_SESSION_PREFIX)) {
+    return subscribeChildSession(context, params.sessionId, params.deliveryKind);
+  }
   const record = requireSession(context, params.sessionId);
   record.deliveryKind = params.deliveryKind;
   // 兼容保护：旧 replayable 流没有 unsubscribe RPC。这里只记录真正的 subscribe，
@@ -2246,6 +2256,83 @@ export async function subscribeSession(
         })
       : undefined,
   };
+}
+
+/**
+ * [fork] M5 — the child sessions' legacy stream subscriptions. A child is
+ * NOT a task: it has no record, so its subscription is just the promise
+ * that its raw events (which already reach onSessionEvent with their own
+ * sessionId) are forwarded as session/event frames. Bounded and
+ * self-cleaning: a child's terminal event drops its entry, a re-subscribe
+ * replaces it, and the registry never exceeds CHILD_SUBSCRIBE_CAP.
+ */
+interface ChildSessionSubscription {
+  deliveryKind?: ZCodeDeliveryKind;
+  /** The protocol seq for the child's own stream — continuous per child. */
+  seq: number;
+  subscribedAt: number;
+}
+
+const CHILD_SUBSCRIBE_CAP = 32;
+
+const childSessionSubscriptions = new WeakMap<
+  ZCodeProtocolAgentServerContext,
+  Map<string, ChildSessionSubscription>
+>();
+
+function childRegistry(
+  context: ZCodeProtocolAgentServerContext,
+): Map<string, ChildSessionSubscription> {
+  const existing = childSessionSubscriptions.get(context);
+  if (existing) return existing;
+  const created = new Map<string, ChildSessionSubscription>();
+  childSessionSubscriptions.set(context, created);
+  return created;
+}
+
+function subscribeChildSession(
+  context: ZCodeProtocolAgentServerContext,
+  sessionId: string,
+  deliveryKind?: ZCodeDeliveryKind,
+) {
+  const registry = childRegistry(context);
+  registry.delete(sessionId); // a re-subscribe replaces the previous entry
+  registry.set(sessionId, { deliveryKind, seq: 0, subscribedAt: Date.now() });
+  if (registry.size > CHILD_SUBSCRIBE_CAP) {
+    const oldest = [...registry.entries()].sort((a, b) => a[1].subscribedAt - b[1].subscribedAt)[0]?.[0];
+    if (oldest) registry.delete(oldest);
+  }
+  // The subscribe ACK's shape: no replay for a child (the bot only reads
+  // live frames; /last carries persisted history through its own snapshots).
+  return { eventSeq: 0, events: [], sessionId };
+}
+
+/** [fork] M5 — forward one child event to its legacy subscriber, if any. */
+function forwardChildSessionEvent(
+  context: ZCodeProtocolAgentServerContext,
+  event: SessionEvent,
+): void {
+  const registry = childSessionSubscriptions.get(context);
+  const sessionId = String(event.sessionId);
+  const subscription = registry?.get(sessionId);
+  if (!registry || !subscription) return;
+  subscription.seq += 1;
+  const mapped = mapSessionEventForProtocol(event, subscription.deliveryKind, {
+    seq: subscription.seq,
+  });
+  if (mapped) {
+    context.notify({
+      method: "session/event",
+      params: mapped,
+    });
+  }
+  const terminal =
+    event.type === SessionEventType.TurnComplete || event.type === SessionEventType.TurnError;
+  if (terminal) {
+    // the child's turn is over: its subscription dies with it (the next
+    // turn re-subscribes through the lane's launch ACK)
+    registry.delete(sessionId);
+  }
 }
 
 export async function sendPrompt(context: ZCodeProtocolAgentServerContext, rawParams: unknown) {
@@ -3478,6 +3565,10 @@ export function onSessionEvent(
       event,
       record.app.sessionId,
     );
+    // [fork] M5 — the child's OWN legacy subscribers (the bot's sa: attach)
+    // receive the raw child frame on session/event; the v4 ingest above is
+    // untouched, so the desktop UI's parent timeline stays clean.
+    forwardChildSessionEvent(context, event);
     return;
   }
   // record.updatedAt 是 sessions-index 的 lastActivityAt 事实源（v4-bridge

@@ -9,6 +9,10 @@ import { useCallback, useMemo, type ReactNode } from "react";
 import { MessageResponse } from "@/components/ai-elements/message.js";
 import { useZCodeIntl } from "@/i18n/IntlProvider.js";
 import { ToolSnapshotFieldNotice } from "@/ToolCallBlocks/ToolSnapshotFieldNotice.js";
+import {
+  canBackgroundToolCall,
+  ToolBackgroundButton,
+} from "@/ToolCallBlocks/ToolBackgroundButton.js";
 import { ToolLayout } from "../ToolLayout.js";
 import type { ToolCallBlockRenderContext } from "../shared.js";
 import { getLatestAgentChildSummaryFromChildren } from "@/ToolCallBlocks/renderers/explore.js";
@@ -206,6 +210,16 @@ function BackgroundAgentProcessSection({
 export function AgentToolCallBlock(context: ToolCallBlockRenderContext) {
   const { intl } = useZCodeIntl();
   const { toolCall, childToolCalls } = context.toolCallNode;
+  // Top-level Agent/Task cards reach this renderer only from the v4 conversation row, so
+  // the same per-tool pill as Bash can detach the running subagent execution
+  // (v4 backgroundToolCall, ctrl+b parity). Child cards never get the handler, so their
+  // nested rows stay without the entry.
+  const onBackgroundToolCall = context.onBackgroundToolCall;
+  const canBackground = canBackgroundToolCall(
+    toolCall.raw,
+    onBackgroundToolCall !== undefined,
+    context.isOfficeMode === true,
+  );
   const prompt = getAgentPrompt(toolCall);
   const fallbackLabel = formatAgentMessage(intl, "chat.toolCall.agent.fallback", "SubAgent");
   const primaryText = getAgentPrimaryText(toolCall, fallbackLabel);
@@ -430,6 +444,14 @@ export function AgentToolCallBlock(context: ToolCallBlockRenderContext) {
         expandedTitle={primaryText}
         renderContent={renderContent}
       />
+      {canBackground && onBackgroundToolCall ? (
+        // Single-tool demotion for the running subagent call: same pill and placement as
+        // the Bash card, before the snapshot field notice.
+        <ToolBackgroundButton
+          toolCallId={toolCall.toolId}
+          onBackgroundToolCall={onBackgroundToolCall}
+        />
+      ) : null}
       <ToolSnapshotFieldNotice
         refs={toolCall.snapshotRefs ?? []}
         onLoadFullToolCallFields={

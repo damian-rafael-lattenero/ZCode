@@ -17,7 +17,7 @@ import {
   useState,
   useSyncExternalStore,
 } from "react";
-import { ChevronRightIcon, EyeIcon } from "lucide-react";
+import { ChevronRightIcon, EyeIcon, PictureInPicture2Icon } from "lucide-react";
 import {
   zcodeProviderRuntimeHeadersErrorCode,
   type HighspeedMessageMeta,
@@ -28,6 +28,7 @@ import {
   TID_CHAT_ASSISTANT_HISTORY_TRIGGER,
   TID_CHAT_BACKGROUND_RESULT_TITLE,
   TID_CHAT_LOADING,
+  TID_V4_TIMELINE_BACKGROUND_TURN,
   testId,
 } from "@zcode/shared/test-ids";
 import type { ApiRetryState, ConversationRowTarget } from "@zcode/shared/zcode-protocol-v4";
@@ -225,14 +226,52 @@ export function toRetryStatus(apiRetry: ApiRetryState): ZCodeApiRetryStatus {
   };
 }
 
+/**
+ * Only a regular user turn can be detached from the foreground: notification/control
+ * turns have no foreground execution to demote and the runtime answers
+ * `fault.command.backgroundTurnUnsupported` for them. Keeping the gate here means the
+ * UI never offers a button that cannot work.
+ */
+export function canDemoteTurn(unit: Pick<ConversationTurnRenderUnit, "header">): boolean {
+  return unit.header?.origin === "userInput" || unit.header?.origin === "editRerun";
+}
+
+/**
+ * Turn-level "Go to background" pill (v4 `backgroundTurn`): detaches the whole running
+ * primaryTurn, unlike the per-tool pill. Rendered below the live loading tail; absent
+ * handler means no entry. Exported for direct unit testing without mounting the whole
+ * ConversationTurnGroup.
+ */
+export function TurnBackgroundButton({ onBackgroundTurn }: { onBackgroundTurn?: () => void }) {
+  const { intl } = useZCodeIntl();
+  if (!onBackgroundTurn) return null;
+  return (
+    <div className="flex justify-center">
+      <Button
+        type="button"
+        variant="secondary"
+        size="sm"
+        className="rounded-full gap-1.5"
+        onClick={() => onBackgroundTurn()}
+        data-testid={TID_V4_TIMELINE_BACKGROUND_TURN}
+      >
+        <PictureInPicture2Icon className="size-3.5" />
+        <span>{intl.formatMessage({ id: "chat.timeline.backgroundTurn" })}</span>
+      </Button>
+    </div>
+  );
+}
+
 function TurnChatLoadingSlot({
   apiRetry,
   eligible,
   initialElapsedMs,
+  onBackgroundTurn,
 }: {
   apiRetry: ApiRetryState | null;
   eligible: boolean;
   initialElapsedMs: number;
+  onBackgroundTurn?: () => void;
 }) {
   const { intl, locale } = useZCodeIntl();
   const retryStatus = useMemo(() => (apiRetry ? toRetryStatus(apiRetry) : null), [apiRetry]);
@@ -249,13 +288,16 @@ function TurnChatLoadingSlot({
   if (!visibleRetryStatus && !eligible) return null;
   return (
     <div data-zcode-chat-loading-slot="true" className="min-h-5">
-      {visibleRetryStatus ? (
-        <ChatApiRetryStatus apiRetry={visibleRetryStatus} intl={intl} locale={locale} />
-      ) : (
-        // running 是 ChatLoading 的权威事实；额外静默计时会让 projection
-        // 更新反复重启可见性，并使 UI 晚于真实状态。
-        <ChatLoading loading data-testid={TID_CHAT_LOADING} initialElapsedMs={initialElapsedMs} />
-      )}
+      <div className="flex flex-col gap-1">
+        {visibleRetryStatus ? (
+          <ChatApiRetryStatus apiRetry={visibleRetryStatus} intl={intl} locale={locale} />
+        ) : (
+          // running 是 ChatLoading 的权威事实；额外静默计时会让 projection
+          // 更新反复重启可见性，并使 UI 晚于真实状态。
+          <ChatLoading loading data-testid={TID_CHAT_LOADING} initialElapsedMs={initialElapsedMs} />
+        )}
+        <TurnBackgroundButton onBackgroundTurn={onBackgroundTurn} />
+      </div>
     </div>
   );
 }
@@ -279,7 +321,13 @@ function useConversationAssistantWorkItems(
           : {}),
         ...(messageStreamVerbosity !== undefined ? { messageStreamVerbosity } : {}),
       }),
-    [firstReasoningRowId, rows, showReasoning, context.messageStreamShowTodos, messageStreamVerbosity],
+    [
+      firstReasoningRowId,
+      rows,
+      showReasoning,
+      context.messageStreamShowTodos,
+      messageStreamVerbosity,
+    ],
   );
 }
 
@@ -914,6 +962,7 @@ function ConversationTurnFlow({
           apiRetry={apiRetry}
           eligible={showLoading}
           initialElapsedMs={unit.workStatus?.durationMs ?? 0}
+          onBackgroundTurn={canDemoteTurn(unit) ? context.onBackgroundTurn : undefined}
         />
       </div>
     );
@@ -1000,6 +1049,7 @@ function ConversationTurnFlow({
         apiRetry={apiRetry}
         eligible={showLoading}
         initialElapsedMs={unit.workStatus?.durationMs ?? 0}
+        onBackgroundTurn={canDemoteTurn(unit) ? context.onBackgroundTurn : undefined}
       />
     </div>
   );
@@ -1239,6 +1289,7 @@ function ConversationBackgroundResultWork({
         apiRetry={apiRetry}
         eligible={showLoading}
         initialElapsedMs={unit.workStatus?.durationMs ?? 0}
+        onBackgroundTurn={canDemoteTurn(unit) ? context.onBackgroundTurn : undefined}
       />
     </Collapsible>
   );
@@ -1351,8 +1402,7 @@ function ConversationTurnGroupImpl({
   // 判据用 latestAssistantTextRow.state 而不是 unit.isRunning：回合可能还在跑
   // （模型说完一段正在调工具），但最新文本行已经终态，那时 copyText 仍须可用。
   const assistantTextTerminal =
-    latestAssistantTextRow?.state === "complete" ||
-    latestAssistantTextRow?.state === "interrupted";
+    latestAssistantTextRow?.state === "complete" || latestAssistantTextRow?.state === "interrupted";
   const assistantRawCopyText = useMemo(
     () => (assistantTextTerminal ? resolveAssistantCopyText(unit) : undefined),
     [

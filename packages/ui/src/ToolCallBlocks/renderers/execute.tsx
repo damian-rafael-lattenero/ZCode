@@ -3,13 +3,15 @@ import {
   bashOutputDisplaySchema,
   executionOutputPreviewSchema,
 } from "@zcode/shared/zcode-protocol-v4";
-import { TID_V4_TOOL_BACKGROUND, testId } from "@zcode/shared/test-ids";
 import { ExecuteOutput } from "@/ToolCallBlocks/renderers/ExecuteOutput.js";
-import { PictureInPicture2Icon, SquareTerminalIcon } from "lucide-react";
+import { SquareTerminalIcon } from "lucide-react";
 import { useCallback, useMemo } from "react";
-import { Button } from "@/components/ui/button.js";
 import { useZCodeIntl } from "@/i18n/IntlProvider.js";
 import { ToolSnapshotFieldNotice } from "@/ToolCallBlocks/ToolSnapshotFieldNotice.js";
+import {
+  canBackgroundToolCall,
+  ToolBackgroundButton,
+} from "@/ToolCallBlocks/ToolBackgroundButton.js";
 import { ToolLayout } from "../ToolLayout.js";
 import type { ToolCallBlockRenderContext } from "../shared.js";
 
@@ -272,16 +274,18 @@ export function ExecuteToolCallBlock(context: ToolCallBlockRenderContext) {
   const { intl } = useZCodeIntl();
   const { toolCallNode, isRunning, statusLabel, errorText, isOfficeMode = false } = context;
   const { toolCall } = toolCallNode;
-  // ctrl+b parity：v4 投影的后台移交事实都在 raw（toolCallRowAdapter 桥接）。
-  // 运行判定用 v4Status 而不是 isRunning：legacy isRunning 还涵盖 pending
-  // （流式输入 / 审批中），那些卡还没有可移交的执行。投影把行翻成
-  // backgrounded=true 后按钮消失、kind 标签缀上后台状态。
+  // ctrl+b parity: the background-handoff facts live in raw (toolCallRowAdapter bridge).
+  // The pill gate (raw.v4Status === "running", not legacy isRunning) is shared with the
+  // Agent card in canBackgroundToolCall; once the projection flips the row to
+  // backgrounded=true the pill disappears and the kind label gets the background suffix.
   const raw = isPlainRecord(toolCall.raw) ? toolCall.raw : undefined;
-  const isV4Running = raw?.v4Status === "running";
   const backgrounded = raw?.backgrounded === true;
   const onBackgroundToolCall = context.onBackgroundToolCall;
-  const canBackgroundToolCall =
-    onBackgroundToolCall !== undefined && isV4Running && !backgrounded && !isOfficeMode;
+  const canBackground = canBackgroundToolCall(
+    raw,
+    onBackgroundToolCall !== undefined,
+    isOfficeMode,
+  );
   // v3.18.0 XSG02：摘要展示调用意图，详情仍从原始 input 读取命令，避免 description 替代真实执行内容。
   const description =
     (toolCall.toolName ?? toolCall.kind) === "Bash" && isPlainRecord(toolCall.input)
@@ -407,24 +411,16 @@ export function ExecuteToolCallBlock(context: ToolCallBlockRenderContext) {
         title={isOfficeMode ? undefined : (description ?? toolCall.title)}
         renderContent={renderContent}
       />
-      {canBackgroundToolCall && onBackgroundToolCall ? (
-        // ctrl+b parity：运行中的 Bash 卡把单条命令移交后台（v4 backgroundToolCall）。
-        // 与轮级「Go to background」药丸（ConversationTimeline）不同粒度；置于卡下方、
-        // 不随收起态隐藏（ToolSnapshotFieldNotice 同款位置约定）。投影翻成
-        // backgrounded 后整块消失。
-        <div className="mt-1 flex justify-center">
-          <Button
-            type="button"
-            variant="secondary"
-            size="sm"
-            className="rounded-full gap-1.5"
-            onClick={() => onBackgroundToolCall(toolCall.toolId)}
-            data-testid={testId(TID_V4_TOOL_BACKGROUND, toolCall.toolId)}
-          >
-            <PictureInPicture2Icon className="size-3.5" />
-            <span>{intl.formatMessage({ id: "chat.timeline.backgroundTurn" })}</span>
-          </Button>
-        </div>
+      {canBackground && onBackgroundToolCall ? (
+        // ctrl+b parity: a running Bash card hands the single command to the background
+        // (v4 backgroundToolCall). Different granularity from the turn-level pill; placed
+        // below the card and not hidden with the collapsed body (same placement contract
+        // as ToolSnapshotFieldNotice). The whole block disappears once the projection
+        // flips the row to backgrounded.
+        <ToolBackgroundButton
+          toolCallId={toolCall.toolId}
+          onBackgroundToolCall={onBackgroundToolCall}
+        />
       ) : null}
       {!isOfficeMode ? (
         <ToolSnapshotFieldNotice

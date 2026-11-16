@@ -415,11 +415,13 @@ async function backgroundTurn(
 }
 
 /**
- * backgroundToolCall（BT 分组 2026-11-05，OpenCode ctrl+b 复刻）：把仍在跑的前台 Bash
- * tool call 移交后台。粒度与 backgroundTurn 不同：tool call 以合成结果立即结算（模型
- * 在同一 turn 继续），进程不动，完成时走既有 BackgroundTaskCompleted → backgroundResult
- * 通知回流。守卫未命中（无该 toolCallId 的在跑前台/已终态）→ noop；runtime 或
- * executionPort 缺移交能力 → unsupported fault。非 CAS 命令。
+ * backgroundToolCall（BT 分组 2026-11-05，OpenCode ctrl+b 复刻）：把仍在跑的前台 tool
+ * call 移交后台。两个粒度都走这一条命令：Bash 的进程交接在 execution adapter 的
+ * toolCallId 登记表；Agent 的交接在 runtime task registry（parentToolCallId →
+ * local_agent）。tool call 以合成结果立即结算（模型在同一 turn 继续），执行本体不动，
+ * 完成时走既有 BackgroundTaskCompleted → backgroundResult 通知回流。守卫未命中
+ * （无该 toolCallId 的在跑前台/已终态）→ noop；runtime 或两个 port 都缺移交能力 →
+ * unsupported fault。非 CAS 命令。
  */
 async function backgroundToolCall(
   host: V4CommandCoreHost,
@@ -427,7 +429,9 @@ async function backgroundToolCall(
 ): Promise<CommandResult | undefined> {
   const record = requireRecord(host, envelope.sessionId);
   const payload = envelope.payload as CommandPayloadMap["backgroundToolCall"];
-  const runtimeHandoff = record.app.runtime?.backgroundRunningToolCall?.(payload.toolCallId);
+  const runtimeHandoff = await record.app.runtime?.backgroundRunningToolCall?.(
+    payload.toolCallId,
+  );
   host.logger?.info?.("v4 background tool call inspected", {
     event: "v4.background_tool_call.inspected",
     module: "bootstrap.zcode_protocol_v4.commands",
@@ -444,7 +448,7 @@ async function backgroundToolCall(
     // 守卫未命中只 noop，绝不触碰任何在跑执行。
     throw new V4CommandNoopError("guard.stopTargetChanged");
   }
-  // runtime 缺方法，或 executionPort 缺外部移交能力（stub / 旧端口）。
+  // runtime 缺方法，或两个 port 都缺外部移交能力（stub / 旧端口）。
   throw Object.assign(new Error("fault.command.backgroundToolCallUnsupported"), {
     reasonCode: "fault.command.backgroundToolCallUnsupported",
   });

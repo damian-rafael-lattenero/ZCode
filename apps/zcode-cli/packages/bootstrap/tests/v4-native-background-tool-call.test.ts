@@ -91,6 +91,19 @@ describe("v4 原生 backgroundToolCall handler", () => {
     expect(app.updateTargetStatus).not.toHaveBeenCalled();
   });
 
+  it("Agent 腿是异步的：host 等待 runtime 决议后再判 accepted（workId = agentId）", async () => {
+    const backgroundRunningToolCall = vi.fn(async () => ({
+      kind: "backgrounded" as const,
+      workId: "agent_1",
+    }));
+    const record = makeRecord({ app: makeApp({ runtime: { backgroundRunningToolCall } }) });
+
+    await expect(
+      new V4CommandExecutor(makeHost(record)).execute(envelope({ toolCallId: "toolu_agent" })),
+    ).resolves.toBeUndefined();
+    expect(backgroundRunningToolCall).toHaveBeenCalledWith("toolu_agent");
+  });
+
   it("守卫未命中（noop）：guard.stopTargetChanged，绝不触碰任何在跑执行", async () => {
     const controller = new AbortController();
     const backgroundRunningToolCall = vi.fn().mockReturnValue({ kind: "noop" });

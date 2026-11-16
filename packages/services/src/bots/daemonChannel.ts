@@ -216,6 +216,9 @@ const KNOWN_QUERY_KINDS = new Set([
   // [fork] "go to background" — demote of the running primaryTurn (v4
   // backgroundTurn); the turn keeps executing, ownership moves to background.
   "backgroundTurn",
+  // [fork] per-tool "go to background" (v4 backgroundToolCall): one running
+  // tool call (Bash process or in-flight Agent) moves to the background.
+  "backgroundToolCall",
   "compact",
   "contextWindow",
   // [fork] A4 — el /mode del bot (plan 🗺 / yolo 🔓).
@@ -756,6 +759,19 @@ export function createDaemonLocalChannel(
         return ack.status === "noop"
           ? { backgrounded: [], reasonCode: ack.reasonCode ?? "guard.stopTargetChanged" }
           : { backgrounded: [query.taskId] };
+      }
+      case "backgroundToolCall": {
+        // [fork] per-tool "go to background" (v4 backgroundToolCall): ONE
+        // running tool call (Bash process or in-flight Agent) moves to the
+        // background and the model continues in the same turn. Same honest
+        // noop contract as backgroundTurn, but the wire names the tool call.
+        const ack = await taskService.backgroundToolCall({
+          taskId: query.taskId,
+          toolCallId: query.toolCallId,
+        });
+        return ack.status === "noop"
+          ? { backgrounded: [], reasonCode: ack.reasonCode ?? "guard.stopTargetChanged" }
+          : { backgrounded: [query.toolCallId] };
       }
       case "contextWindow": {
         let workspacePath = query.workspacePath;

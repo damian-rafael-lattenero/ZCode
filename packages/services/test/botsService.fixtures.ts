@@ -129,6 +129,7 @@ export function createLegacyTaskService(): IZCodeTaskService {
     respondElicitation: vi.fn(async () => true),
     stopGeneration: vi.fn(async () => undefined),
     backgroundTurn: vi.fn(async () => ({ status: "accepted" as const })),
+    backgroundToolCall: vi.fn(async () => ({ status: "accepted" as const })),
     onDynamicStreamEvent: vi.fn(() => () => ({ dispose() {} })),
   } as unknown as IZCodeTaskService;
 }

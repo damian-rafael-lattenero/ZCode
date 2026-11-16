@@ -233,6 +233,28 @@ export type DaemonChannelQuery =
       workspaceIdentity?: string;
     }
   | {
+      /**
+       * [fork] backgroundToolCall (additive, 16/11 — per-tool "go to
+       * background" from the phone): move ONE running tool call to the
+       * background (the same v4 `backgroundToolCall` command the desktop tool
+       * cards send). Different granularity from `backgroundTurn`: the tool
+       * call resolves at once with a synthetic result so the model continues
+       * in the same turn, while the execution itself keeps running. Today the
+       * runtime answers for foreground Bash calls and for in-flight Agent
+       * (subagent) calls addressed by their parent toolCallId.
+       * Non-CAS. Success mirrors the demote's wire shape but names the tool
+       * call: `{ backgrounded: ["<toolCallId>"] }`; a noop answers
+       * `{ backgrounded: [], reasonCode: "<ack.reasonCode>" }` (e.g.
+       * "guard.stopTargetChanged"). Old servers answer `unknown_query`.
+       */
+      kind: "backgroundToolCall";
+      taskId: string;
+      /** The running tool call to hand off (Agent: the parent Agent/Task call). */
+      toolCallId: string;
+      workspacePath?: string;
+      workspaceIdentity?: string;
+    }
+  | {
       kind: "contextWindow";
       taskId: string;
       workspacePath?: string;

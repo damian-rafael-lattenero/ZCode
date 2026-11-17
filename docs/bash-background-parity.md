@@ -132,7 +132,7 @@ Owner verdict: background is **per section, never the whole conversation**. The 
 turn-level affordance is gone from every surface (the desktop entry was removed in
 `259514cc`; the phone's `bgd:` live-card row is removed in this batch — the route and
 `ChannelQuery.BackgroundTurn` stay for old cards). While the model thinks or writes, the
-composer offers **⚡ Cut and continue / ⏳ Queue** instead of parking the turn.
+composer offers **⚡ Cut and continue / ⏳ Soft steer** instead of parking the turn.
 
 - **Interrupt (⚡)**: `sendText.requestedDelivery: "interrupt"`. Admission enqueues the
   text as an in-turn guide FIRST, then aborts a step-scoped `AbortController`
@@ -143,6 +143,12 @@ composer offers **⚡ Cut and continue / ⏳ Queue** instead of parking the turn
   and is walked through provider wrappers, so Stop still cancels the turn.
   `availability.interruptSteer` gates the button (running + compact unlocked); the
   runtime's steerable check stays authoritative and rejects honestly.
+- **Soft steer (⏳)**: `sendText.requestedDelivery: "guide"`. The running edit, search or
+  command finishes normally; the guide is drained at the next model-step boundary
+  (after the tool batch, or after a text-only step) and the SAME turn continues with the
+  message. It never waits for the whole turn to end, and no manual "Send now" is needed;
+  if the turn cannot consume it, the existing fallback queues it. The classic deferred
+  queue stays available through Cmd/Ctrl+Enter and the queue panel.
 - **Read-only tool detach**: `ToolEntry.backgrounding` (host-authoritative, never name
   inferred) is set on Grep, Glob, WebFetch and WebSearch only. The executor owns a
   `DetachedToolTaskStore`; the call runner races the handler against a detach gate,

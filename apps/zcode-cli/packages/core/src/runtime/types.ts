@@ -584,6 +584,12 @@ export type PromptAdmissionOptions = ExecuteTurnOptions & {
   expectedTurnId?: TurnId;
   /** busy 时的产品队列语义；附件或不可 steer 时由 Core 回退 queue。 */
   queueDelivery?: "guide" | "queue";
+  /**
+   * U1: cut the CURRENT model step and continue the SAME turn with this input. The guide
+   * is persisted before the abort; mid-tool there is no step controller, so the guide
+   * waits at the batch boundary. Requires a steerable active turn.
+   */
+  interruptCurrentModelStep?: boolean;
   /** 强制进入 FIFO；用于携带只能在未来独立 turn 安装的临时运行模型。 */
   requireQueue?: boolean;
   /** queue promotion 等内部调用要求 admission 必须 idle，否则直接拒绝。 */

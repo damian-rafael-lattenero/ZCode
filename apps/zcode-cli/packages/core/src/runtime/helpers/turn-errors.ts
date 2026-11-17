@@ -141,6 +141,32 @@ export function createTurnCancelledError(error: unknown) {
   });
 }
 
+// 2026-11-17 U1: the user can cut the CURRENT MODEL STEP (not the turn) and continue the
+// same turn with their steer message. The step abort needs an identity distinct from
+// TurnCancelled: the model/provider layer wraps abort reasons in its own errors, so the
+// predicate walks the cause chain looking for this code. A step interrupt is a normal
+// boundary, never a turn failure and never the "[Request interrupted by user]" marker.
+const MODEL_STEP_INTERRUPTED_CODE = "user_steer_model_step_interrupted" as const;
+
+export function createModelStepInterruptedError(): Error {
+  return Object.assign(new Error("Model step interrupted by user steer"), {
+    code: MODEL_STEP_INTERRUPTED_CODE,
+  });
+}
+
+export function isModelStepInterruptedError(error: unknown): boolean {
+  let current = error;
+  const seen = new WeakSet<object>();
+  for (let depth = 0; depth <= 6; depth += 1) {
+    if (!current || typeof current !== "object" || seen.has(current)) return false;
+    seen.add(current);
+    const record = current as Record<string, unknown>;
+    if (record.code === MODEL_STEP_INTERRUPTED_CODE) return true;
+    current = record.cause;
+  }
+  return false;
+}
+
 // 用户主动中断（TurnCancelled）属于正常结束，不应记为错误。turn/compact/rewind 三处 catch
 // 之前都无条件 emit TurnError，会被 reducer/UI/桌面统一映射成 turn.failed（status:error、追加错误消息）。
 // 这里统一收口：取消时改发 TurnComplete(resultType:"cancelled") 让状态干净回到 idle，真实错误才发 TurnError。

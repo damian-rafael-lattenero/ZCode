@@ -191,6 +191,13 @@ export interface AgentRuntimeInternal
    * 经它 abort 对应 AbortController；settlement 后移除。重启即丢（backgroundTurnDiesOnRestart）。
    */
   readonly detachedTurns: Map<TurnId, DetachedTurnHandle>;
+  /**
+   * U1 (2026-11-17): the in-flight provider/model step controller. Exists only while a
+   * model request/stream is running; aborting it cuts the STEP (the turn continues with
+   * the drained steer guide), never the turn. Stop still aborts via the turn signal,
+   * which is linked into this controller.
+   */
+  activeModelStepController?: AbortController;
   foregroundPromotionLease?: ForegroundPromotionLeaseState;
   activeTurn?: ActiveTurnSteeringState;
   activeTurnStartReservation?: ActiveTurnStartReservation;

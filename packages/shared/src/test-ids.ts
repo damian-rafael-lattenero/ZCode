@@ -659,12 +659,12 @@ export const TID_V4_COMPOSER_CLEAR_QUEUE_SEND = "v4-composer-clear-queue-send";
 export const TID_V4_COMPOSER_KEEP_QUEUE_SEND = "v4-composer-keep-queue-send";
 /** v4 暂停队列发送确认弹窗 */
 export const TID_V4_PAUSED_QUEUE_SEND_DIALOG = "v4-paused-queue-send-dialog";
-/** v4 composer busy-input picker (cut and continue / queue) */
+/** v4 composer busy-input picker (cut and continue / soft steer) */
 export const TID_COMPOSER_INTERRUPT_PICKER = "composer-interrupt-picker";
 /** v4 composer busy-input picker: "cut and continue" option */
 export const TID_COMPOSER_INTERRUPT_PICKER_INTERRUPT = "composer-interrupt-picker-interrupt";
-/** v4 composer busy-input picker: "queue" option */
-export const TID_COMPOSER_INTERRUPT_PICKER_QUEUE = "composer-interrupt-picker-queue";
+/** v4 composer busy-input picker: "soft steer" option (delivered at the next step) */
+export const TID_COMPOSER_INTERRUPT_PICKER_STEER = "composer-interrupt-picker-steer";
 /** V4 composer 附件 chip（动态后缀为附件 id） */
 export const TID_V4_ATTACHMENT = "v4-attachment";
 /** V4 composer 附件上传进度（动态后缀为附件 id） */

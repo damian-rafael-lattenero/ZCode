@@ -6457,9 +6457,9 @@ const enUS: Record<string, string> = {
   "chat.composer.interruptPicker.interrupt": "⚡ Cut and continue",
   "chat.composer.interruptPicker.interruptDescription":
     "Ends the current model step and continues in the same turn. A running tool batch finishes first.",
-  "chat.composer.interruptPicker.queue": "⏳ Queue",
-  "chat.composer.interruptPicker.queueDescription":
-    "Starts after the current turn ends. If the turn has already ended, it starts right away.",
+  "chat.composer.interruptPicker.steer": "⏳ Soft steer",
+  "chat.composer.interruptPicker.steerDescription":
+    "Delivered when the current step finishes (the running edit, search or command), then the same turn continues with it. If it cannot be delivered, it stays queued.",
   "chat.composerEdit.editingUserQuery": "Editing your last message",
   "chat.composerEdit.editingQueueItem": "Editing a queued message",
   "chat.composerEdit.invalid.notLatest":

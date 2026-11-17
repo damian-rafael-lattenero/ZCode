@@ -6,10 +6,11 @@ import type {
 } from "@zcode/shared/zcode-protocol-v4";
 
 /**
- * Busy-composer delivery choice: cut the current model step and continue the same
- * turn, or queue the prompt until the turn ends.
+ * Busy-composer delivery choice: cut the current model step now (interrupt), or steer
+ * softly — deliver at the next natural model-step boundary so the running edit, search
+ * or command finishes first and the SAME turn continues with the message (guide).
  */
-export type ComposerInterruptDelivery = "interrupt" | "queue";
+export type ComposerInterruptDelivery = "interrupt" | "guide";
 
 export interface ComposerInterruptPickerGate {
   /**

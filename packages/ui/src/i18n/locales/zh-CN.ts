@@ -6033,9 +6033,9 @@ const zhCN: Record<string, string> = {
   "chat.composer.interruptPicker.interrupt": "⚡ 中断并继续",
   "chat.composer.interruptPicker.interruptDescription":
     "结束当前模型步骤，并在同一轮继续；正在运行的工具批处理会先执行完。",
-  "chat.composer.interruptPicker.queue": "⏳ 加入队列",
-  "chat.composer.interruptPicker.queueDescription":
-    "当前轮结束后开始；如果本轮已结束，则立即开始。",
+  "chat.composer.interruptPicker.steer": "⏳ 软引导",
+  "chat.composer.interruptPicker.steerDescription":
+    "当前步骤（正在执行的编辑、搜索或命令）结束后立即交付，并在同一轮继续；若无法交付，则留在队列中。",
   "chat.composerEdit.editingUserQuery": "正在编辑上一条消息",
   "chat.composerEdit.editingQueueItem": "正在编辑排队消息",
   "chat.composerEdit.invalid.notLatest": "这条消息已不是最后一条，发送将作为新消息",

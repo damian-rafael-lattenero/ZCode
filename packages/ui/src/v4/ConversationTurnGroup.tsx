@@ -17,7 +17,7 @@ import {
   useState,
   useSyncExternalStore,
 } from "react";
-import { ChevronRightIcon, EyeIcon, PictureInPicture2Icon } from "lucide-react";
+import { ChevronRightIcon, EyeIcon } from "lucide-react";
 import {
   zcodeProviderRuntimeHeadersErrorCode,
   type HighspeedMessageMeta,
@@ -28,7 +28,6 @@ import {
   TID_CHAT_ASSISTANT_HISTORY_TRIGGER,
   TID_CHAT_BACKGROUND_RESULT_TITLE,
   TID_CHAT_LOADING,
-  TID_V4_TIMELINE_BACKGROUND_TURN,
   testId,
 } from "@zcode/shared/test-ids";
 import type { ApiRetryState, ConversationRowTarget } from "@zcode/shared/zcode-protocol-v4";
@@ -227,51 +226,20 @@ export function toRetryStatus(apiRetry: ApiRetryState): ZCodeApiRetryStatus {
 }
 
 /**
- * Only a regular user turn can be detached from the foreground: notification/control
- * turns have no foreground execution to demote and the runtime answers
- * `fault.command.backgroundTurnUnsupported` for them. Keeping the gate here means the
- * UI never offers a button that cannot work.
+ * Turn-level demotion has NO desktop entry (owner verdict 2026-11-05, reconfirmed
+ * 2026-11-17): a demoted turn keeps the session's only turn slot, so the composer cannot
+ * start anything until it settles — the generic pill was a trap, not a shortcut. The v4
+ * `backgroundTurn` command/runtime stay for the phone and the Task Island; the desktop
+ * hands single tool calls to the background instead (`ToolBackgroundButton`).
  */
-export function canDemoteTurn(unit: Pick<ConversationTurnRenderUnit, "header">): boolean {
-  return unit.header?.origin === "userInput" || unit.header?.origin === "editRerun";
-}
-
-/**
- * Turn-level "Go to background" pill (v4 `backgroundTurn`): detaches the whole running
- * primaryTurn, unlike the per-tool pill. Rendered below the live loading tail; absent
- * handler means no entry. Exported for direct unit testing without mounting the whole
- * ConversationTurnGroup.
- */
-export function TurnBackgroundButton({ onBackgroundTurn }: { onBackgroundTurn?: () => void }) {
-  const { intl } = useZCodeIntl();
-  if (!onBackgroundTurn) return null;
-  return (
-    <div className="flex justify-center">
-      <Button
-        type="button"
-        variant="secondary"
-        size="sm"
-        className="rounded-full gap-1.5"
-        onClick={() => onBackgroundTurn()}
-        data-testid={TID_V4_TIMELINE_BACKGROUND_TURN}
-      >
-        <PictureInPicture2Icon className="size-3.5" />
-        <span>{intl.formatMessage({ id: "chat.timeline.backgroundTurn" })}</span>
-      </Button>
-    </div>
-  );
-}
-
 function TurnChatLoadingSlot({
   apiRetry,
   eligible,
   initialElapsedMs,
-  onBackgroundTurn,
 }: {
   apiRetry: ApiRetryState | null;
   eligible: boolean;
   initialElapsedMs: number;
-  onBackgroundTurn?: () => void;
 }) {
   const { intl, locale } = useZCodeIntl();
   const retryStatus = useMemo(() => (apiRetry ? toRetryStatus(apiRetry) : null), [apiRetry]);
@@ -296,7 +264,6 @@ function TurnChatLoadingSlot({
           // 更新反复重启可见性，并使 UI 晚于真实状态。
           <ChatLoading loading data-testid={TID_CHAT_LOADING} initialElapsedMs={initialElapsedMs} />
         )}
-        <TurnBackgroundButton onBackgroundTurn={onBackgroundTurn} />
       </div>
     </div>
   );
@@ -962,7 +929,6 @@ function ConversationTurnFlow({
           apiRetry={apiRetry}
           eligible={showLoading}
           initialElapsedMs={unit.workStatus?.durationMs ?? 0}
-          onBackgroundTurn={canDemoteTurn(unit) ? context.onBackgroundTurn : undefined}
         />
       </div>
     );
@@ -1049,7 +1015,6 @@ function ConversationTurnFlow({
         apiRetry={apiRetry}
         eligible={showLoading}
         initialElapsedMs={unit.workStatus?.durationMs ?? 0}
-        onBackgroundTurn={canDemoteTurn(unit) ? context.onBackgroundTurn : undefined}
       />
     </div>
   );
@@ -1289,7 +1254,6 @@ function ConversationBackgroundResultWork({
         apiRetry={apiRetry}
         eligible={showLoading}
         initialElapsedMs={unit.workStatus?.durationMs ?? 0}
-        onBackgroundTurn={canDemoteTurn(unit) ? context.onBackgroundTurn : undefined}
       />
     </Collapsible>
   );

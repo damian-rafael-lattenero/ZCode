@@ -669,8 +669,6 @@ export const TID_V4_ATTACHMENT_UPLOAD_RETRY = "v4-attachment-upload-retry";
 export const TID_V4_STOP = "v4-stop";
 /** v4 composer 转入后台按钮（把运行中的 primaryTurn demote 为 backgroundTurn，DT 分组） */
 export const TID_V4_COMPOSER_BACKGROUND_TURN = "v4-composer-background-turn";
-/** v4 时间线 live tail 下的「Go to background」按钮（与 composer 按钮同一命令，DT 分组） */
-export const TID_V4_TIMELINE_BACKGROUND_TURN = "v4-timeline-background-turn";
 /** v4 运行中 Bash tool card 下方的「Go to background」（动态后缀为 toolCallId，BT 分组） */
 export const TID_V4_TOOL_BACKGROUND = "v4-tool-background";
 /** v4 assistant 行 fork 按钮（动态后缀为 rowId） */

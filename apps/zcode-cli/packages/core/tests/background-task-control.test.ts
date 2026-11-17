@@ -2,7 +2,7 @@ import { existsSync, readFileSync } from "node:fs";
 import { mkdir, mkdtemp, rm } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { tmpdir } from "node:os";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import {
   SessionEventType,
   CoreErrorType,
@@ -22,6 +22,10 @@ import {
 } from "../src/runtime-task/registry.js";
 import { BackgroundTaskTracker } from "../src/tool/executor/background-tasks.js";
 import { updateRuntimeBackgroundTask } from "../src/tool/executor/background-task-registry.js";
+import {
+  DetachedToolTaskStore,
+  type DetachedToolTaskTerminal,
+} from "../src/tool/executor/detached-tool-tasks.js";
 import { createExploreSubagentPort } from "../src/subagent/runner.js";
 import { taskStopToolEntry } from "../src/tool/handlers/task-stop.js";
 import { createTestSessionEventStore } from "./test-event-store.js";
@@ -2740,5 +2744,345 @@ describe("dwf 停止分支记录 stopInitiator", () => {
     await (system.runtime as any).stopBackgroundTask("dwfrun-stop", {});
     expect(plain).toEqual(["dwfrun-stop:none"]);
     expect(system.registry.get("dwfrun-stop")?.stopInitiator).toBeUndefined();
+  });
+});
+
+describe("detached tool tasks (BT 2.0)", () => {
+  const grepToolCall = { id: "tool_grep", input: { pattern: "needle" }, name: "Grep" };
+  const grepRegistry = {
+    get: (name: string) =>
+      name === "Grep"
+        ? { backgrounding: { cancellable: true, supported: true }, metadata: { name } }
+        : undefined,
+  };
+
+  it("requestBackground flips only a registered running call and the disposer detaches the handle", () => {
+    const store = new DetachedToolTaskStore();
+    const requestDetach = vi.fn(() => "toolbg_registered");
+    const dispose = store.registerActive({
+      requestDetach,
+      toolCallId: "tool_grep",
+      toolName: "Grep",
+    });
+
+    expect(store.requestBackground("tool_grep")).toEqual({
+      kind: "backgrounded",
+      workId: "toolbg_registered",
+    });
+    expect(store.requestBackground("tool_missing")).toEqual({ kind: "noop" });
+
+    dispose();
+    expect(store.requestBackground("tool_grep")).toEqual({ kind: "noop" });
+    expect(requestDetach).toHaveBeenCalledTimes(1);
+  });
+
+  it("requestBackground is a noop when the handle guard refuses the detach", () => {
+    const store = new DetachedToolTaskStore();
+    store.registerActive({
+      requestDetach: () => undefined,
+      toolCallId: "tool_settled",
+      toolName: "Grep",
+    });
+    expect(store.requestBackground("tool_settled")).toEqual({ kind: "noop" });
+  });
+
+  it("bounded result text settles the terminal snapshot once and late terminals never overwrite it", async () => {
+    const store = new DetachedToolTaskStore();
+    const controller = new AbortController();
+    const terminal = Promise.withResolvers<DetachedToolTaskTerminal>();
+    store.track({
+      taskId: "toolbg_bounded",
+      toolCall: grepToolCall,
+      terminal: terminal.promise,
+      controller,
+      maxResultChars: 10,
+    });
+
+    expect(store.getSnapshot("toolbg_bounded")).toMatchObject({
+      description: "needle",
+      status: "running",
+      toolCallId: "tool_grep",
+      toolName: "Grep",
+    });
+
+    terminal.resolve({ resultTruncated: false, status: "completed", resultText: "0123456789ABCDEF" });
+    await expect(store.waitForTerminal("toolbg_bounded")).resolves.toMatchObject({
+      resultText: "0123456789\n[truncated]",
+      resultTruncated: true,
+      status: "completed",
+    });
+
+    // A second terminal report (executor / watchdog race) must not rewrite the record.
+    const late = Promise.withResolvers<DetachedToolTaskTerminal>();
+    store.track({
+      taskId: "toolbg_bounded",
+      toolCall: grepToolCall,
+      terminal: late.promise,
+      controller,
+    });
+    late.resolve({ status: "failed", resultText: "late" });
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(store.getSnapshot("toolbg_bounded")).toMatchObject({
+      resultText: "0123456789\n[truncated]",
+      status: "completed",
+    });
+  });
+
+  it("watchdog aborts the handler controller and settles timed_out even if the handler never resolves", async () => {
+    const store = new DetachedToolTaskStore();
+    const controller = new AbortController();
+    const never = Promise.withResolvers<DetachedToolTaskTerminal>();
+    store.track({
+      taskId: "toolbg_watchdog",
+      toolCall: grepToolCall,
+      terminal: never.promise,
+      controller,
+      maxRuntimeMs: 10,
+    });
+
+    await expect(store.waitForTerminal("toolbg_watchdog")).resolves.toMatchObject({
+      error: expect.stringContaining("10ms runtime limit"),
+      status: "timed_out",
+    });
+    expect(controller.signal.aborted).toBe(true);
+  });
+
+  it("stop aborts the controller, settles cancelled and keeps a later handler result out", async () => {
+    const store = new DetachedToolTaskStore();
+    const controller = new AbortController();
+    const terminal = Promise.withResolvers<DetachedToolTaskTerminal>();
+    store.track({
+      taskId: "toolbg_stop",
+      toolCall: grepToolCall,
+      terminal: terminal.promise,
+      controller,
+    });
+
+    expect(store.stop("toolbg_stop")).toMatchObject({ status: "cancelled" });
+    expect(controller.signal.aborted).toBe(true);
+    expect(store.stop("toolbg_missing")).toBeUndefined();
+    expect(store.getSnapshot("toolbg_missing")).toBeUndefined();
+
+    terminal.resolve({ resultText: "too late", status: "completed" });
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    const snapshot = await store.waitForTerminal("toolbg_stop");
+    expect(snapshot).toMatchObject({ status: "cancelled" });
+    expect(snapshot?.resultText).toBeUndefined();
+  });
+
+  it("tracker: local_tool provider, taskKind tool, bounded result notification and registry resultText", async () => {
+    const sessionId = createSessionId("background-control-local-tool");
+    const turnId = createTurnId("turn_background_control_local_tool");
+    const events: Array<{ payload: Record<string, unknown>; type: SessionEventType }> = [];
+    const notifications: Array<{
+      originMeta?: unknown;
+      taskId?: string;
+      text: string;
+      toolName?: string;
+    }> = [];
+    const runtimeTaskRegistry = new InMemoryRuntimeTaskRegistry();
+    const store = new DetachedToolTaskStore();
+    const tracker = new BackgroundTaskTracker({
+      detachedToolTasks: store,
+      emitEvent: async (event: SessionEvent) => {
+        events.push({ payload: event.payload as Record<string, unknown>, type: event.type });
+      },
+      enqueueBackgroundTaskNotification: (notification) => {
+        notifications.push(notification);
+      },
+      getWorkingDirectory: () => "/tmp",
+      getWorkspaceRoot: () => "/tmp",
+      readFileState: new Map(),
+      registry: grepRegistry,
+      runtimeScope: "main",
+      runtimeTaskRegistry,
+      sessionId,
+    } as never);
+
+    const controller = new AbortController();
+    const terminal = Promise.withResolvers<DetachedToolTaskTerminal>();
+    store.track({
+      taskId: "toolbg_tracker",
+      toolCall: grepToolCall,
+      terminal: terminal.promise,
+      controller,
+      maxResultChars: 8,
+    });
+
+    await tracker.trackBackgroundTask(
+      grepToolCall as never,
+      {
+        backgroundTaskId: "toolbg_tracker",
+        backgroundedByUser: true,
+        status: "backgrounded",
+      },
+      { spanId: "span_local_tool", traceId: "trace_local_tool", sessionId, turnId } as never,
+      turnId,
+    );
+
+    const started = events.find((event) => event.type === SessionEventType.BackgroundTaskStarted);
+    expect(started?.payload).toMatchObject({
+      cancellable: true,
+      status: "running",
+      taskId: "toolbg_tracker",
+      taskKind: "tool",
+      toolCallId: "tool_grep",
+      toolName: "Grep",
+    });
+    expect(runtimeTaskRegistry.get("toolbg_tracker")).toMatchObject({
+      isBackgrounded: true,
+      status: "running",
+      taskType: "local_tool",
+      type: "local_tool",
+    });
+
+    terminal.resolve({ status: "completed", resultText: "abcdefghijkl" });
+    await waitForCondition(() =>
+      events.some((event) => event.type === SessionEventType.BackgroundTaskCompleted),
+    );
+
+    const completed = events.find(
+      (event) => event.type === SessionEventType.BackgroundTaskCompleted,
+    );
+    expect(completed?.payload).toMatchObject({
+      cancellable: false,
+      status: "completed",
+      taskId: "toolbg_tracker",
+      taskKind: "tool",
+    });
+    expect(runtimeTaskRegistry.get("toolbg_tracker")).toMatchObject({
+      resultText: "abcdefgh\n[truncated]",
+      status: "completed",
+      type: "local_tool",
+    });
+
+    expect(notifications).toHaveLength(1);
+    expect(notifications[0]?.text).toContain("<task-type>local_tool</task-type>");
+    expect(notifications[0]?.text).toContain("<status>completed</status>");
+    expect(notifications[0]?.text).toContain("<result>abcdefgh\n[truncated]</result>");
+    expect(notifications[0]?.originMeta).toMatchObject({
+      backgroundSource: "tool",
+      workId: "toolbg_tracker",
+    });
+  });
+
+  it("tracker: a failed detached call notifies with local_tool and the error", async () => {
+    const sessionId = createSessionId("background-control-local-tool-failed");
+    const turnId = createTurnId("turn_background_control_local_tool_failed");
+    const notifications: Array<{ text: string }> = [];
+    const store = new DetachedToolTaskStore();
+    const tracker = new BackgroundTaskTracker({
+      detachedToolTasks: store,
+      emitEvent: async () => {},
+      enqueueBackgroundTaskNotification: (notification) => {
+        notifications.push(notification);
+      },
+      getWorkingDirectory: () => "/tmp",
+      getWorkspaceRoot: () => "/tmp",
+      readFileState: new Map(),
+      registry: grepRegistry,
+      runtimeScope: "main",
+      runtimeTaskRegistry: new InMemoryRuntimeTaskRegistry(),
+      sessionId,
+    } as never);
+
+    const controller = new AbortController();
+    const terminal = Promise.withResolvers<DetachedToolTaskTerminal>();
+    store.track({
+      taskId: "toolbg_failed",
+      toolCall: grepToolCall,
+      terminal: terminal.promise,
+      controller,
+    });
+    await tracker.trackBackgroundTask(
+      grepToolCall as never,
+      { backgroundTaskId: "toolbg_failed", status: "backgrounded" },
+      { spanId: "span_local_tool_failed", traceId: "trace_local_tool_failed", sessionId, turnId },
+      turnId,
+    );
+
+    terminal.resolve({ error: "ripgrep exited with code 2", status: "failed" });
+    await waitForCondition(() => notifications.length === 1);
+    expect(notifications[0]?.text).toContain("<status>failed</status>");
+    expect(notifications[0]?.text).toContain("<error>ripgrep exited with code 2</error>");
+  });
+
+  it("stopBackgroundTask routes local_tool to the executor store", async () => {
+    const sessionId = createSessionId("background-control-local-tool-stop");
+    const eventStore = createTestSessionEventStore();
+    const runtimeTaskRegistry = new InMemoryRuntimeTaskRegistry();
+    const stopDetachedToolTask = vi.fn(() => ({
+      completedAt: new Date(1),
+      description: "needle",
+      startedAt: new Date(0),
+      status: "cancelled" as const,
+      taskId: "toolbg_stop",
+      toolCallId: "tool_grep",
+      toolName: "Grep",
+    }));
+    runtimeTaskRegistry.register({
+      agentId: "toolbg_stop",
+      agentType: "local_tool",
+      description: "needle",
+      isBackgrounded: true,
+      startedAt: new Date(0),
+      status: "running",
+      taskId: "toolbg_stop",
+      taskType: "local_tool",
+      type: "local_tool",
+    } as never);
+    const runtime = createTestAgentRuntime(
+      sessionId,
+      { mode: "build" },
+      {
+        eventStore,
+        runtimeTaskRegistry,
+        toolExecutor: { stopDetachedToolTask } as never,
+      },
+    );
+
+    await expect(runtime.cancelBackgroundTask("toolbg_stop")).resolves.toMatchObject({
+      cancelled: true,
+      status: "cancelled",
+      taskId: "toolbg_stop",
+    });
+    expect(stopDetachedToolTask).toHaveBeenCalledWith("toolbg_stop");
+  });
+
+  it("session close includes running local_tool tasks in the cleanup sweep", async () => {
+    const sessionId = createSessionId("background-control-local-tool-cleanup");
+    const eventStore = createTestSessionEventStore();
+    const runtimeTaskRegistry = new InMemoryRuntimeTaskRegistry();
+    const stopDetachedToolTask = vi.fn(() => ({
+      startedAt: new Date(0),
+      status: "cancelled" as const,
+      taskId: "toolbg_cleanup",
+      toolCallId: "tool_grep",
+      toolName: "Grep",
+      description: "needle",
+    }));
+    runtimeTaskRegistry.register({
+      agentId: "toolbg_cleanup",
+      agentType: "local_tool",
+      description: "needle",
+      isBackgrounded: true,
+      startedAt: new Date(0),
+      status: "running",
+      taskId: "toolbg_cleanup",
+      taskType: "local_tool",
+      type: "local_tool",
+    } as never);
+    const runtime = createTestAgentRuntime(
+      sessionId,
+      { mode: "build" },
+      {
+        eventStore,
+        runtimeTaskRegistry,
+        toolExecutor: { stopDetachedToolTask } as never,
+      },
+    );
+
+    await runtime.cancelRunningRuntimeBackgroundTasks({ reason: "session_closed" });
+    expect(stopDetachedToolTask).toHaveBeenCalledWith("toolbg_cleanup");
   });
 });

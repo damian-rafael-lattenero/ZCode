@@ -141,6 +141,14 @@ export const webSearchToolEntry: ToolEntry = {
     needsApproval: false,
   },
   handler: webSearchHandler as ToolHandler,
+  // Read-only search: the user may move a running call to the background. The executor
+  // clears the foreground timeout on detach, so maxRuntimeMs is the only remaining bound.
+  backgrounding: {
+    supported: true,
+    cancellable: true,
+    maxResultChars: 20_000,
+    maxRuntimeMs: 10 * 60_000,
+  },
   formatModelContent: formatWebSearchModelContent,
   inputSchema: WebSearchInputJsonSchema,
   outputSchema: WebSearchOutputJsonSchema,

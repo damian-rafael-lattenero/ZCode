@@ -5266,11 +5266,13 @@ export class ProductProjection {
             ? "workflow"
             : payload.taskKind === "turn"
               ? "turn"
-              : legacyKind === "agent"
-              ? "subagent"
-              : legacyKind === "bash"
-                ? "bash"
-                : (existing?.kind ?? "bash");
+              : payload.taskKind === "tool"
+                ? "tool"
+                : legacyKind === "agent"
+                ? "subagent"
+                : legacyKind === "bash"
+                  ? "bash"
+                  : (existing?.kind ?? "bash");
     // 事件 status（running/completed/failed/timed_out/cancelled/spawn_error/lost）
     // → summary status（running/resultPending/failed/cancelled）。
     const rawStatus = payload.status ?? "running";
@@ -5293,10 +5295,11 @@ export class ProductProjection {
     // backgrounded !== true 的幂等门使任意顺序/重复的生命周期事件只翻一次。
     // BT 2.0（2026-11-16）：同一个翻转还覆盖运行中的 subagent——它的 subagent 行也带上
     // backgrounded 事实，让 Agent 卡与 completion-blocking 门读同一份真值，而不是两份。
+    // BT 2.0 通用工具（2026-11-17）：kind "tool" 走同一条工具行翻转（没有 subagent 行）。
     let toolRowFlip: ConversationDelta | undefined;
     let subagentRowFlip: ConversationDelta | undefined;
     let anchorRowId: number | null = existing?.anchorRowId ?? null;
-    if ((kind === "bash" || kind === "subagent") && payload.toolCallId) {
+    if ((kind === "bash" || kind === "subagent" || kind === "tool") && payload.toolCallId) {
       const toolRow = this.findToolRow(payload.toolCallId);
       if (toolRow && toolRow.backgrounded !== true) {
         toolRowFlip = {

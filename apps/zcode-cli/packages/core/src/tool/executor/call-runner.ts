@@ -1,7 +1,6 @@
 import { toolSearchNameForMode } from "@zcode/contracts";
 import { resolveDeferredToolCall } from "../deferred-call.js";
 import {
-  type AgentTelemetryErrorCategory,
   CoreErrorType,
   HookEventName,
   createChildTraceContext,
@@ -21,7 +20,6 @@ import {
   normalizeToolExecutionInput,
   prepareInitialToolExecutionInput,
 } from "../input-normalization.js";
-import { hasOfficialCuaFrameAuthority } from "../../mcp/image-normalization.js";
 import type { SkillTelemetryMetadata } from "@zcode/contracts";
 import type { ToolExecutionContext, ToolExecutionResult } from "../types.js";
 import type { ToolEntry } from "../types.js";
@@ -54,6 +52,9 @@ import {
   resolveTimeoutMs,
 } from "./timeout.js";
 import { createToolModelStatusSink, withDefaultToolModelStatusSink } from "./model-status-sink.js";
+import { completeDetachedToolCall, createToolCallDetachGate } from "./detached-tool-call.js";
+import { resolveModelOutputEntry } from "./model-output-entry.js";
+import { errorCategoryForToolError, withHookAdditionalContexts } from "./result-helpers.js";
 import { runToolCallWithTelemetry } from "./telemetry.js";
 import {
   withAutomationCreateLimitTurnStop,
@@ -217,6 +218,17 @@ async function executeToolCallImpl(
         ? AbortSignal.any([options.signal, lifetime.signal])
         : lifetime.signal,
     };
+  // BT (2026-11-17): when a call is detached, its lifetime release moves to the detached
+  // completion chain — releasing it here would free the host resource under the still-running
+  // handler. Double-release is prevented by this flag, not by the call sites.
+  let lifetimeReleased = false;
+  const releaseLifetime = () => {
+    if (lifetimeReleased) return;
+    lifetimeReleased = true;
+    lifetime?.release();
+  };
+  // Declared before the protected block because the outermost `finally` reads it.
+  let detachedLifetimeDeferred = false;
   try {
     const mode = deps.getMode();
 
@@ -489,6 +501,18 @@ async function executeToolCallImpl(
     let skillTelemetryMetadata: SkillTelemetryMetadata | undefined;
     let failureStage: "handler" | "serialize" | "post_hook" = "handler";
 
+    // --- User backgrounding (BT 2.0): the detach gate -----------------------------------
+    // A backgrounding-capable call registers a handle before the handler starts. The gate
+    // is resolved only by `requestDetach`, which owns the guards (capability, running,
+    // not settled) and clears the foreground deadline — a detached handler must not be
+    // killed by the timeout that belonged to its foreground wait.
+    const detachGate = createToolCallDetachGate({
+      deadline,
+      entry,
+      store: deps.detachedToolTasks,
+      toolCall: canonicalToolCall,
+    });
+
     try {
       const model = options?.model ?? deps.model;
       const embeddedSearchDecision = resolveEmbeddedSearchBranchCapability({
@@ -578,7 +602,7 @@ async function executeToolCallImpl(
         ...(inputAdjustments === undefined ? {} : { inputAdjustments }),
       };
 
-      const output = await executeWithTimeout(
+      const handlerPromise = executeWithTimeout(
         entry.handler,
         executionInput,
         context,
@@ -586,6 +610,50 @@ async function executeToolCallImpl(
         executionAbortController,
         entry,
       );
+      // Settle the flag as soon as the handler promise settles: a detach request must lose
+      // to a handler that already produced its result.
+      const trackedHandler = handlerPromise.then(
+        (output) => {
+          detachGate.markHandlerSettled();
+          return output;
+        },
+        (error: unknown) => {
+          detachGate.markHandlerSettled();
+          throw error;
+        },
+      );
+      const raced = await Promise.race([
+        trackedHandler.then((output) => ({ kind: "completed" as const, output })),
+        detachGate.promise.then((taskId) => ({ kind: "detached" as const, taskId })),
+      ]);
+
+      if (raced.kind === "detached") {
+        // From here the handler belongs to the detached task store: lifetime release and
+        // terminal bookkeeping happen in its completion chain, not in this frame.
+        detachedLifetimeDeferred = true;
+        return await completeDetachedToolCall({
+          backgroundTasks,
+          controller: executionAbortController,
+          deps,
+          entry,
+          formatPreToolHookContexts,
+          permissionWaitMs,
+          pluginId,
+          readFileStateMetadata,
+          releaseLifetime,
+          skillTelemetryMetadata,
+          startTime,
+          taskId: raced.taskId,
+          telemetry,
+          toolCall: canonicalToolCall,
+          totalStartedAt,
+          traceContext,
+          trackedHandler,
+          turnId,
+        });
+      }
+
+      const output = raced.output;
       const durationMs = Date.now() - startTime;
       if (isToolHandlerFailure(output)) {
         // handler 用返回值表达可预期业务失败；这里只转换到既有异常控制流，
@@ -804,70 +872,15 @@ async function executeToolCallImpl(
       }
       return result;
     } finally {
+      detachGate.unregister();
       unlinkParentAbort();
     }
   } finally {
-    lifetime?.release();
+    // A detached call outlives this frame: the completion chain releases the lifetime.
+    if (!detachedLifetimeDeferred) releaseLifetime();
   }
-}
-
-function resolveModelOutputEntry(entry: ToolEntry, output: unknown): ToolEntry {
-  const isSharedNodeRepl =
-    entry.metadata.name === "mcp__node_repl__js" ||
-    entry.metadata.mcpPresentation?.serverName === "node_repl";
-  if (
-    entry.modelContentProtection === OFFICIAL_CUA_FRAME_MODEL_CONTENT_PROTECTION ||
-    !isSharedNodeRepl ||
-    !hasOfficialCuaFrameAuthority(output)
-  ) {
-    return entry;
-  }
-  return {
-    ...entry,
-    modelContentProtection: OFFICIAL_CUA_FRAME_MODEL_CONTENT_PROTECTION,
-    resultBudget: {
-      ...entry.resultBudget,
-      maxInlineBytes: Math.max(entry.resultBudget.maxInlineBytes, 256 * 1024),
-      maxModelBytes: Math.max(entry.resultBudget.maxModelBytes, 256 * 1024),
-      strategy: "truncate",
-      preview: { direction: "head" },
-    },
-  };
 }
 
 function isEmptyToolName(toolName: string): boolean {
   return toolName.trim().length === 0;
-}
-
-function errorCategoryForToolError(type: string | undefined): AgentTelemetryErrorCategory {
-  switch (type) {
-    case CoreErrorType.ConfigurationError:
-    case CoreErrorType.ToolNotFound:
-      return "configuration";
-    case CoreErrorType.PermissionDenied:
-    case CoreErrorType.PermissionEscalation:
-    case CoreErrorType.PermissionTimeout:
-      return "permission";
-    case CoreErrorType.InvalidInput:
-      return "parse";
-    case CoreErrorType.ToolCancelled:
-      return "cancelled";
-    case CoreErrorType.ToolTimeout:
-      return "timeout";
-    default:
-      return "internal";
-  }
-}
-
-/**
- * 成功、失败与提前返回的失败（PreToolUse 拒绝、Hook 改写后校验失败、权限拒绝）都带上 Hook context。
- * PreToolUse deny 和权限拒绝会在 handler 前提前返回，旧逻辑只在 handler 的成功/异常路径带 context，
- * 导致 Hook 明明返回了 additionalContext，模型却看不到。
- */
-function withHookAdditionalContexts(
-  result: ToolExecutionResult,
-  hookAdditionalContexts: readonly string[],
-): ToolExecutionResult {
-  if (hookAdditionalContexts.length === 0) return result;
-  return { ...result, hookAdditionalContexts: [...hookAdditionalContexts] };
 }

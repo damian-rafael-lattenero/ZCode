@@ -208,7 +208,8 @@ export interface BackgroundTaskInfo {
   toolCallId?: string;
   toolName?: string;
   // "turn" = 用户 demote 的原 primaryTurn（DT 分组，2026-11-04）。
-  taskKind?: "bash" | "subagent" | "workflow" | "turn";
+  // "tool" = 用户移交到后台的通用只读工具调用（BT 2.0，2026-11-17）。
+  taskKind?: "bash" | "subagent" | "workflow" | "turn" | "tool";
   childSessionId?: string;
   blocked?: boolean;
   blockedReason?: string;

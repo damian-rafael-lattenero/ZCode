@@ -356,8 +356,9 @@ export interface SubagentResultMeta {
 /** 独立后台结果轮的展示元信息；批量轮可复用代表任务身份并合成 title，不从通知文本反向解析。 */
 export interface BackgroundResultOriginMeta {
   /** `workflow` 是 dynamic-workflow run（workId ≡ runId），复用整条后台通知管线。
-   *  `turn` 是用户 demote 的原 primaryTurn 正常完成（DT 分组，2026-11-04）。 */
-  backgroundSource: "bash" | "subagent" | "workflow" | "turn";
+   *  `turn` 是用户 demote 的原 primaryTurn 正常完成（DT 分组，2026-11-04）。
+   *  `tool` 是用户移交到后台的通用只读工具调用（BT 2.0，2026-11-17）。 */
+  backgroundSource: "bash" | "subagent" | "workflow" | "turn" | "tool";
   workId: string;
   title: string;
   /** 只在 backgroundSource === "workflow" 的单条通知轮上在场；manifest 渲染的唯一数据源。 */
@@ -1052,7 +1053,8 @@ export interface BackgroundTaskPayloadBase {
   // "workflow" = workflow run（CreateWorkflow）。追踪器的行为已按 per-tool lifecycleProvider
   // 分派，taskKind 只决定面板分组与图标，所以加宽是纯展示修正，不改任何生命周期语义。
   // "turn" = 用户 demote 的原 primaryTurn（DT 分组，2026-11-04）。
-  taskKind?: "bash" | "subagent" | "workflow" | "turn";
+  // "tool" = 用户移交的通用只读工具调用（BT 2.0，2026-11-17）。
+  taskKind?: "bash" | "subagent" | "workflow" | "turn" | "tool";
   childSessionId?: SessionId | string;
   blocked?: boolean;
   blockedReason?: "interactive_prompt_detected" | "no_output_progress" | string;

@@ -1,14 +1,18 @@
 // BT (2026-11-05, OpenCode ctrl+b parity): the runtime primitive
-// backgroundRunningToolCall. Two legs share one guard contract:
+// backgroundRunningToolCall. Three legs share one guard contract:
 // - Bash: the executionPort toolCallId registry decides (hit → backgrounded,
 //   the process is untouched; unknown/terminal → noop, never an abort);
 // - Agent: the runtime task registry decides by parentToolCallId (local_agent
 //   still foreground → backgrounded through the subagent port; anything else
-//   → noop). A port that lacks the capability produces unsupported.
+//   → noop);
+// - Generic tool (BT 2.0): the executor's DetachedToolTaskStore decides by
+//   toolCallId (backgrounding-capable and still running → backgrounded; any
+//   other miss → noop). A runtime with no handoff leg at all is unsupported.
 // These tests use a minimal internal stub and call the method directly.
 import { describe, expect, it, vi } from "vitest";
 import type { AgentRuntimeInternal } from "../src/runtime/internal.js";
 import type { RuntimeTaskSnapshot } from "../src/runtime-task/registry.js";
+import type { ToolBackgroundRequestResult } from "../src/tool/executor/detached-tool-tasks.js";
 import { backgroundRunningToolCall } from "../src/runtime/methods/background-tool-call.js";
 
 function agentTask(overrides: Partial<RuntimeTaskSnapshot> = {}): RuntimeTaskSnapshot {
@@ -28,6 +32,7 @@ function agentTask(overrides: Partial<RuntimeTaskSnapshot> = {}): RuntimeTaskSna
 
 function internalWith(overrides: {
   executionPort?: Record<string, unknown>;
+  executor?: Record<string, unknown>;
   logger?: Record<string, unknown>;
   subagentPort?: Record<string, unknown>;
   tasks?: RuntimeTaskSnapshot[];
@@ -35,6 +40,7 @@ function internalWith(overrides: {
   const tasks = overrides.tasks ?? [];
   return {
     executionPort: overrides.executionPort,
+    executor: overrides.executor,
     logger: overrides.logger,
     rootTraceContext: { traceId: "trace_bt" },
     runtimeTaskRegistry: {
@@ -153,5 +159,65 @@ describe("backgroundRunningToolCall（BT 用户移交）", () => {
       ).resolves.toEqual({ kind: "noop" });
     }
     expect(backgroundTask).not.toHaveBeenCalled();
+  });
+
+  it("通用工具第三腿命中：委托 executor.requestBackgroundToolCall 并返回 backgrounded(workId)", async () => {
+    const requestBackgroundToolCall = vi.fn(
+      (): ToolBackgroundRequestResult => ({ kind: "backgrounded", workId: "toolbg_1" }),
+    );
+    const logger = { info: vi.fn() };
+    const result = await backgroundRunningToolCall.call(
+      internalWith({
+        executionPort: {},
+        executor: { requestBackgroundToolCall },
+        logger,
+      }),
+      "toolu_grep",
+    );
+
+    expect(result).toEqual({ kind: "backgrounded", workId: "toolbg_1" });
+    expect(requestBackgroundToolCall).toHaveBeenCalledWith("toolu_grep");
+    expect(logger.info).toHaveBeenCalled();
+  });
+
+  it("通用工具第三腿未命中（store 守卫 miss）：noop", async () => {
+    const requestBackgroundToolCall = vi.fn(
+      (): ToolBackgroundRequestResult => ({ kind: "noop" }),
+    );
+    await expect(
+      backgroundRunningToolCall.call(
+        internalWith({ executionPort: {}, executor: { requestBackgroundToolCall } }),
+        "toolu_grep",
+      ),
+    ).resolves.toEqual({ kind: "noop" });
+    expect(requestBackgroundToolCall).toHaveBeenCalledWith("toolu_grep");
+  });
+
+  it("executor 明确回 unsupported 但腿在场：整体仍是 noop，不冒充运行时级不支持", async () => {
+    const requestBackgroundToolCall = vi.fn(
+      (): ToolBackgroundRequestResult => ({ kind: "unsupported" }),
+    );
+    await expect(
+      backgroundRunningToolCall.call(
+        internalWith({ executionPort: {}, executor: { requestBackgroundToolCall } }),
+        "toolu_read",
+      ),
+    ).resolves.toEqual({ kind: "noop" });
+  });
+
+  it("Bash 腿优先：命中后不再询问 executor", async () => {
+    const requestBackgroundToolCall = vi.fn(
+      (): ToolBackgroundRequestResult => ({ kind: "backgrounded", workId: "toolbg_never" }),
+    );
+    const result = await backgroundRunningToolCall.call(
+      internalWith({
+        executionPort: { requestBackgroundByToolCallId: () => "exec_user_bg" },
+        executor: { requestBackgroundToolCall },
+      }),
+      "toolu_1",
+    );
+
+    expect(result).toEqual({ kind: "backgrounded", workId: "exec_user_bg" });
+    expect(requestBackgroundToolCall).not.toHaveBeenCalled();
   });
 });

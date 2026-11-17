@@ -411,9 +411,10 @@ export type CommandStateSummary = z.infer<typeof commandStateSummarySchema>;
 export const backgroundWorkSummarySchema = z.object({
   workId: z.string(),
   // workflow = workflow run（CreateWorkflow）。turn = 用户 demote 的原 primaryTurn（DT 分组，
-  // 2026-11-04），无 childSessionId、无 anchorRowId 绑定的 tool row。**闭集加值的偏斜代价**：
-  // 旧桌面收到未知值时整个 state.updated patch 解析失败（已知键的非法值是错误，不是剥离），
-  // 于是整帧被 assembler 拒收，且 resync 的 snapshot 携带同一个值、同样失败——不能优雅降级。
+  // 2026-11-04）。tool = 用户移交到后台的通用只读工具调用（BT 2.0，2026-11-17），无
+  // childSessionId、anchorRowId 绑定的 tool row。
+  // **闭集加值的偏斜代价**：旧桌面收到未知值时整个 state.updated patch 解析失败（已知键的非法值是错误，
+  // 不是剥离），于是整帧被 assembler 拒收，且 resync 的 snapshot 携带同一个值、同样失败——不能优雅降级。
   // CLI 与桌面同批发布才使它可接受。
   // tool = foreground tool call that was moved to the background and now runs as a
   // runtime task of its own (Task Island "Tools" section).

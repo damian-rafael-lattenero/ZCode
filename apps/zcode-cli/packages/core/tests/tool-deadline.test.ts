@@ -14,6 +14,7 @@ import {
 } from "@zcode/contracts";
 import { PermissionService, defaultPermissionConfig } from "../src/permission/service.js";
 import { createToolExecutor } from "../src/tool/executor.js";
+import { DetachedToolTaskStore } from "../src/tool/executor/detached-tool-tasks.js";
 import { ToolDeadline, observeToolAdmissionClock } from "../src/tool/executor/timeout.js";
 import { createToolRegistry } from "../src/tool/registry.js";
 import type { ToolEntry, ToolExecutionContext } from "../src/tool/types.js";
@@ -233,6 +234,108 @@ describe("tool executor pauses the deadline while a tool-side request is queued"
     const result = await run(entry);
     expect(result.success).toBe(false);
     expect(result.error?.message).toContain("timed out after 60ms");
+  });
+});
+
+describe("tool executor detaches a running call on user request (BT 2.0)", () => {
+  const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
+  it("clears the foreground deadline, defers the lifetime and settles the store from the handler result", async () => {
+    const sessionId = createSessionId("detach-exec");
+    const turnId = createTurnId("detach-exec");
+    const traceContext = createRootTraceContext({ sessionId, turnId });
+    const emitted: SessionEvent[] = [];
+    const detached = new DetachedToolTaskStore();
+    const registry = createToolRegistry();
+    const toolCallId = createToolCallId("detach-call");
+    let releaseHandler!: () => void;
+    const handlerGate = new Promise<void>((resolve) => {
+      releaseHandler = resolve;
+    });
+    let handlerStarted!: () => void;
+    const started = new Promise<void>((resolve) => {
+      handlerStarted = resolve;
+    });
+    let lifetimeReleased = false;
+    registry.register({
+      capability: "test",
+      metadata: {
+        name: "DetachTool",
+        description: "detach test tool",
+        readOnly: true,
+        destructive: false,
+        concurrentSafe: true,
+        timeoutMs: 30,
+        maxOutputBytes: 1000,
+        sideEffectScope: "none",
+        riskLevel: "low",
+        needsApproval: false,
+      },
+      // The foreground timeout would fire at 30ms; the handler runs 80ms after the detach.
+      backgrounding: { cancellable: true, maxResultChars: 100, supported: true },
+      retainExecution: () => ({
+        release: () => {
+          lifetimeReleased = true;
+        },
+        signal: new AbortController().signal,
+      }),
+      handler: async () => {
+        handlerStarted();
+        await handlerGate;
+        await sleep(80);
+        return { ok: true };
+      },
+      inputSchema: { type: "object", properties: {} },
+      outputSchema: { type: "object", properties: { ok: { type: "boolean" } } },
+    } as unknown as ToolEntry);
+    const executor = createToolExecutor({
+      detachedToolTasks: detached,
+      emitEvent: async (event) => {
+        emitted.push(event);
+      },
+      permissionService: new PermissionService(defaultPermissionConfig),
+      registry,
+      sessionId,
+      traceContext,
+      turnId,
+    });
+
+    const pending = executor.execute(
+      { id: toolCallId, input: {}, name: "DetachTool" },
+      { traceContext },
+    );
+    await started;
+
+    const request = executor.requestBackgroundToolCall?.(toolCallId);
+    expect(request?.kind).toBe("backgrounded");
+    const workId = request?.kind === "backgrounded" ? request.workId : "";
+    expect(workId).toMatch(/^toolbg_/);
+    // The call is no longer "running foreground": a second request is a guard miss.
+    expect(executor.requestBackgroundToolCall?.(toolCallId)).toEqual({ kind: "noop" });
+
+    const result = await pending;
+    expect(result.success).toBe(true);
+    expect(result.output).toMatchObject({
+      backgroundedByUser: true,
+      backgroundTaskId: workId,
+      status: "backgrounded",
+    });
+    expect(String(result.modelContent)).toContain(`manually backgrounded by user with ID: ${workId}`);
+    expect(result.serialization?.content).toBe(String(result.modelContent));
+    // Lifetime release moved to the detached completion chain.
+    expect(lifetimeReleased).toBe(false);
+    expect(
+      emitted.some((event) => event.type === SessionEventType.BackgroundTaskStarted),
+    ).toBe(true);
+
+    releaseHandler();
+    await expect(detached.waitForTerminal(workId)).resolves.toMatchObject({
+      resultText: JSON.stringify({ ok: true }),
+      status: "completed",
+      toolCallId,
+      toolName: "DetachTool",
+    });
+    expect(lifetimeReleased).toBe(true);
   });
 });
 

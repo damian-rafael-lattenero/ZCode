@@ -39,6 +39,9 @@ export async function projectTask(
   if (task.type === "local_dynamic_workflow") {
     return projectDynamicWorkflowTask(task, context);
   }
+  if (task.type === "local_tool") {
+    return projectDetachedToolTask(task, context);
+  }
 
   const output = await readTaskOutputFile(task.outputFile, context);
   return {
@@ -56,6 +59,30 @@ export async function projectTask(
  * 文件读取保留为回退，返回形状与 {@link projectAgentTask} 一致。
  */
 async function projectDynamicWorkflowTask(
+  task: RuntimeTaskSnapshot,
+  context: ToolExecutionContext,
+): Promise<TaskOutputTask> {
+  const outputFile = task.outputFile;
+  const output = task.resultText ?? (await readTaskOutputFile(outputFile, context));
+
+  return {
+    task_id: task.taskId,
+    task_type: task.type,
+    status: task.status,
+    description: task.description,
+    output,
+    ...(outputFile ? { outputFile } : {}),
+    ...(task.resultText === undefined ? {} : { result: task.resultText }),
+    ...(task.error ? { error: task.error } : {}),
+  };
+}
+
+/**
+ * A user-detached generic tool call (BT 2.0). The executor store writes the bounded result
+ * text onto the runtime task entry when the handler settles; the output file (when the
+ * serializer produced an artifact) stays the fallback, mirroring the dwf precedent.
+ */
+async function projectDetachedToolTask(
   task: RuntimeTaskSnapshot,
   context: ToolExecutionContext,
 ): Promise<TaskOutputTask> {

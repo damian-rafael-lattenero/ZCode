@@ -113,10 +113,11 @@ export const subagentResultMetaSchema = z.object({
 });
 
 export const backgroundResultOriginMetaSchema = z.object({
-  // 四个取值与 contracts 的 BackgroundResultOriginMeta 保持同步。
+  // 五个取值与 contracts 的 BackgroundResultOriginMeta 保持同步。
   // "workflow" 是 dynamic-workflow run（workId ≡ runId），复用整条后台通知管线。
   // "turn" 是用户 demote 的原 primaryTurn 正常完成（DT 分组，2026-11-04）。
-  backgroundSource: z.enum(["bash", "subagent", "workflow", "turn"]),
+  // "tool" 是用户移交到后台的通用只读工具调用（BT 2.0，2026-11-17）。
+  backgroundSource: z.enum(["bash", "subagent", "workflow", "turn", "tool"]),
   workId: z.string().min(1),
   title: z.string().min(1),
   // 只在 backgroundSource === "workflow" 的单条通知轮上在场；zod 剥离未知键，

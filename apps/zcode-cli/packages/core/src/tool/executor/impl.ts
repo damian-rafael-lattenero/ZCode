@@ -11,6 +11,11 @@ import type {
 import { BackgroundTaskTracker } from "./background-tasks.js";
 import { executeToolBatch, executeToolSchedule } from "./batch-runner.js";
 import { executeToolCall } from "./call-runner.js";
+import {
+  DetachedToolTaskStore,
+  type DetachedToolTaskSnapshot,
+  type ToolBackgroundRequestResult,
+} from "./detached-tool-tasks.js";
 import { runPreToolUseHooks } from "./hook-flow.js";
 import { areReadsDeniedWithoutPrompt, resolveToolPermission } from "./permission-flow.js";
 import type {
@@ -25,6 +30,7 @@ import { validateInput } from "./validation.js";
 export class ToolExecutorImpl implements ToolExecutor {
   private readonly deps: ToolExecutorDeps;
   private readonly backgroundTasks: BackgroundTaskTracker;
+  private readonly detachedToolTasks: DetachedToolTaskStore;
   /** 一个 runtime 一个执行器，序号在同一 assistant 内可比；删除、清空读取状态不影响它。 */
   private readFileStateSnapshotCount = 0;
 
@@ -74,6 +80,7 @@ export class ToolExecutorImpl implements ToolExecutor {
       dynamicWorkflowSnippetPort: options.dynamicWorkflowSnippetPort,
       modelCatalogPort: options.modelCatalogPort,
       runtimeTaskRegistry: options.runtimeTaskRegistry,
+      detachedToolTasks: options.detachedToolTasks ?? new DetachedToolTaskStore(),
       readFileState: options.readFileState ?? new Map(),
       nextReadFileStateSnapshotIndex: () => this.readFileStateSnapshotCount++,
       hasLoadedSkill: options.hasLoadedSkill,
@@ -101,6 +108,8 @@ export class ToolExecutorImpl implements ToolExecutor {
       maxConcurrency: options.maxConcurrency ?? 10,
       hookRunner: options.hookRunner,
     };
+    this.detachedToolTasks = this.deps.detachedToolTasks ?? new DetachedToolTaskStore();
+    this.deps.detachedToolTasks = this.detachedToolTasks;
     this.backgroundTasks = new BackgroundTaskTracker(this.deps);
   }
 
@@ -179,6 +188,14 @@ export class ToolExecutorImpl implements ToolExecutor {
     // 与 submit 路径同一个 tracker 实例、同一条 trackBackgroundTask：resume 重臂的行为
     // 按构造等于工具启动路径的行为，两条路径不可能漂移（见 ToolExecutor 接口注释）。
     return this.backgroundTasks.trackBackgroundTask(toolCall, output, traceContext, turnId);
+  }
+
+  requestBackgroundToolCall(toolCallId: string): ToolBackgroundRequestResult {
+    return this.detachedToolTasks.requestBackground(toolCallId);
+  }
+
+  stopDetachedToolTask(taskId: string): DetachedToolTaskSnapshot | undefined {
+    return this.detachedToolTasks.stop(taskId);
   }
 
   executeBatch(

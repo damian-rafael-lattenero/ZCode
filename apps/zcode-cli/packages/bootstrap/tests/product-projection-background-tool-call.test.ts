@@ -144,6 +144,89 @@ describe("bash background tool call projection flip", () => {
   });
 });
 
+describe("generic tool background projection flip (BT 2.0)", () => {
+  function toolHarness() {
+    const projection = new ProductProjection("bg-generic-tool", "epoch");
+    let seq = 0;
+    const apply = (type: SessionEvent["type"], payload: unknown) =>
+      projection.applyEvent({
+        id: `event-${++seq}`,
+        sessionId: "bg-generic-tool",
+        turnId: "turn-1",
+        traceId: "trace",
+        timestamp: new Date(1700000000000 + seq),
+        sequenceNumber: seq,
+        type,
+        payload,
+      } as SessionEvent);
+    apply(SessionEventType.SessionCreated, { mode: "default", contextWindow: 200000 });
+    apply(SessionEventType.TurnStarted, { turnNumber: 1, input: "search", messageId: "user-1" });
+    apply(SessionEventType.ToolCallScheduled, {
+      toolCallId: "grep-1",
+      toolName: "Grep",
+      input: { pattern: "needle" },
+      schedule: { parallelGroups: [["grep-1"]], executionOrder: ["grep-1"] },
+    });
+    apply(SessionEventType.ToolCallStarted, { toolCallId: "grep-1", toolName: "Grep" });
+    const toolRow = (): ToolCallRow | undefined =>
+      projection
+        .getSnapshot()
+        .rows.window.find((r) => r.kind === "toolCall" && r.toolCallId === "grep-1") as
+        | ToolCallRow
+        | undefined;
+    const work = (): BackgroundWorkSummary | undefined =>
+      projection.getSnapshot().backgroundWorks.find((w) => w.workId === "toolbg_1");
+    const backgroundStarted = () =>
+      apply(SessionEventType.BackgroundTaskStarted, {
+        taskId: "toolbg_1",
+        toolCallId: "grep-1",
+        toolName: "Grep",
+        taskKind: "tool",
+        description: "needle",
+        status: "running",
+        cancellable: true,
+      });
+    return { apply, backgroundStarted, toolRow, work };
+  }
+
+  it("taskKind tool flips the tool row to backgrounded and anchors a tool summary", () => {
+    const h = toolHarness();
+    const deltas = h.backgroundStarted();
+
+    const flipped = h.toolRow();
+    expect(flipped?.backgrounded).toBe(true);
+    expect(flipped?.workId).toBe("toolbg_1");
+
+    const summary = h.work();
+    expect(summary?.kind).toBe("tool");
+    expect(summary?.status).toBe("running");
+    expect(summary?.anchorRowId).toBe(flipped?.rowId);
+
+    expect(deltas.some((d) => d.op === "row.upserted" && d.row.kind === "toolCall")).toBe(true);
+    for (const delta of deltas) expect(conversationDeltaSchema.parse(delta)).toEqual(delta);
+  });
+
+  it("repeat tool lifecycle events are idempotent and terminal updates keep the anchor", () => {
+    const h = toolHarness();
+    h.backgroundStarted();
+    const firstRowId = h.toolRow()?.rowId;
+
+    expect(h.backgroundStarted().some((d) => d.op === "row.upserted")).toBe(false);
+    h.apply(SessionEventType.BackgroundTaskCompleted, {
+      taskId: "toolbg_1",
+      toolCallId: "grep-1",
+      toolName: "Grep",
+      taskKind: "tool",
+      status: "completed",
+    });
+
+    expect(h.toolRow()?.backgrounded).toBe(true);
+    expect(h.toolRow()?.rowId).toBe(firstRowId);
+    expect(h.work()?.status).toBe("resultPending");
+    expect(h.work()?.anchorRowId).toBe(firstRowId);
+  });
+});
+
 describe("subagent background tool call projection flip (BT 2.0)", () => {
   function subagentHarness() {
     const projection = new ProductProjection("bg-subagent", "epoch");

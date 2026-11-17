@@ -23,6 +23,18 @@ import {
 } from "./background-task-registry.js";
 import { backgroundTaskOutputMetadata } from "./background-task-output.js";
 import {
+  backgroundTaskKindForToolCall,
+  formatDetachedToolTaskNotification,
+  isDetachedToolTaskSnapshot,
+  isGenericBackgroundingTool,
+} from "./detached-tool-task-support.js";
+import {
+  buildBackgroundTaskSummary,
+  normalizeBackgroundTaskNotificationStatus,
+  normalizeBashTaskNotificationStatus,
+  resolveBashBackgroundResultTitle,
+} from "./bash-background-notification.js";
+import {
   buildWorkflowReportsNotificationSection,
   type BackgroundTaskSnapshot,
   buildWorkflowTaskSummary,
@@ -408,7 +420,7 @@ export class BackgroundTaskTracker {
       // V4 projection 过去从 toolName 手写推断类型，漏掉真实 Agent
       // 工具名后把后台 subagent 投成 bash/process。runtime 在事实产生处一次裁决。
       // 生命周期行为不受影响——那已经由 per-tool 的 lifecycleProvider 分派。
-      taskKind: backgroundTaskKind(toolCall.name),
+      taskKind: backgroundTaskKindForToolCall(this.deps.registry, toolCall),
       childSessionId: outputMetadata.childSessionId,
       cancellable: status === "running" && this.canCancelBackgroundTask(toolCall),
       command: typeof input.command === "string" ? input.command : undefined,
@@ -581,6 +593,17 @@ export class BackgroundTaskTracker {
               ),
             }
           : {}),
+        // Generic tool backgrounding follows the Bash precedent: the terminal turn is a
+        // background result round, so originMeta carries the source kind and the work id.
+        ...(isGenericBackgroundingTool(this.deps.registry, toolCall)
+          ? {
+              originMeta: {
+                backgroundSource: "tool" as const,
+                title: resolveBashBackgroundResultTitle(toolCall, taskId),
+                workId: taskId,
+              },
+            }
+          : {}),
         taskId,
         text,
         toolName: toolCall.name,
@@ -619,7 +642,18 @@ export class BackgroundTaskTracker {
     if (toolCall.name === "Workflow" || isDynamicWorkflowRunDispatchToolName(toolCall.name)) {
       return this.formatWorkflowTaskNotification(toolCall, taskId, status, snapshot, output);
     }
-    if (toolCall.name !== "Bash") return undefined;
+    if (toolCall.name !== "Bash") {
+      // Generic read-only tool backgrounding (BT 2.0): the notification was silently
+      // skipped for these tools before, because there was no branch that could format
+      // them. The shared task notification shape carries the bounded result text.
+      if (!isGenericBackgroundingTool(this.deps.registry, toolCall)) return undefined;
+      return formatDetachedToolTaskNotification({
+        snapshot: isDetachedToolTaskSnapshot(snapshot) ? snapshot : undefined,
+        status,
+        taskId,
+        toolCall,
+      });
+    }
 
     const input = isRecord(toolCall.input) ? toolCall.input : {};
     const command = typeof input.command === "string" ? input.command : undefined;
@@ -815,6 +849,18 @@ export class BackgroundTaskTracker {
       };
     }
 
+    // Generic tool backgrounding (BT 2.0): the executor's detached store is the whole
+    // lifecycle source. No getSnapshot on purpose — the store never polls, so the tracker
+    // must not start its 1s interval; the direct terminal waiter is the only contract.
+    if (isGenericBackgroundingTool(deps.registry, toolCall)) {
+      const store = deps.detachedToolTasks;
+      if (store === undefined) return {};
+      return {
+        waitForTerminal: (taskId: string) => store.waitForTerminal(taskId),
+        cancellable: deps.registry?.get(toolCall.name)?.backgrounding?.cancellable === true,
+      };
+    }
+
     // 其余工具沿用 executionPort 的通用后台面（无直接等待者），与泛化前一致。
     const getBackgroundTask = deps.executionPort?.getBackgroundTask;
     return {
@@ -832,54 +878,6 @@ function isBackgroundTaskLaunch(
 ): boolean {
   if (output.status === "backgrounded") return true;
   return isSubagentDispatchToolName(toolCall.name) && output.status === "async_launched";
-}
-
-type BashTaskNotificationStatus = "completed" | "failed" | "killed";
-
-function normalizeBashTaskNotificationStatus(status: string): BashTaskNotificationStatus {
-  return normalizeBackgroundTaskNotificationStatus(status);
-}
-
-function normalizeBackgroundTaskNotificationStatus(status: string): BashTaskNotificationStatus {
-  switch (status) {
-    case "completed":
-      return "completed";
-    case "cancelled":
-    case "timed_out":
-    case "killed":
-    case "stopped":
-      return "killed";
-    default:
-      return "failed";
-  }
-}
-
-function resolveBashBackgroundResultTitle(toolCall: ExecutableToolCall, taskId: string): string {
-  const input = isRecord(toolCall.input) ? toolCall.input : {};
-  const description = stringField(input, "description")?.trim();
-  const command = stringField(input, "command")?.trim();
-  return description || command || toolCall.name || taskId;
-}
-
-function buildBackgroundTaskSummary(input: {
-  command?: string;
-  description?: string;
-  exitCode?: number;
-  lost?: boolean;
-  status: BashTaskNotificationStatus;
-}): string {
-  const subject = input.description ?? input.command ?? "Bash background command";
-  const prefix = `Background command "${subject}"`;
-  // Provider-visible summary 保持简洁；完整输出路径由 task-notification 的 output-file 字段承载。
-  if (input.lost) return `${prefix} failed because its in-process state was lost`;
-  switch (input.status) {
-    case "completed":
-      return `${prefix} completed${input.exitCode !== undefined ? ` (exit code ${input.exitCode})` : ""}`;
-    case "failed":
-      return `${prefix} failed${input.exitCode !== undefined ? ` with exit code ${input.exitCode}` : ""}`;
-    case "killed":
-      return `${prefix} was stopped`;
-  }
 }
 
 function stringField(record: Record<string, unknown> | undefined, key: string): string | undefined {
@@ -904,19 +902,10 @@ function getWorkflowTaskWaiter(workflowPort: unknown): WorkflowTaskWaiter | unde
 }
 
 /**
- * 后台任务的展示类别（面板分组与图标）。`taskKind` 只是装饰：生命周期语义已经由
- * per-tool 的 lifecycleProvider 分派，所以这里的分类改动不会影响观察/等待/取消。
- *
- * legacy `Workflow`（script workflow）刻意仍归 "bash"：它不可取消、面板上也没有详情页，
- * 与 workflow run 是两种不同的东西，共用一个类别会让面板把两者混在一起。
+ * The classification lives in detached-tool-task-support.ts
+ * ({@link backgroundTaskKindForToolCall}): the generic "tool" kind needs the registry
+ * capability, not just the tool name.
  */
-function backgroundTaskKind(toolName: string): "bash" | "subagent" | "workflow" {
-  if (isSubagentDispatchToolName(toolName)) return "subagent";
-  // dwf 的两个入口（CreateWorkflow / ResumeWorkflowRun）同归 "workflow"：同一个 run 的
-  // 生命周期延续，面板分组与图标不该因入口不同而换类。
-  return isDynamicWorkflowRunDispatchToolName(toolName) ? "workflow" : "bash";
-}
-
 function backgroundExecutionLogFields(
   execution: BackgroundExecutionSnapshot,
 ): Record<string, unknown> {

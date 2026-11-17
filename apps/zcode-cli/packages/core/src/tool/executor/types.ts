@@ -52,6 +52,11 @@ import type {
   ToolExecutionResult,
   ToolRuntimeScope,
 } from "../types.js";
+import type {
+  DetachedToolTaskSnapshot,
+  DetachedToolTaskStore,
+  ToolBackgroundRequestResult,
+} from "./detached-tool-tasks.js";
 
 export interface BackgroundTaskNotificationCommand {
   originMeta?: BackgroundResultOriginMeta;
@@ -127,6 +132,8 @@ export interface ToolExecutorOptions {
   /** 模型目录端口；缺席则 ListModels 报能力缺席，CreateWorkflow 的 subagent_model 被拒。 */
   modelCatalogPort?: ModelCatalogPort;
   runtimeTaskRegistry?: RuntimeTaskRegistry;
+  /** Optional injection point; the executor creates its own store when absent. */
+  detachedToolTasks?: DetachedToolTaskStore;
   readFileState?: ReadFileStateMap;
   /** 技能门的探针（ToolInputResolutionContext.hasLoadedSkill）；runtime 按 provider 可见历史回答。 */
   hasLoadedSkill?: (skillName: string) => boolean;
@@ -192,6 +199,21 @@ export interface ToolExecutor {
     traceContext: TraceContext,
     turnId?: TurnId,
   ): Promise<void>;
+
+  /**
+   * Moves a still-running call of a backgrounding-capable tool to the background
+   * (`ToolEntry.backgrounding.supported`). The guards live in the registered handle:
+   * unknown/already-settled/not-backgroundable calls answer `noop` and are never aborted.
+   * Optional: alternate executors (test stubs) may not own a detached task store.
+   */
+  requestBackgroundToolCall?(toolCallId: string): ToolBackgroundRequestResult;
+
+  /**
+   * Stops a detached tool task through the store that owns its handler controller.
+   * Returns the terminal snapshot after the stop, or undefined when the store no longer
+   * knows the task. Optional for the same reason as {@link requestBackgroundToolCall}.
+   */
+  stopDetachedToolTask?(taskId: string): DetachedToolTaskSnapshot | undefined;
 }
 
 export interface ToolExecuteOptions {
@@ -261,6 +283,12 @@ export interface ToolExecutorDeps {
   modelCatalogPort?: ModelCatalogPort;
   runtimeTaskRegistry?: RuntimeTaskRegistry;
   readFileState: ReadFileStateMap;
+  /**
+   * Executor-owned registry of in-flight backgrounding-capable tool calls plus their
+   * detached terminal snapshots. The tracker reads it through the per-tool lifecycle
+   * provider; the executor writes it from the call runner.
+   */
+  detachedToolTasks?: DetachedToolTaskStore;
   /** 文件读取快照的下一个序号；执行器持有计数器，只增不减。 */
   nextReadFileStateSnapshotIndex: () => number;
   hasLoadedSkill?: (skillName: string) => boolean;

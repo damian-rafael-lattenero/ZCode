@@ -350,6 +350,22 @@ export interface ToolEntry extends ToolContractDeclaration {
   resultArtifactContentType?: string;
   metadata: ToolMetadata;
   /**
+   * Host-authoritative capability: the user may move a running call of this tool to the
+   * background. Only the trusted built-in registration path may set it; executor code must
+   * never infer it from a tool name or from model-visible content.
+   *
+   * `maxRuntimeMs` arms the detached task watchdog (the executor's DetachedToolTaskStore):
+   * once a call is detached, the foreground timeout no longer applies, so this is the only
+   * bound on a handler that keeps running. `maxResultChars` bounds the snapshot text that
+   * the terminal notification and TaskOutput projection carry.
+   */
+  backgrounding?: {
+    supported: true;
+    cancellable?: boolean;
+    maxResultChars?: number;
+    maxRuntimeMs?: number;
+  };
+  /**
    * 只由宿主验证后的可信来源写入；不能从模型可见的 MCP 名称或 descriptor 推导。
    */
   permissionCapabilityGroup?: PermissionCapabilityGroup;

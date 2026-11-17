@@ -16,7 +16,6 @@
 const IDENTITY: string = "ZCode Local Signing"
 const KEYCHAIN: string = "/Users/lattenero/Library/Keychains/login.keychain-db"
 const WORKDIR: string = "/tmp/zcode-signing"
-const P12_PASS: string = "zcode-local"
 
 def identity-exists []: nothing -> bool {
     let r: record = (do { ^security find-identity -v -p codesigning } | complete)
@@ -62,8 +61,20 @@ def main []: nothing -> nothing {
     # LEGACY P12 ALGORITHMS: `security import` rejects the modern MAC
     # ("MAC verification failed") — PBE-SHA1-3DES + SHA1 MAC are the shape
     # macOS accepts (the known LibreSSL/OpenSSL 3 interop fix).
-    checked "openssl pkcs12" { ^openssl pkcs12 -export -out $p12 -inkey $key -in $cert -passout $"pass:($P12_PASS)" -name $IDENTITY -keypbe PBE-SHA1-3DES -certpbe PBE-SHA1-3DES -macalg sha1 }
-    checked "security import" { ^security import $p12 -k $KEYCHAIN -P $P12_PASS -T /usr/bin/codesign -T /usr/bin/security }
+    # EPHEMERAL p12 wrap password (fleet audit 17/11: credentials off argv):
+    # generated per run, never stored, the p12 is destroyed at script end —
+    # an argv observer in the ~100 ms import window gets a key to a p12 that
+    # no longer exists. openssl reads it from a 0600 file (-passout file:).
+    # `security import` has NO stdin/file option for the passphrase (verified
+    # live: an empty-password p12 + import without -P = MAC verification
+    # failed), so the ephemeral pass still rides -P argv — useless after the
+    # run, unlike the old committed static "zcode-local".
+    let p12_pass: string = (random chars -l 32)
+    let pass_file: string = ($WORKDIR | path join "p12.pass")
+    $p12_pass | save -f $pass_file
+    ^chmod 600 $pass_file
+    checked "openssl pkcs12" { ^openssl pkcs12 -export -out $p12 -inkey $key -in $cert -passout file:($pass_file) -name $IDENTITY -keypbe PBE-SHA1-3DES -certpbe PBE-SHA1-3DES -macalg sha1 }
+    checked "security import" { ^security import $p12 -k $KEYCHAIN -P $p12_pass -T /usr/bin/codesign -T /usr/bin/security }
     checked "add-trusted-cert" { ^security add-trusted-cert -r trustRoot -p codeSign -k $KEYCHAIN $cert }
     rm -rf $WORKDIR
     if not (identity-exists) {

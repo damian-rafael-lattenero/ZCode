@@ -237,6 +237,16 @@ async function sendText(
       payload.expectedHeldQueueItemIds,
     );
   }
+  if (payload.requestedDelivery === "queue") {
+    // BT 3.1 (2026-11-17): an explicit queue choice (the composer picker's ⏳) means
+    // "send it as soon as the session can, without another tap". A previous Stop or turn
+    // error leaves autoDrain=false and the FIFO would wait for a manual Resume/Send now;
+    // re-arm the gate here so the normal drain promotes it at the first free boundary.
+    // Routing-derived queues never carry payload.requestedDelivery, so an implicit
+    // enqueue keeps the paused-queue semantics.
+    await record.app.setQueueAutoDrain(true);
+    await host.afterLegacyStateMutation?.(record, "queue_auto_drain_resumed");
+  }
   let started;
   // 附件命令面：AttachmentRef → TurnAttachment 在闸门后映射（active turn 已排除）。
   try {

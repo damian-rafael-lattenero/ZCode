@@ -52,6 +52,9 @@ function makeApp(overrides: Record<string, unknown> = {}) {
       queueLength: 1,
       turnId: "turn-1",
     }),
+    // BT 3.1: an explicit queue send re-arms the drain gate; the fake must expose the
+    // same facade method the real app does.
+    setQueueAutoDrain: vi.fn().mockResolvedValue(undefined),
     getModel: vi.fn().mockReturnValue("account:bigmodel-start-plan/glm-5"),
     readTarget: vi.fn().mockResolvedValue(null),
     updateTargetStatus: vi.fn().mockResolvedValue(null),
@@ -289,6 +292,48 @@ describe("v4 原生 sendText", () => {
       providerId: "provider-a",
       modelId: "model-a",
     });
+  });
+
+  it("explicit queue re-arms a paused auto-drain so it fires without another tap", async () => {
+    const setQueueAutoDrain = vi.fn().mockResolvedValue(undefined);
+    const app = makeApp({
+      setQueueAutoDrain,
+      sendInput: vi.fn().mockResolvedValue({
+        kind: "queued",
+        pendingInputId: "queue_cmd-1",
+        queueLength: 1,
+        turnId: "turn-1",
+      }),
+    });
+    const host = makeHost(makeRecord({ app }));
+
+    await new V4CommandExecutor(host).execute(
+      envelope("sendText", { text: "queue me", requestedDelivery: "queue" }),
+    );
+
+    expect(setQueueAutoDrain).toHaveBeenCalledWith(true);
+    expect(host.legacyMutations).toContain("queue_auto_drain_resumed");
+  });
+
+  it("routing-derived and guide sends do not touch the auto-drain gate", async () => {
+    const setQueueAutoDrain = vi.fn().mockResolvedValue(undefined);
+    for (const payload of [
+      { text: "implicit routing" },
+      { text: "deferred guide", requestedDelivery: "guide" },
+    ]) {
+      const app = makeApp({
+        setQueueAutoDrain,
+        sendInput: vi.fn().mockResolvedValue({
+          completion: Promise.resolve({}),
+          kind: "started_turn",
+          turnId: "turn-1",
+        }),
+      });
+      await new V4CommandExecutor(makeHost(makeRecord({ app }))).execute(
+        envelope("sendText", payload),
+      );
+    }
+    expect(setQueueAutoDrain).not.toHaveBeenCalled();
   });
 
   it("app input facade 把 start/queue 决策交给 Core admission，不查询 activeTurn", async () => {

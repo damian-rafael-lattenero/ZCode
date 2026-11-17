@@ -631,6 +631,15 @@ const ruRU: Record<string, string> = {
   "bashOutput.error.unsupported": "Эта среда выполнения не поддерживает фоновый вывод",
   "bashOutput.error.read_failed": "Не удалось прочитать файл вывода",
   "bashOutput.error.query_failed": "Не удалось подключиться к среде выполнения задачи",
+  // Боковая вкладка живых деталей фонового инструмента.
+  "backgroundTool.open": "Показать детали: {title}",
+  "backgroundTool.title": "Детали инструмента",
+  "backgroundTool.empty": "Деталей пока нет",
+  "backgroundTool.truncated": "Обрезано",
+  "backgroundTool.status.running": "Выполняется",
+  "backgroundTool.status.success": "Завершено",
+  "backgroundTool.status.error": "Ошибка",
+  "backgroundTool.status.cancelled": "Отменено",
 
   "purchase.entry.loading": "Загрузка планов…",
   "purchase.entry.retry": "Не удалось загрузить планы. Повторить",
@@ -6336,9 +6345,10 @@ const ruRU: Record<string, string> = {
   "chat.composer.backgroundWorks.tooltipAgent": "Открыть запущенных агентов",
   "chat.composer.backgroundWorks.tooltipWorkflow": "Открыть запущенные рабочие процессы",
   "chat.composer.backgroundWorks.tooltipWorkflowDetails": "Открыть сведения о рабочем процессе",
+  "chat.composer.backgroundWorks.tooltipTool": "Открыть запущенные фоновые инструменты",
   "chat.composer.backgroundWorks.tooltipMixed": "Открыть запущенные терминалы и агентов",
   "chat.composer.backgroundWorks.ariaLabel":
-    "Открыть фоновые задачи: Bash — {bashCount}, рабочие процессы — {workflowCount}, субагенты — {subagentCount}, всего — {count}",
+    "Открыть фоновые задачи: Bash — {bashCount}, рабочие процессы — {workflowCount}, инструменты — {toolCount}, субагенты — {subagentCount}, всего — {count}",
   "chat.summaryPanel.goalIterationValue": "Итерация {count}",
   "chat.summaryPanel.todoGoalIterationGroup": "Итерация {count}",
   "chat.summaryPanel.todoSessionGroup": "Сеанс",
@@ -6359,6 +6369,8 @@ const ruRU: Record<string, string> = {
   "chat.statusPanel.todoWaitingExpanded": "Скрыть ожидающие ({count})",
   "chat.statusPanel.todoWaitingFold": "Ожидают: {count}",
   "chat.statusPanel.terminals": "Терминалы",
+  // Вызовы инструментов, переведённые в фон, получают отдельный раздел.
+  "chat.statusPanel.tools": "Инструменты",
   "chat.statusPanel.agents": "Агенты",
   "chat.statusPanel.workflows": "Рабочие процессы",
   "chat.statusPanel.runningStatusValue": "В фоне: {count}",

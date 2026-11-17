@@ -638,6 +638,15 @@ const jaJP: Record<string, string> = {
   "bashOutput.error.unsupported": "このランタイムはバックグラウンド出力に対応していません",
   "bashOutput.error.read_failed": "出力ファイルを読み込めませんでした",
   "bashOutput.error.query_failed": "タスクのランタイムに接続できませんでした",
+  // バックグラウンドツールのライブ詳細サイドタブ（バックグラウンド化されたツール呼び出し）。
+  "backgroundTool.open": "{title}の詳細を表示",
+  "backgroundTool.title": "ツール詳細",
+  "backgroundTool.empty": "詳細はまだありません",
+  "backgroundTool.truncated": "切り詰め",
+  "backgroundTool.status.running": "実行中",
+  "backgroundTool.status.success": "完了",
+  "backgroundTool.status.error": "失敗",
+  "backgroundTool.status.cancelled": "キャンセル済み",
 
   "purchase.entry.loading": "プランを読み込み中…",
   "purchase.entry.retry": "プランを読み込めませんでした。再試行",
@@ -6357,9 +6366,10 @@ const jaJP: Record<string, string> = {
   "chat.composer.backgroundWorks.tooltipAgent": "実行中のエージェントを開く",
   "chat.composer.backgroundWorks.tooltipWorkflow": "実行中のワークフローを開く",
   "chat.composer.backgroundWorks.tooltipWorkflowDetails": "ワークフローの詳細を開く",
+  "chat.composer.backgroundWorks.tooltipTool": "実行中のバックグラウンドツールを開く",
   "chat.composer.backgroundWorks.tooltipMixed": "実行中のターミナルとエージェントを開く",
   "chat.composer.backgroundWorks.ariaLabel":
-    "実行中のバックグラウンドタスクを開く: Bash {bashCount} 件、ワークフロー {workflowCount} 件、サブエージェント {subagentCount} 件、合計 {count} 件",
+    "実行中のバックグラウンドタスクを開く: Bash {bashCount} 件、ワークフロー {workflowCount} 件、ツール {toolCount} 件、サブエージェント {subagentCount} 件、合計 {count} 件",
   "chat.summaryPanel.goalIterationValue": "反復 {count}",
   "chat.summaryPanel.todoGoalIterationGroup": "反復 {count}",
   "chat.summaryPanel.todoSessionGroup": "セッション",
@@ -6380,6 +6390,8 @@ const jaJP: Record<string, string> = {
   "chat.statusPanel.todoWaitingExpanded": "待機中 {count} 件を非表示",
   "chat.statusPanel.todoWaitingFold": "待機中 {count} 件",
   "chat.statusPanel.terminals": "ターミナル",
+  // バックグラウンド化されたツール呼び出し専用のセクション(ライブ詳細サイドタブ)。
+  "chat.statusPanel.tools": "ツール",
   "chat.statusPanel.agents": "エージェント",
   "chat.statusPanel.workflows": "ワークフロー",
   "chat.statusPanel.runningStatusValue": "バックグラウンドで {count} 件",

@@ -803,6 +803,15 @@ const enUS: Record<string, string> = {
   "bashOutput.error.unsupported": "This runtime does not support background output",
   "bashOutput.error.read_failed": "Could not read the output file",
   "bashOutput.error.query_failed": "Could not connect to the task runtime",
+  // Background tool live-detail side tab (tool calls moved to the background).
+  "backgroundTool.open": "View detail for {title}",
+  "backgroundTool.title": "Tool detail",
+  "backgroundTool.empty": "No detail yet",
+  "backgroundTool.truncated": "Truncated",
+  "backgroundTool.status.running": "Running",
+  "backgroundTool.status.success": "Completed",
+  "backgroundTool.status.error": "Failed",
+  "backgroundTool.status.cancelled": "Cancelled",
 
   "purchase.entry.loading": "Loading plans…",
   "purchase.entry.retry": "Could not load plans. Retry",
@@ -6634,11 +6643,12 @@ const enUS: Record<string, string> = {
   "chat.composer.backgroundWorks.tooltipAgent": "Open running agents",
   "chat.composer.backgroundWorks.tooltipWorkflow": "Open running workflows",
   "chat.composer.backgroundWorks.tooltipWorkflowDetails": "Open workflow details",
+  "chat.composer.backgroundWorks.tooltipTool": "Open running background tools",
   // DT group: tooltip when the badge holds only detached turns; mixed kinds still use tooltipMixed.
   "chat.composer.backgroundWorks.tooltipTurn": "Open running background chats",
   "chat.composer.backgroundWorks.tooltipMixed": "Open running terminals and agents",
   "chat.composer.backgroundWorks.ariaLabel":
-    "Open running background tasks: {bashCount} Bash, {workflowCount} workflow, {subagentCount} Subagent, {turnCount} background chat, {count} total",
+    "Open running background tasks: {bashCount} Bash, {workflowCount} workflow, {toolCount} tool, {subagentCount} Subagent, {turnCount} background chat, {count} total",
   "chat.summaryPanel.goalIterationValue": "Iteration {count}",
   "chat.summaryPanel.todoGoalIterationGroup": "Iteration {count}",
   "chat.summaryPanel.todoSessionGroup": "Session",
@@ -6659,6 +6669,8 @@ const enUS: Record<string, string> = {
   "chat.statusPanel.todoWaitingExpanded": "Hide {count} waiting",
   "chat.statusPanel.todoWaitingFold": "{count} waiting",
   "chat.statusPanel.terminals": "Terminals",
+  // Tool calls moved to the background get their own section (live-detail side tab).
+  "chat.statusPanel.tools": "Tools",
   "chat.statusPanel.agents": "Agents",
   // DT group: section for the detached turn (the conversation the user demoted to background).
   "chat.statusPanel.turns": "Background chats",

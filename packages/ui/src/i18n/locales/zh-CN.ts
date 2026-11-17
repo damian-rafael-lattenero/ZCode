@@ -739,6 +739,15 @@ const zhCN: Record<string, string> = {
   "bashOutput.error.unsupported": "当前运行时不支持查看后台输出",
   "bashOutput.error.read_failed": "无法读取输出文件",
   "bashOutput.error.query_failed": "无法连接到任务运行时",
+  // 后台工具实时详情侧栏（转到后台的工具调用）。
+  "backgroundTool.open": "查看 {title} 的详情",
+  "backgroundTool.title": "工具详情",
+  "backgroundTool.empty": "暂无详情",
+  "backgroundTool.truncated": "已截断",
+  "backgroundTool.status.running": "运行中",
+  "backgroundTool.status.success": "已完成",
+  "backgroundTool.status.error": "失败",
+  "backgroundTool.status.cancelled": "已取消",
 
   "purchase.entry.loading": "正在查询套餐…",
   "purchase.entry.retry": "套餐查询失败，重试",
@@ -6202,11 +6211,12 @@ const zhCN: Record<string, string> = {
   "chat.composer.backgroundWorks.tooltipWorkflow": "打开运行中的工作流",
   // 唯一在跑的工作流直达详情页时，徽标如实说出落点。
   "chat.composer.backgroundWorks.tooltipWorkflowDetails": "打开工作流详情",
+  "chat.composer.backgroundWorks.tooltipTool": "打开运行中的后台工具",
   // DT 分组：徽标里恰好只有 detached turn 一类时的文案；混合仍走 tooltipMixed。
   "chat.composer.backgroundWorks.tooltipTurn": "打开运行中的后台对话",
   "chat.composer.backgroundWorks.tooltipMixed": "打开运行中的终端与智能体",
   "chat.composer.backgroundWorks.ariaLabel":
-    "打开运行中的后台任务：Bash {bashCount} 个，工作流 {workflowCount} 个，子智能体 {subagentCount} 个，后台对话 {turnCount} 个，共 {count} 个",
+    "打开运行中的后台任务：Bash {bashCount} 个，工作流 {workflowCount} 个，工具 {toolCount} 个，子智能体 {subagentCount} 个，后台对话 {turnCount} 个，共 {count} 个",
   "chat.summaryPanel.goalIterationValue": "第 {count} 次迭代",
   "chat.summaryPanel.todoGoalIterationGroup": "第 {count} 轮迭代",
   "chat.summaryPanel.todoSessionGroup": "整个会话",
@@ -6227,6 +6237,8 @@ const zhCN: Record<string, string> = {
   "chat.statusPanel.todoWaitingExpanded": "收起 {count} 项待处理",
   "chat.statusPanel.todoWaitingFold": "待处理 {count} 项",
   "chat.statusPanel.terminals": "终端",
+  // 转到后台的工具调用有独立分区（实时详情侧栏）。
+  "chat.statusPanel.tools": "工具",
   "chat.statusPanel.agents": "智能体",
   // DT 分组：demote 后的 detached turn 分区（用户主动转入后台的那轮对话）。
   "chat.statusPanel.turns": "后台对话",

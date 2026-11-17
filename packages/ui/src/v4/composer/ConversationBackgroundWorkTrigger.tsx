@@ -5,6 +5,7 @@ import {
   MessageSquareTextIcon,
   SquareTerminalIcon,
   Workflow,
+  WrenchIcon,
 } from "lucide-react";
 import { TID_V4_COMPOSER_BACKGROUND_WORK_TRIGGER } from "@zcode/shared/test-ids";
 import type { BackgroundWorkSummary } from "@zcode/shared/zcode-protocol-v4";
@@ -15,6 +16,8 @@ import { useZCodeIntl } from "@/i18n/IntlProvider.js";
 export interface ComposerBackgroundWorkCounts {
   bashCount: number;
   workflowCount: number;
+  /** Tool calls moved to the background (they run as their own runtime task). */
+  toolCount: number;
   subagentCount: number;
   /** DT 分组：demote 后的 backgroundTurn（detached turn）运行数。 */
   turnCount: number;
@@ -27,6 +30,7 @@ export function getComposerBackgroundWorkCounts(
 ): ComposerBackgroundWorkCounts {
   let bashCount = 0;
   let workflowCount = 0;
+  let toolCount = 0;
   let turnCount = 0;
   for (const work of backgroundWorks) {
     if (work.status !== "running") continue;
@@ -36,6 +40,10 @@ export function getComposerBackgroundWorkCounts(
       // workflow run 单独计数，不并入 bashCount。totalCount 汇总各类后台工作，
       // 确保只有 workflow run 时也显示 badge，用户仍能打开面板使用停止按钮。
       workflowCount += 1;
+    } else if (work.kind === "tool") {
+      // Background tool works have their own Task Island section and live-detail tab;
+      // they must light the badge so the section can be opened from the composer.
+      toolCount += 1;
     } else if (work.kind === "turn") {
       // DT 分组：demote 后的 detached turn 也是实时活动——demote 后（DT01）徽标必须
       // 仍然亮着，用户才有入口打开 Task Island 查看并取消这条 turn（DT07）。
@@ -46,9 +54,10 @@ export function getComposerBackgroundWorkCounts(
   return {
     bashCount,
     workflowCount,
+    toolCount,
     subagentCount,
     turnCount,
-    totalCount: bashCount + workflowCount + subagentCount + turnCount,
+    totalCount: bashCount + workflowCount + toolCount + subagentCount + turnCount,
   };
 }
 
@@ -83,6 +92,7 @@ function ConversationBackgroundWorkTriggerImpl({
   const activeKindCount = [
     counts.bashCount,
     counts.workflowCount,
+    counts.toolCount,
     counts.subagentCount,
     counts.turnCount,
   ].filter((count) => count > 0).length;
@@ -96,15 +106,18 @@ function ConversationBackgroundWorkTriggerImpl({
             ? "chat.composer.backgroundWorks.tooltipTerminal"
             : counts.workflowCount > 0
               ? "chat.composer.backgroundWorks.tooltipWorkflow"
-              : counts.turnCount > 0
-                ? "chat.composer.backgroundWorks.tooltipTurn"
-                : "chat.composer.backgroundWorks.tooltipAgent",
+              : counts.toolCount > 0
+                ? "chat.composer.backgroundWorks.tooltipTool"
+                : counts.turnCount > 0
+                  ? "chat.composer.backgroundWorks.tooltipTurn"
+                  : "chat.composer.backgroundWorks.tooltipAgent",
   });
   const ariaLabel = intl.formatMessage(
     { id: "chat.composer.backgroundWorks.ariaLabel" },
     {
       bashCount: String(counts.bashCount),
       workflowCount: String(counts.workflowCount),
+      toolCount: String(counts.toolCount),
       subagentCount: String(counts.subagentCount),
       turnCount: String(counts.turnCount),
       count: String(counts.totalCount),
@@ -120,6 +133,7 @@ function ConversationBackgroundWorkTriggerImpl({
         data-testid={TID_V4_COMPOSER_BACKGROUND_WORK_TRIGGER}
         data-background-bash-count={counts.bashCount}
         data-background-workflow-count={counts.workflowCount}
+        data-background-tool-count={counts.toolCount}
         data-background-subagent-count={counts.subagentCount}
         data-background-turn-count={counts.turnCount}
         data-background-total-count={counts.totalCount}
@@ -144,6 +158,12 @@ function ConversationBackgroundWorkTriggerImpl({
             <span className="inline-flex items-center gap-0.5">
               <Workflow className="size-3.5" />
               <span>{counts.workflowCount}</span>
+            </span>
+          ) : null}
+          {counts.toolCount > 0 ? (
+            <span className="inline-flex items-center gap-0.5">
+              <WrenchIcon className="size-3.5" />
+              <span>{counts.toolCount}</span>
             </span>
           ) : null}
           {counts.subagentCount > 0 ? (

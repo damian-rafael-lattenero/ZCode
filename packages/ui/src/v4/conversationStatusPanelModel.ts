@@ -123,6 +123,8 @@ export interface ConversationStatusPanelModel {
   sessionPlans: ConversationStatusPanelSessionPlansModel | null;
   plan: ConversationStatusPanelPlanModel | null;
   runningBashWorks: BackgroundWorkSummary[];
+  /** Tool calls moved to the background: their own Task Island section with live detail. */
+  runningToolWorks: BackgroundWorkSummary[];
   runningSubagentWorks: ConversationStatusPanelRunningSubagent[];
   runningWorkflowRuns: ConversationStatusPanelWorkflowRun[];
   /** DT 分组：用户 demote 的原 primaryTurn（backgroundTurn），Task Island 独立行。 */
@@ -347,6 +349,7 @@ export function buildConversationStatusPanelModel(
   const sessionPlans = buildSessionPlansModel(input.sessionPlans, input.workspacePath);
   const plan = buildPlanModel(input.plan);
   const runningBashWorks: BackgroundWorkSummary[] = [];
+  const runningToolWorks: BackgroundWorkSummary[] = [];
   const runningTurnWorks: BackgroundWorkSummary[] = [];
   const workflowWorkByWorkId = new Map<string, BackgroundWorkSummary>();
   for (const work of input.backgroundWorks ?? []) {
@@ -369,6 +372,12 @@ export function buildConversationStatusPanelModel(
       runningTurnWorks.push(work);
       continue;
     }
+    if (work.kind === "tool") {
+      // A tool call moved to the background keeps running as a runtime task; it gets its own
+      // section and a live-detail side tab, never mixed with terminals.
+      runningToolWorks.push(work);
+      continue;
+    }
     if (work.kind === "bash") {
       runningBashWorks.push(work);
     }
@@ -385,6 +394,7 @@ export function buildConversationStatusPanelModel(
     sessionPlans,
     plan,
     runningBashWorks,
+    runningToolWorks,
     runningSubagentWorks,
     runningWorkflowRuns,
     runningTurnWorks,
@@ -394,6 +404,7 @@ export function buildConversationStatusPanelModel(
       sessionPlans ||
       plan ||
       runningBashWorks.length > 0 ||
+      runningToolWorks.length > 0 ||
       runningSubagentWorks.length > 0 ||
       runningWorkflowRuns.length > 0 ||
       runningTurnWorks.length > 0,

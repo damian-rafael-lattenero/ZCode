@@ -32,6 +32,7 @@ const forkTestFiles = [
   "packages/ui/test/v4ConversationStatusPanelGitReview.test.ts",
   "packages/ui/test/v4ConversationTurnRenderUnits.test.ts",
   "packages/ui/test/v4ToolBackgroundButton.test.ts",
+  "packages/ui/test/v4ComposerInterruptPicker.test.ts",
   "packages/ui/test/v4PlanToggleHooks.test.ts",
 ];
 
@@ -62,7 +63,10 @@ export default defineConfig({
     maxWorkers: 4,
     testTimeout: 30_000,
     // UI 组件测试需要 DOM；services/shared 的纯逻辑测试保持 node 环境。
-    environmentMatchGlobs: [["packages/ui/**", "jsdom"], ["packages/desktop/**", "jsdom"]],
+    environmentMatchGlobs: [
+      ["packages/ui/**", "jsdom"],
+      ["packages/desktop/**", "jsdom"],
+    ],
     include: forkTestFiles,
   },
 });

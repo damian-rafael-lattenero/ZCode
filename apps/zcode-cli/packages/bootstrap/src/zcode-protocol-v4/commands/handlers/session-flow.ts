@@ -91,7 +91,11 @@ async function sendText(
       genUiContext: payload.genUiContext,
     });
   const routingMode = host.getInputRoutingMode?.(envelope.sessionId ?? "") ?? null;
-  const forceStartNow = payload.requestedDelivery === "startNow";
+  // U1 (2026-11-17): `interrupt` is a real delivery now — prompt-turn maps it to an
+  // in-turn guide plus interruptCurrentModelStep (cut the model step, continue the turn).
+  // It must NOT be normalized to startNow: that would preempt the turn instead of steering.
+  const requestedDelivery = payload.requestedDelivery;
+  const forceStartNow = requestedDelivery === "startNow";
   // 队首被 composer 编辑态冻结时 Core 可能完全空闲；不强制入队会 startNow 越过冻结项。
   const queueHeadEditLocked =
     !forceStartNow &&
@@ -242,9 +246,9 @@ async function sendText(
       botGroupSource: payload.botGroupSource,
       conversationQuotes: payload.conversationQuotes,
       requestedDelivery:
-        payload.requestedDelivery ??
+        requestedDelivery ??
         (routingMode === "guide" ? "guide" : routingMode === "enqueue" ? "queue" : "startNow"),
-      ...(payload.requestedDelivery !== "guide" && routingMode === "guide" && attachments?.length
+      ...(requestedDelivery !== "guide" && routingMode === "guide" && attachments?.length
         ? { fallbackReasonCode: "guide.attachmentsUnsupported" }
         : {}),
       attachmentRefs: payload.attachments,

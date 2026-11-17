@@ -168,8 +168,9 @@ export const sessionActionAvailabilitySchema = z.object({
   queueEdit: actionAvailabilitySchema,
   sendQueuedNow: actionAvailabilitySchema,
   // U1 (2026-11-17): cut the current model step and continue the same turn with a guide.
-  // Optional only for old-CLI frames: absence = the step interrupt is unavailable and the
-  // composer picker offers enqueue only.
+  // Base gate = a foreground turn is running and compact is not locking the session; the
+  // runtime's steerable check stays authoritative. Optional only for old-CLI frames:
+  // absence = the step interrupt is unavailable and the composer picker offers enqueue only.
   interruptSteer: actionAvailabilitySchema.optional(),
   pauseGoal: actionAvailabilitySchema,
   resumeGoal: actionAvailabilitySchema,

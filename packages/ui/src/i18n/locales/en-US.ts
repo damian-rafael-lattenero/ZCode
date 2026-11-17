@@ -6441,9 +6441,16 @@ const enUS: Record<string, string> = {
   "chat.queue.enqueue": "Queue message",
   "chat.queue.title": "Queued messages ({count})",
   "chat.queue.drag": "Drag to reorder",
-  "chat.queue.sendNow": "Steer",
+  "chat.queue.sendNow": "Send now",
   "chat.queue.runNow": "Run now",
   "chat.queue.edit": "Edit",
+  "chat.composer.interruptPicker.title": "Send while this turn is running",
+  "chat.composer.interruptPicker.interrupt": "⚡ Cut and continue",
+  "chat.composer.interruptPicker.interruptDescription":
+    "Ends the current model step and continues in the same turn. A running tool batch finishes first.",
+  "chat.composer.interruptPicker.queue": "⏳ Queue",
+  "chat.composer.interruptPicker.queueDescription":
+    "Starts after the current turn ends. If the turn has already ended, it starts right away.",
   "chat.composerEdit.editingUserQuery": "Editing your last message",
   "chat.composerEdit.editingQueueItem": "Editing a queued message",
   "chat.composerEdit.invalid.notLatest":

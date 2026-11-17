@@ -213,6 +213,13 @@ import {
 } from "@/lib/conversationSelectionReference.js";
 import { deleteConversationAnnotationWithUndo } from "@/selection-comment/index.js";
 import { ConversationBackgroundWorkTrigger } from "@/v4/composer/ConversationBackgroundWorkTrigger.js";
+import {
+  isInterruptSteerOffered,
+  shouldOfferComposerInterruptPicker,
+  useComposerInterruptPickerController,
+  type ComposerInterruptDelivery,
+} from "@/v4/composer/composerInterruptPicker.js";
+import { ComposerInterruptPicker } from "@/v4/composer/ComposerInterruptPickerStrip.js";
 import { V4ComposerCuaEntry } from "@/v4/composer/V4ComposerCuaEntry.js";
 import {
   V4ComposerModeSwitch,
@@ -257,7 +264,7 @@ export interface ConversationComposerSendOptions {
   /** renderer-only：ACK accepted 后由 SessionPane 绑定真实 commandId/sessionId。 */
   telemetrySeed?: ConversationPromptTelemetrySeed;
   /** 本次 busy input 的一次性投递覆盖，不改 session 偏好。 */
-  requestedDelivery?: "startNow" | "queue" | "guide";
+  requestedDelivery?: "startNow" | "queue" | "guide" | "interrupt";
   /** 提交命令创建后由 Composer 订阅权威 projection，覆盖 ACK 丢失后的收口。 */
   onCommandCreated?: (commandId: string) => void;
   sharedContextRefs?: Array<{ kind: "shared_context_import"; context_id: string }>;
@@ -271,7 +278,7 @@ type ComposerSubmit = (
   heldQueueDisposition?: "clearQueueAndSend" | "keepQueueAndSend",
   expectedHeldQueueItemIds?: readonly string[],
   existingTelemetrySeed?: ConversationPromptTelemetrySeed,
-  requestedDelivery?: "startNow" | "queue" | "guide",
+  requestedDelivery?: "startNow" | "queue" | "guide" | "interrupt",
 ) => Promise<void>;
 function getComposerAttachmentTypeLabel(filename: string, mimeType: string): string {
   const leaf = filename.split(/[\\/]/u).at(-1) ?? filename;
@@ -738,7 +745,7 @@ function ConversationComposerImpl({
   const [heldQueueConfirmation, setHeldQueueConfirmation] = useState<{
     queueItemIds: readonly string[];
     telemetrySeed: ConversationPromptTelemetrySeed;
-    requestedDelivery?: "startNow" | "queue" | "guide";
+    requestedDelivery?: "startNow" | "queue" | "guide" | "interrupt";
   } | null>(null);
   const [sendTooltipOpen, setSendTooltipOpen] = useState(false);
   // submit 经 ref 读取最新文本/pending，避免回调随每次输入变更引用。
@@ -750,6 +757,13 @@ function ConversationComposerImpl({
   snapshotRef.current = snapshot;
   // 指向最新渲染的 submit：等待语音识别后由它重新读取最新的附件、引用和可发送状态。
   const latestSubmitRef = useRef<ComposerSubmit | null>(null);
+  // Busy-input picker: the selected delivery re-enters submit with an explicit override,
+  // so the picker branch below never intercepts its own dispatch.
+  const interruptPicker = useComposerInterruptPickerController({
+    onDeliver: useCallback((delivery: ComposerInterruptDelivery) => {
+      void latestSubmitRef.current?.(undefined, undefined, undefined, delivery);
+    }, []),
+  });
   // 这条线断过一次：composer 原本读一个平行的 sharedContextImport prop，而 SessionPane 从没
   // 传过它（全仓 `sharedContextImport=` 零命中），于是首条消息永远不带 sharedContextRefs。
   // 现在从必然拿到的 snapshot 推导，理由与边界见 resolveAttachableShareContext。
@@ -1463,12 +1477,38 @@ function ConversationComposerImpl({
     if (!canSend) setSendTooltipOpen(false);
   }, [canSend]);
 
+  // Close the busy-input picker as soon as the turn or route stops supporting the
+  // choice. Dismissal never touches the draft, attachments or telemetry.
+  useEffect(() => {
+    if (!interruptPicker.open) return;
+    if (
+      !shouldOfferComposerInterruptPicker({
+        canSend,
+        canStop,
+        activeWorks: snapshot?.control.activeWorks ?? [],
+        inputRoutingMode: mode,
+        heldQueueConfirmationOpen: heldQueueConfirmation !== null,
+        explicitDeliveryOverride: false,
+      })
+    ) {
+      interruptPicker.dismiss();
+    }
+  }, [
+    interruptPicker.open,
+    interruptPicker.dismiss,
+    canSend,
+    canStop,
+    heldQueueConfirmation,
+    mode,
+    snapshot?.control.activeWorks,
+  ]);
+
   const submit: ComposerSubmit = useCallback(
     async (
       heldQueueDisposition?: "clearQueueAndSend" | "keepQueueAndSend",
       expectedHeldQueueItemIds?: readonly string[],
       existingTelemetrySeed?: ConversationPromptTelemetrySeed,
-      requestedDelivery?: "startNow" | "queue" | "guide",
+      requestedDelivery?: "startNow" | "queue" | "guide" | "interrupt",
     ) => {
       // 连接 pending 同步进入 ref，覆盖菜单点击后 React 尚未提交的一帧及快捷键提交。
       // 只阻止新输入，不取消正在执行或已排队消息，也不清空草稿。
@@ -1580,6 +1620,22 @@ function ConversationComposerImpl({
         runtimeBlocked ||
         (createSubmissionFromComposer !== undefined && submission === null) ||
         attachmentsApi.hasUnreadyAttachments
+      ) {
+        return;
+      }
+      // A running primary turn turns the first submit into an inline interrupt/queue
+      // choice instead of sending. The guard above already proved the draft is sendable;
+      // explicit overrides (Cmd/Ctrl+Enter, held-queue confirmation) keep sending directly.
+      if (
+        interruptPicker.request({
+          canSend: true,
+          canStop: snapshotRef.current?.control.canStop === true,
+          activeWorks: snapshotRef.current?.control.activeWorks ?? [],
+          inputRoutingMode: snapshotRef.current?.inputRouting.mode ?? "startNow",
+          heldQueueConfirmationOpen: heldQueueConfirmation !== null,
+          explicitDeliveryOverride:
+            requestedDelivery !== undefined || heldQueueDisposition !== undefined,
+        })
       ) {
         return;
       }
@@ -1937,6 +1993,8 @@ function ConversationComposerImpl({
       remoteAvailable,
       runtimeBlocked,
       getCodeCommentContexts,
+      heldQueueConfirmation,
+      interruptPicker.request,
       telemetryDraftConfig,
       modelSelectionView,
       onSendText,
@@ -1997,10 +2055,13 @@ function ConversationComposerImpl({
   // Lexical onChange（首字符也稳定回传，见 LexicalChatInput.TextContentPlugin）。
   const handleEditorChange = useCallback(
     (value: string) => {
+      // Editing changes the prompt the user saw when the picker opened, so the
+      // interrupt/queue question no longer applies. The edited draft stays intact.
+      interruptPicker.dismiss();
       updateText(value);
       scheduleDraftPersist();
     },
-    [scheduleDraftPersist, updateText],
+    [interruptPicker.dismiss, scheduleDraftPersist, updateText],
   );
 
   const handleEditorFocus = useCallback(() => {
@@ -3000,6 +3061,13 @@ function ConversationComposerImpl({
               id: `chat.selections.limit.${conversationSelectionLimitReason}`,
             })}
           </div>
+        ) : null}
+        {interruptPicker.open ? (
+          <ComposerInterruptPicker
+            interruptAllowed={isInterruptSteerOffered(snapshot?.availability.interruptSteer)}
+            onSelect={interruptPicker.select}
+            onDismiss={interruptPicker.dismiss}
+          />
         ) : null}
         <ChatPromptEditor
           extraPlugins={elementMentionPlugin}

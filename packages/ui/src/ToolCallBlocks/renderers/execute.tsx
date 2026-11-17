@@ -8,10 +8,6 @@ import { SquareTerminalIcon } from "lucide-react";
 import { useCallback, useMemo } from "react";
 import { useZCodeIntl } from "@/i18n/IntlProvider.js";
 import { ToolSnapshotFieldNotice } from "@/ToolCallBlocks/ToolSnapshotFieldNotice.js";
-import {
-  canBackgroundToolCall,
-  ToolBackgroundButton,
-} from "@/ToolCallBlocks/ToolBackgroundButton.js";
 import { ToolLayout } from "../ToolLayout.js";
 import type { ToolCallBlockRenderContext } from "../shared.js";
 
@@ -274,18 +270,6 @@ export function ExecuteToolCallBlock(context: ToolCallBlockRenderContext) {
   const { intl } = useZCodeIntl();
   const { toolCallNode, isRunning, statusLabel, errorText, isOfficeMode = false } = context;
   const { toolCall } = toolCallNode;
-  // ctrl+b parity: the background-handoff facts live in raw (toolCallRowAdapter bridge).
-  // The pill gate (raw.v4Status === "running", not legacy isRunning) is shared with the
-  // Agent card in canBackgroundToolCall; once the projection flips the row to
-  // backgrounded=true the pill disappears and the kind label gets the background suffix.
-  const raw = isPlainRecord(toolCall.raw) ? toolCall.raw : undefined;
-  const backgrounded = raw?.backgrounded === true;
-  const onBackgroundToolCall = context.onBackgroundToolCall;
-  const canBackground = canBackgroundToolCall(
-    raw,
-    onBackgroundToolCall !== undefined,
-    isOfficeMode,
-  );
   // v3.18.0 XSG02：摘要展示调用意图，详情仍从原始 input 读取命令，避免 description 替代真实执行内容。
   const description =
     (toolCall.toolName ?? toolCall.kind) === "Bash" && isPlainRecord(toolCall.input)
@@ -378,22 +362,9 @@ export function ExecuteToolCallBlock(context: ToolCallBlockRenderContext) {
                   : "chat.toolCall.execute.conciseCompleted",
               })
             : context.kindLabelOverride) ??
-          (backgrounded ? (
-            // 后台态是条事实不是新设计语言：在既有 kind 标签后缀一枚弱化词。
-            <span>
-              {intl.formatMessage({
-                id: isRunning ? "chat.toolCall.execute.running" : "chat.toolCall.execute.ran",
-              })}
-              <span className="text-foreground-subtle">
-                {" · "}
-                {intl.formatMessage({ id: "chat.toolCall.backgrounded" })}
-              </span>
-            </span>
-          ) : (
-            intl.formatMessage({
-              id: isRunning ? "chat.toolCall.execute.running" : "chat.toolCall.execute.ran",
-            })
-          ))
+          intl.formatMessage({
+            id: isRunning ? "chat.toolCall.execute.running" : "chat.toolCall.execute.ran",
+          })
         }
         sourceLabel={context.sourceLabel}
         primaryText={
@@ -411,17 +382,6 @@ export function ExecuteToolCallBlock(context: ToolCallBlockRenderContext) {
         title={isOfficeMode ? undefined : (description ?? toolCall.title)}
         renderContent={renderContent}
       />
-      {canBackground && onBackgroundToolCall ? (
-        // ctrl+b parity: a running Bash card hands the single command to the background
-        // (v4 backgroundToolCall). Different granularity from the turn-level pill; placed
-        // below the card and not hidden with the collapsed body (same placement contract
-        // as ToolSnapshotFieldNotice). The whole block disappears once the projection
-        // flips the row to backgrounded.
-        <ToolBackgroundButton
-          toolCallId={toolCall.toolId}
-          onBackgroundToolCall={onBackgroundToolCall}
-        />
-      ) : null}
       {!isOfficeMode ? (
         <ToolSnapshotFieldNotice
           refs={toolCall.snapshotRefs ?? []}

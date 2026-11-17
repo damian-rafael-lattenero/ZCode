@@ -1,49 +1,65 @@
 // @vitest-environment jsdom
 
-import { createElement } from "react";
-import { cleanup, fireEvent, render, screen } from "./fork-testing";
-import { afterEach, describe, expect, it } from "vitest";
+import { createElement, useState } from "react";
+import { act, cleanup, fireEvent, render, screen } from "./fork-testing";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { TID_V4_TOOL_BACKGROUND, testId } from "@zcode/shared/test-ids";
 import { ToolCallBlock } from "@/ToolCallBlocks.js";
-import { canBackgroundToolCall } from "@/ToolCallBlocks/ToolBackgroundButton.js";
+import { canBackgroundToolCall, PILL_DELAY_MS } from "@/ToolCallBlocks/ToolBackgroundButton.js";
 import { ZCodeIntlProvider } from "@/i18n/IntlProvider.js";
 import type { TaskChatToolCallTreeNode } from "@/lib/toolCallTree.js";
 
-// ctrl+b parity：运行中的 Bash 卡获得单工具粒度的「Go to background」。
-// DOM 契约：data-testid = testId("v4-tool-background", toolCallId)，渲染在 execute 卡
-// 下方（ToolSnapshotFieldNotice 同款「不随收起隐藏」位置），仅当
-// raw.v4Status === "running" && raw.backgrounded !== true && onBackgroundToolCall 在场。
+// ctrl+b parity: any running tool row that the host marks `raw.backgroundable` gets
+// the single-tool "Go to background" pill after PILL_DELAY_MS of uninterrupted
+// running. DOM contract: data-testid = testId("v4-tool-background", toolCallId),
+// rendered as a sibling below the generic tool card (same placement as
+// ToolSnapshotFieldNotice: it does not hide with the collapsed body).
 
-afterEach(cleanup);
+beforeEach(() => {
+  vi.useFakeTimers();
+});
 
-// fork-testing 只导出 getByTestId（断言存在）；缺席断言用同款过滤逻辑就地实现。
-function queryByTestId(id: string): Element | null {
-  return (
-    Array.from(document.body.querySelectorAll("[data-testid]")).find(
-      (element) => element.getAttribute("data-testid") === id,
-    ) ?? null
+afterEach(() => {
+  cleanup();
+  vi.useRealTimers();
+});
+
+// fork-testing only exports getByTestId (which asserts presence); absence and count
+// assertions use the same filter logic locally.
+function queryAllByTestId(id: string): Element[] {
+  return Array.from(document.body.querySelectorAll("[data-testid]")).filter(
+    (element) => element.getAttribute("data-testid") === id,
   );
 }
 
-// 与 v4/toolCallRowAdapter.toolCallRowToLegacyNode 的 raw 桥接同形（只含本特性消费的键）。
-function executeNode(options: {
+function queryByTestId(id: string): Element | null {
+  return queryAllByTestId(id)[0] ?? null;
+}
+
+// Mirrors the v4/toolCallRowAdapter.toolCallRowToLegacyNode raw bridge shape
+// (only the keys this feature consumes).
+function toolNode(options: {
   toolCallId: string;
+  toolName: string;
+  input?: unknown;
   v4Status: string;
+  backgroundable?: true;
   backgrounded?: true;
   legacyStatus?: string;
 }): TaskChatToolCallTreeNode {
   return {
     toolCall: {
       toolId: options.toolCallId,
-      toolName: "Bash",
-      kind: "Bash",
-      input: { command: "sleep 30" },
+      toolName: options.toolName,
+      kind: options.toolName,
+      input: options.input ?? {},
       status:
         options.legacyStatus ?? (options.v4Status === "running" ? "in_progress" : "completed"),
       raw: {
         toolCallId: options.toolCallId,
-        toolName: "Bash",
+        toolName: options.toolName,
         v4Status: options.v4Status,
+        ...(options.backgroundable ? { backgroundable: true } : {}),
         ...(options.backgrounded ? { backgrounded: true } : {}),
       },
     },
@@ -51,123 +67,356 @@ function executeNode(options: {
   };
 }
 
-function renderBlock(node: TaskChatToolCallTreeNode, onBackgroundToolCall?: (id: string) => void) {
+function executeNode(options: {
+  toolCallId: string;
+  v4Status: string;
+  backgroundable?: true;
+  backgrounded?: true;
+  legacyStatus?: string;
+}): TaskChatToolCallTreeNode {
+  return toolNode({
+    ...options,
+    toolName: "Bash",
+    input: { command: "sleep 30" },
+  });
+}
+
+function agentNode(options: {
+  toolCallId: string;
+  v4Status: string;
+  backgroundable?: true;
+  backgrounded?: true;
+  legacyStatus?: string;
+}): TaskChatToolCallTreeNode {
+  return toolNode({
+    ...options,
+    toolName: "Agent",
+    input: { description: "Investigate the failure" },
+  });
+}
+
+function grepNode(options: {
+  toolCallId: string;
+  v4Status: string;
+  backgroundable?: true;
+  backgrounded?: true;
+}): TaskChatToolCallTreeNode {
+  return toolNode({
+    ...options,
+    toolName: "Grep",
+    input: { pattern: "needle", path: "src" },
+  });
+}
+
+type BackgroundHandler = (toolCallId: string) => void;
+
+function blockProps(node: TaskChatToolCallTreeNode, onBackgroundToolCall?: BackgroundHandler) {
+  return {
+    toolCallNode: node,
+    workspacePath: "/tmp/workspace",
+    ...(onBackgroundToolCall ? { onBackgroundToolCall } : {}),
+  };
+}
+
+function renderBlock(node: TaskChatToolCallTreeNode, onBackgroundToolCall?: BackgroundHandler) {
   return render(
     createElement(
       ZCodeIntlProvider,
       { initialLocale: "en-US" },
-      createElement(ToolCallBlock, {
-        toolCallNode: node,
-        workspacePath: "/tmp/workspace",
-        ...(onBackgroundToolCall ? { onBackgroundToolCall } : {}),
-      }),
+      createElement(ToolCallBlock, blockProps(node, onBackgroundToolCall)),
     ),
   );
 }
 
-// Agent/Task top-level card: same raw bridge shape, kind normalized to the agent family.
-function agentNode(options: {
-  toolCallId: string;
-  v4Status: string;
-  backgrounded?: true;
-  legacyStatus?: string;
-}): TaskChatToolCallTreeNode {
+// Stateful host harness: lets a test flip the same card from running to backgrounded
+// (or any terminal status) without a remount, matching real projection updates.
+function renderUpdatable(
+  initialNode: TaskChatToolCallTreeNode,
+  onBackgroundToolCall?: BackgroundHandler,
+) {
+  let updateNode: ((node: TaskChatToolCallTreeNode) => void) | undefined;
+
+  function Harness() {
+    const [node, setNode] = useState(initialNode);
+    updateNode = setNode;
+    return createElement(ToolCallBlock, blockProps(node, onBackgroundToolCall));
+  }
+
+  render(createElement(ZCodeIntlProvider, { initialLocale: "en-US" }, createElement(Harness)));
+
   return {
-    toolCall: {
-      toolId: options.toolCallId,
-      toolName: "Agent",
-      kind: "Agent",
-      input: { description: "Investigate the failure" },
-      status:
-        options.legacyStatus ?? (options.v4Status === "running" ? "in_progress" : "completed"),
-      raw: {
-        toolCallId: options.toolCallId,
-        toolName: "Agent",
-        v4Status: options.v4Status,
-        ...(options.backgrounded ? { backgrounded: true } : {}),
-      },
+    update(nextNode: TaskChatToolCallTreeNode): void {
+      act(() => {
+        updateNode?.(nextNode);
+      });
     },
-    childToolCalls: [],
   };
 }
 
-describe("execute 卡的单工具「Go to background」（ctrl+b parity）", () => {
-  it("running 且未 backgrounded 且宿主在场时渲染按钮，testid 带 toolCallId", () => {
-    renderBlock(executeNode({ toolCallId: "tc-live", v4Status: "running" }), () => {});
+function advance(ms: number): void {
+  act(() => {
+    vi.advanceTimersByTime(ms);
+  });
+}
+
+describe("per-tool Go to background delay", () => {
+  it("declares the 2.5s delay constant", () => {
+    expect(PILL_DELAY_MS).toBe(2500);
+  });
+
+  it("stays hidden at 2400ms and appears at 2500ms for a running backgroundable row", () => {
+    renderBlock(
+      executeNode({ toolCallId: "tc-delay", v4Status: "running", backgroundable: true }),
+      () => {},
+    );
+
+    advance(PILL_DELAY_MS - 100);
+    expect(queryByTestId(testId(TID_V4_TOOL_BACKGROUND, "tc-delay"))).toBeNull();
+
+    advance(100);
+    expect(screen.getByTestId(testId(TID_V4_TOOL_BACKGROUND, "tc-delay"))).toBeTruthy();
+  });
+});
+
+describe("Bash (execute) card", () => {
+  it("renders the pill with the toolCallId test id after the delay", () => {
+    renderBlock(
+      executeNode({ toolCallId: "tc-live", v4Status: "running", backgroundable: true }),
+      () => {},
+    );
+    advance(PILL_DELAY_MS);
     expect(screen.getByTestId(testId(TID_V4_TOOL_BACKGROUND, "tc-live"))).toBeTruthy();
   });
 
-  it("终态（success）不渲染按钮", () => {
-    renderBlock(executeNode({ toolCallId: "tc-done", v4Status: "success" }), () => {});
-    expect(queryByTestId(testId(TID_V4_TOOL_BACKGROUND, "tc-done"))).toBeNull();
+  it("never renders without the host backgroundable capability", () => {
+    renderBlock(executeNode({ toolCallId: "tc-no-cap", v4Status: "running" }), () => {});
+    advance(PILL_DELAY_MS * 4);
+    expect(queryByTestId(testId(TID_V4_TOOL_BACKGROUND, "tc-no-cap"))).toBeNull();
   });
 
-  it("投影翻成 backgrounded 后不再渲染按钮", () => {
-    renderBlock(
-      executeNode({ toolCallId: "tc-bg", v4Status: "running", backgrounded: true }),
+  it("hides immediately once the projection flips the row to backgrounded", () => {
+    const view = renderUpdatable(
+      executeNode({ toolCallId: "tc-bg", v4Status: "running", backgroundable: true }),
       () => {},
+    );
+    advance(PILL_DELAY_MS);
+    expect(screen.getByTestId(testId(TID_V4_TOOL_BACKGROUND, "tc-bg"))).toBeTruthy();
+
+    view.update(
+      executeNode({
+        toolCallId: "tc-bg",
+        v4Status: "running",
+        backgroundable: true,
+        backgrounded: true,
+      }),
     );
     expect(queryByTestId(testId(TID_V4_TOOL_BACKGROUND, "tc-bg"))).toBeNull();
   });
 
-  it("宿主缺席（只读 / runtime 未就绪）不渲染按钮", () => {
-    renderBlock(executeNode({ toolCallId: "tc-ro", v4Status: "running" }));
+  it("never renders for a terminal (success) row", () => {
+    renderBlock(
+      executeNode({ toolCallId: "tc-done", v4Status: "success", backgroundable: true }),
+      () => {},
+    );
+    advance(PILL_DELAY_MS * 4);
+    expect(queryByTestId(testId(TID_V4_TOOL_BACKGROUND, "tc-done"))).toBeNull();
+  });
+
+  it("never renders for a pending row", () => {
+    renderBlock(
+      executeNode({
+        toolCallId: "tc-pending",
+        v4Status: "pendingApproval",
+        backgroundable: true,
+        legacyStatus: "pending",
+      }),
+      () => {},
+    );
+    advance(PILL_DELAY_MS * 4);
+    expect(queryByTestId(testId(TID_V4_TOOL_BACKGROUND, "tc-pending"))).toBeNull();
+  });
+
+  it("never renders while the host handler is absent", () => {
+    renderBlock(executeNode({ toolCallId: "tc-ro", v4Status: "running", backgroundable: true }));
+    advance(PILL_DELAY_MS * 4);
     expect(queryByTestId(testId(TID_V4_TOOL_BACKGROUND, "tc-ro"))).toBeNull();
   });
 
-  it("点击把该卡的 toolCallId 交给宿主分发器", () => {
+  it("click hands this card's toolCallId to the host dispatcher", () => {
     const dispatched: string[] = [];
-    renderBlock(executeNode({ toolCallId: "tc-click", v4Status: "running" }), (toolCallId) =>
-      dispatched.push(toolCallId),
+    renderBlock(
+      executeNode({ toolCallId: "tc-click", v4Status: "running", backgroundable: true }),
+      (toolCallId) => dispatched.push(toolCallId),
     );
+    advance(PILL_DELAY_MS);
     fireEvent.click(screen.getByTestId(testId(TID_V4_TOOL_BACKGROUND, "tc-click")));
     expect(dispatched).toEqual(["tc-click"]);
   });
 });
 
-describe("Agent card single-tool Go to background", () => {
-  it("renders the pill with the toolCallId test id when running, not backgrounded and handler present", () => {
-    renderBlock(agentNode({ toolCallId: "agent-live", v4Status: "running" }), () => {});
+describe("generic family cards", () => {
+  it("gives a non-Bash/non-Agent family (Grep) the same pill after the delay", () => {
+    renderBlock(
+      grepNode({ toolCallId: "grep-live", v4Status: "running", backgroundable: true }),
+      () => {},
+    );
+    advance(PILL_DELAY_MS);
+    expect(screen.getByTestId(testId(TID_V4_TOOL_BACKGROUND, "grep-live"))).toBeTruthy();
+  });
+
+  it("never renders for a generic family row without backgroundable", () => {
+    renderBlock(grepNode({ toolCallId: "grep-no-cap", v4Status: "running" }), () => {});
+    advance(PILL_DELAY_MS * 4);
+    expect(queryByTestId(testId(TID_V4_TOOL_BACKGROUND, "grep-no-cap"))).toBeNull();
+  });
+
+  it("never renders once a generic row is backgrounded", () => {
+    renderBlock(
+      grepNode({
+        toolCallId: "grep-bg",
+        v4Status: "running",
+        backgroundable: true,
+        backgrounded: true,
+      }),
+      () => {},
+    );
+    advance(PILL_DELAY_MS * 4);
+    expect(queryByTestId(testId(TID_V4_TOOL_BACKGROUND, "grep-bg"))).toBeNull();
+  });
+
+  it("keeps the Background suffix near the card once backgrounded", () => {
+    renderBlock(
+      grepNode({
+        toolCallId: "grep-suffix",
+        v4Status: "running",
+        backgroundable: true,
+        backgrounded: true,
+      }),
+      () => {},
+    );
+    expect(screen.getByText("· Background")).toBeTruthy();
+  });
+});
+
+describe("Agent card", () => {
+  it("renders the pill with the toolCallId test id after the delay", () => {
+    renderBlock(
+      agentNode({ toolCallId: "agent-live", v4Status: "running", backgroundable: true }),
+      () => {},
+    );
+    advance(PILL_DELAY_MS);
     expect(screen.getByTestId(testId(TID_V4_TOOL_BACKGROUND, "agent-live"))).toBeTruthy();
   });
 
-  it("renders no pill for a terminal (success) row", () => {
-    renderBlock(agentNode({ toolCallId: "agent-done", v4Status: "success" }), () => {});
-    expect(queryByTestId(testId(TID_V4_TOOL_BACKGROUND, "agent-done"))).toBeNull();
+  it("never renders without the host backgroundable capability", () => {
+    renderBlock(agentNode({ toolCallId: "agent-no-cap", v4Status: "running" }), () => {});
+    advance(PILL_DELAY_MS * 4);
+    expect(queryByTestId(testId(TID_V4_TOOL_BACKGROUND, "agent-no-cap"))).toBeNull();
   });
 
-  it("renders no pill once the projection flips the row to backgrounded", () => {
-    renderBlock(
-      agentNode({ toolCallId: "agent-bg", v4Status: "running", backgrounded: true }),
+  it("hides immediately once the projection flips the row to backgrounded", () => {
+    const view = renderUpdatable(
+      agentNode({ toolCallId: "agent-bg", v4Status: "running", backgroundable: true }),
       () => {},
+    );
+    advance(PILL_DELAY_MS);
+    expect(screen.getByTestId(testId(TID_V4_TOOL_BACKGROUND, "agent-bg"))).toBeTruthy();
+
+    view.update(
+      agentNode({
+        toolCallId: "agent-bg",
+        v4Status: "running",
+        backgroundable: true,
+        backgrounded: true,
+      }),
     );
     expect(queryByTestId(testId(TID_V4_TOOL_BACKGROUND, "agent-bg"))).toBeNull();
   });
 
-  it("renders no pill when the host does not inject the handler (read-only / runtime not ready)", () => {
-    renderBlock(agentNode({ toolCallId: "agent-ro", v4Status: "running" }));
+  it("never renders for a terminal (success) row", () => {
+    renderBlock(
+      agentNode({ toolCallId: "agent-done", v4Status: "success", backgroundable: true }),
+      () => {},
+    );
+    advance(PILL_DELAY_MS * 4);
+    expect(queryByTestId(testId(TID_V4_TOOL_BACKGROUND, "agent-done"))).toBeNull();
+  });
+
+  it("never renders while the host handler is absent", () => {
+    renderBlock(agentNode({ toolCallId: "agent-ro", v4Status: "running", backgroundable: true }));
+    advance(PILL_DELAY_MS * 4);
     expect(queryByTestId(testId(TID_V4_TOOL_BACKGROUND, "agent-ro"))).toBeNull();
   });
 
   it("click hands this card's toolCallId to the host dispatcher", () => {
     const dispatched: string[] = [];
-    renderBlock(agentNode({ toolCallId: "agent-click", v4Status: "running" }), (toolCallId) =>
-      dispatched.push(toolCallId),
+    renderBlock(
+      agentNode({ toolCallId: "agent-click", v4Status: "running", backgroundable: true }),
+      (toolCallId) => dispatched.push(toolCallId),
     );
+    advance(PILL_DELAY_MS);
     fireEvent.click(screen.getByTestId(testId(TID_V4_TOOL_BACKGROUND, "agent-click")));
     expect(dispatched).toEqual(["agent-click"]);
   });
 });
 
+describe("single mount per card", () => {
+  it("renders exactly one pill for a Bash card", () => {
+    renderBlock(
+      executeNode({ toolCallId: "one-bash", v4Status: "running", backgroundable: true }),
+      () => {},
+    );
+    advance(PILL_DELAY_MS);
+    expect(queryAllByTestId(testId(TID_V4_TOOL_BACKGROUND, "one-bash"))).toHaveLength(1);
+  });
+
+  it("renders exactly one pill for an Agent card", () => {
+    renderBlock(
+      agentNode({ toolCallId: "one-agent", v4Status: "running", backgroundable: true }),
+      () => {},
+    );
+    advance(PILL_DELAY_MS);
+    expect(queryAllByTestId(testId(TID_V4_TOOL_BACKGROUND, "one-agent"))).toHaveLength(1);
+  });
+
+  it("renders exactly one pill for a generic family card", () => {
+    renderBlock(
+      grepNode({ toolCallId: "one-grep", v4Status: "running", backgroundable: true }),
+      () => {},
+    );
+    advance(PILL_DELAY_MS);
+    expect(queryAllByTestId(testId(TID_V4_TOOL_BACKGROUND, "one-grep"))).toHaveLength(1);
+  });
+});
+
 describe("canBackgroundToolCall gate", () => {
-  it("requires a handler, a plain record, running v4 status and no prior background flip", () => {
-    expect(canBackgroundToolCall({ v4Status: "running" }, true, false)).toBe(true);
-    expect(canBackgroundToolCall({ v4Status: "running", backgrounded: true }, true, false)).toBe(
+  it("requires the host capability, a handler, a plain record, running status and no prior flip", () => {
+    expect(canBackgroundToolCall({ v4Status: "running", backgroundable: true }, true, false)).toBe(
+      true,
+    );
+    expect(canBackgroundToolCall({ v4Status: "running" }, true, false)).toBe(false);
+    expect(canBackgroundToolCall({ v4Status: "running", backgroundable: false }, true, false)).toBe(
       false,
     );
-    expect(canBackgroundToolCall({ v4Status: "success" }, true, false)).toBe(false);
-    expect(canBackgroundToolCall({ v4Status: "running" }, false, false)).toBe(false);
-    expect(canBackgroundToolCall({ v4Status: "running" }, true, true)).toBe(false);
+    expect(
+      canBackgroundToolCall(
+        { v4Status: "running", backgroundable: true, backgrounded: true },
+        true,
+        false,
+      ),
+    ).toBe(false);
+    expect(canBackgroundToolCall({ v4Status: "success", backgroundable: true }, true, false)).toBe(
+      false,
+    );
+    expect(
+      canBackgroundToolCall({ v4Status: "pendingApproval", backgroundable: true }, true, false),
+    ).toBe(false);
+    expect(canBackgroundToolCall({ v4Status: "running", backgroundable: true }, false, false)).toBe(
+      false,
+    );
+    expect(canBackgroundToolCall({ v4Status: "running", backgroundable: true }, true, true)).toBe(
+      false,
+    );
     expect(canBackgroundToolCall(["running"], true, false)).toBe(false);
     expect(canBackgroundToolCall("running", true, false)).toBe(false);
     expect(canBackgroundToolCall(null, true, false)).toBe(false);

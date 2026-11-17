@@ -5172,6 +5172,11 @@ export class ProductProjection {
   private onBackgroundTurnDemoted(event: SessionEvent): ConversationDelta[] {
     this.outputContinuationTextRowId = null;
     const deltas: ConversationDelta[] = [
+      // demote 之后 isRunning() 转 false：该 turn 的流式事件一律被拒收（迟到终态不复活），
+      // 未定稿的 text/reasoning 行因此再也等不到自己的 close。thinking 阶段的 demote
+      // （owner 2026-11-17 drill）会把 reasoning 行永远留在 streaming —— 时间线上就是一个
+      // 收不了口的 thinking 转圈。前台段落在这里定稿，剩余内容只经 backgroundResult 回来。
+      ...this.closeStreamingRows("complete"),
       ...this.upsertTurnHeader(event, "completedSuccess"),
       {
         op: "state.updated",

@@ -107,10 +107,18 @@ BGV01–BGV06 验收见 [后台 Bash 输出详情](background-bash-output-detail
   under running Agent/Task cards, not only under running Bash cards. The pill lives in
   the shared `ToolBackgroundButton` component so both renderers use one gate
   (`raw.v4Status === "running"`, not already backgrounded, not office mode).
-- Turn-level: the desktop entry for `backgroundTurn` is restored as a pill under the
-  live "Working" indicator (`v4-timeline-background-turn`), for `userInput`/`editRerun`
-  turns only. The runtime/protocol/facade are the same ones the phone already uses; the
-  turn keeps executing detached and its result arrives as a backgroundResult turn.
+- Turn-level: **no desktop entry** (owner verdict 2026-11-05, reconfirmed 2026-11-17 after
+  a live drill). The 2026-11-16 pill under the live "Working" indicator
+  (`v4-timeline-background-turn`) was removed: `backgroundTurnHoldsQueueDrain` keeps the
+  session's only turn slot until the detached turn settles, so the pill opened a session
+  state the composer could not use (typed input became a queue item, and the queue's
+  "Steer"/run-now is refused while the phase is completed). The same drill exposed a
+  projection defect that is fixed: demote now seals the open text/reasoning rows
+  (`closeStreamingRows`), because the demoted turn's stream is refused afterwards — a
+  demote during the thinking phase used to leave the reasoning row `streaming` forever.
+  The `backgroundTurn` command/runtime/projection stay (phone daemon channel, Task Island
+  detached lane, `cancelBackgroundWork`); the desktop hands single tool calls to the
+  background instead.
 - Phone: the daemon channel exposes the additive query
   `{"kind":"backgroundToolCall","taskId":…,"toolCallId":…}` (same wire shape as
   `backgroundTurn` but naming the tool call). The bot's live card renders the turn row

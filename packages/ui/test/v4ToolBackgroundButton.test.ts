@@ -3,16 +3,9 @@
 import { createElement } from "react";
 import { cleanup, fireEvent, render, screen } from "./fork-testing";
 import { afterEach, describe, expect, it } from "vitest";
-import {
-  TID_V4_TIMELINE_BACKGROUND_TURN,
-  TID_V4_TOOL_BACKGROUND,
-  testId,
-} from "@zcode/shared/test-ids";
-import type { TurnHeaderRow } from "@zcode/shared/zcode-protocol-v4";
+import { TID_V4_TOOL_BACKGROUND, testId } from "@zcode/shared/test-ids";
 import { ToolCallBlock } from "@/ToolCallBlocks.js";
 import { canBackgroundToolCall } from "@/ToolCallBlocks/ToolBackgroundButton.js";
-import { canDemoteTurn, TurnBackgroundButton } from "@/v4/ConversationTurnGroup.js";
-import type { ConversationTurnRenderUnit } from "@/v4/conversationTurnRenderUnits.js";
 import { ZCodeIntlProvider } from "@/i18n/IntlProvider.js";
 import type { TaskChatToolCallTreeNode } from "@/lib/toolCallTree.js";
 
@@ -98,20 +91,6 @@ function agentNode(options: {
   };
 }
 
-function turnWithOrigin(origin: string): Pick<ConversationTurnRenderUnit, "header"> {
-  return { header: { origin } as TurnHeaderRow };
-}
-
-function renderTurnPill(onBackgroundTurn?: () => void) {
-  return render(
-    createElement(
-      ZCodeIntlProvider,
-      { initialLocale: "en-US" },
-      createElement(TurnBackgroundButton, onBackgroundTurn ? { onBackgroundTurn } : {}),
-    ),
-  );
-}
-
 describe("execute 卡的单工具「Go to background」（ctrl+b parity）", () => {
   it("running 且未 backgrounded 且宿主在场时渲染按钮，testid 带 toolCallId", () => {
     renderBlock(executeNode({ toolCallId: "tc-live", v4Status: "running" }), () => {});
@@ -192,37 +171,5 @@ describe("canBackgroundToolCall gate", () => {
     expect(canBackgroundToolCall(["running"], true, false)).toBe(false);
     expect(canBackgroundToolCall("running", true, false)).toBe(false);
     expect(canBackgroundToolCall(null, true, false)).toBe(false);
-  });
-});
-
-describe("canDemoteTurn gate", () => {
-  it("allows only regular user turns", () => {
-    expect(canDemoteTurn(turnWithOrigin("userInput"))).toBe(true);
-    expect(canDemoteTurn(turnWithOrigin("editRerun"))).toBe(true);
-    expect(canDemoteTurn(turnWithOrigin("backgroundResult"))).toBe(false);
-    expect(canDemoteTurn(turnWithOrigin("goalContinuation"))).toBe(false);
-    expect(canDemoteTurn(turnWithOrigin("workflowLaunch"))).toBe(false);
-    expect(canDemoteTurn({ header: undefined })).toBe(false);
-  });
-});
-
-describe("turn-level Go to background pill", () => {
-  it("renders the timeline pill when the handler is present", () => {
-    renderTurnPill(() => {});
-    expect(screen.getByTestId(TID_V4_TIMELINE_BACKGROUND_TURN)).toBeTruthy();
-  });
-
-  it("renders nothing when the handler is absent", () => {
-    renderTurnPill();
-    expect(queryByTestId(TID_V4_TIMELINE_BACKGROUND_TURN)).toBeNull();
-  });
-
-  it("click fires the handler", () => {
-    let clicks = 0;
-    renderTurnPill(() => {
-      clicks += 1;
-    });
-    fireEvent.click(screen.getByTestId(TID_V4_TIMELINE_BACKGROUND_TURN));
-    expect(clicks).toBe(1);
   });
 });

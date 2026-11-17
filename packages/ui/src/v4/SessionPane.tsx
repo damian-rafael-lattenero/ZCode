@@ -3212,27 +3212,12 @@ export function SessionPane({
     [dispatchCommand, sessionId],
   );
 
-  // Turn-level demotion (v4 `backgroundTurn`): detaches the whole running primaryTurn into a
-  // background turn. Different granularity from handleBackgroundToolCall below, which only
-  // detaches one tool call. Identity guard (expectedForegroundExecutionId) is optional and
-  // omitted here; the runtime answers noop (guard.stopTargetChanged) when idle and
-  // unsupported (fault.command.backgroundTurnUnsupported) for non-detachable turns.
+  // Single-tool demotion (OpenCode ctrl+b parity): the toolCallId comes from the running row
+  // itself (only the card knows which call is live), so the pane does not look it up in
+  // activeWorks; runtime resolves execution identity and state guards per toolCallId. No
+  // optimistic phase: the card flips to the background state only when the authoritative
+  // projection (row.backgrounded / row.workId) replays (runtimeFactsAreAuthoritative).
   // Defined before the rowContext memo (same constraint as handleCancelBackgroundWork).
-  const handleBackgroundTurn = useCallback(() => {
-    if (!sessionId) return;
-    logger.lifecycle.info("[v4-pane] backgroundTurn command dispatched", { sessionId });
-    void dispatchCommand("backgroundTurn", {}, sessionId).catch((error) => {
-      logger.lifecycle.warn(`[v4-pane] backgroundTurn failed: ${String(error)}`);
-    });
-  }, [dispatchCommand, sessionId]);
-
-  // Single-tool demotion (OpenCode ctrl+b parity): unlike handleBackgroundTurn above, the
-  // toolCallId comes from the running row itself (only the card knows which call is live), so
-  // the pane does not look it up in activeWorks; runtime resolves execution identity and state
-  // guards per toolCallId. No optimistic phase: the card flips to the background state only
-  // when the authoritative projection (row.backgrounded / row.workId) replays
-  // (runtimeFactsAreAuthoritative). Defined before the rowContext memo (same constraint as
-  // handleCancelBackgroundWork).
   const handleBackgroundToolCall = useCallback(
     (toolCallId: string) => {
       if (!sessionId) return;
@@ -3391,10 +3376,9 @@ export function SessionPane({
       onOpenWorkflowArtifact:
         runtimeReady && onOpenWorkflowArtifact ? handleOpenWorkflowArtifact : undefined,
       onCancelBackgroundWork: readOnly || !runtimeReady ? undefined : handleCancelBackgroundWork,
-      // Turn-level and single-tool background demotion share the same two gates (read-only,
-      // runtime ready). Absence removes the corresponding pill entirely: no turn pill under
-      // the live tail and no pill under a running Bash/Agent card.
-      onBackgroundTurn: readOnly || !runtimeReady ? undefined : handleBackgroundTurn,
+      // Single-tool background demotion: absence removes the pill entirely (read-only,
+      // runtime not ready). No turn-level entry: the detached turn keeps the session's only
+      // turn slot, so the generic turn pill is deliberately not offered (owner verdict).
       onBackgroundToolCall: readOnly || !runtimeReady ? undefined : handleBackgroundToolCall,
       // Resume 进入会话上下文的唯一供给点；灰度与只读两道门都在 resolveWorkflowResumeHandler 里，
       // 断在这里等于工具卡页脚与摘要卡的按钮一起消失。
@@ -3478,7 +3462,6 @@ export function SessionPane({
       readOnly,
       runtimeReady,
       handleCancelBackgroundWork,
-      handleBackgroundTurn,
       handleBackgroundToolCall,
       dynamicWorkflowEnabled,
       handleResumeWorkflowRun,
@@ -6700,7 +6683,10 @@ export function SessionPane({
           activeEditLockConfirmed={composerEdit.editSession?.lockConfirmed ?? false}
           onReleaseEditLock={composerEdit.releaseQueueItemEditLock}
           onFocusEditInComposer={composerEdit.requestEditFocus}
-          onSendNow={handleSendQueuedNow}
+          // availability 是权威事实：会话不在 running（含 demote 后的 completed）时
+          // sendQueuedNow 必被 CLI 拒绝（guard.sendQueuedNowRequiresRunning），渲染一个
+          // 点了没有任何反馈的按钮就是装饰。恢复队列消费走 onResume 那条显式路径。
+          onSendNow={snapshot.availability.sendQueuedNow.allowed ? handleSendQueuedNow : undefined}
           onMoveItem={handleReorderQueueItem}
           onResume={handleResumeQueue}
         />

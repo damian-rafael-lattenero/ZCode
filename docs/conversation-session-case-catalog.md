@@ -5938,6 +5938,19 @@ ensureReady/restart 必须拒绝，原实例不关闭且 generation 不变；正
 点按 composer 按钮的 DT01/DT05–DT08 pending E2E 入口已消失——那些 pending spec 视为
 obsolete，除非未来恢复 turn 级入口，不再 replay。
 
+**2026-11-17 复裁（owner drill）：BT 2.0 的 timeline pill 撤回 + demote 定稿前台流。**
+2026-11-16 的 BT 2.0 把 turn 级 pill 重新挂回 live tail（`v4-timeline-background-turn`），
+owner 当日实测 thinking 阶段的 demote：thinking 一直转圈，随后输入只得到「Steer」而点了
+没有反应。两个根因分别修掉：
+1. 投影：demote 后 `isRunning()` 转 false，该 turn 的流式事件被拒收，未定稿的 text/reasoning
+   行永远等不到自己的 close。`onBackgroundTurnDemoted` 现在先 `closeStreamingRows("complete")`
+   再封 header（剩余内容只经 backgroundResult 回来）。
+2. 入口：turn 级 pill 从桌面撤除（回到 2026-11-05 裁决）——`backgroundTurnHoldsQueueDrain`
+   让 detached turn 占住唯一 turn 名额，输入只能排队且 phase 已 completed 时
+   `sendQueuedNow` 必被拒（`guard.sendQueuedNowRequiresRunning`），入口本身只是陷阱。
+   队列面板的 "Steer"/run-now 现在按 availability 渲染，不再给点了没反应的按钮。
+`backgroundTurn` 协议、runtime、facade、Task Island 与手机 daemon channel 全部不变。
+
 owner 2026-11-04 裁决：运行中的 primary turn 可由用户主动转入 background（demote），解除
 completion gate，让用户立即继续其他工作；turn 本身不得中断。该裁决取代 background matrix
 BG-P03 的剪枝（Ctrl+B 类前台转后台控制从 "unsupported product surface" 变为 accepted 产品能力）。

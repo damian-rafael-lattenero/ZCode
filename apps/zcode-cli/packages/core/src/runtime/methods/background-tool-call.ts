@@ -7,7 +7,7 @@ import { supportsBashBackgroundRequestByToolCallId } from "../../tool/handlers/b
 
 /**
  * BT (2026-11-05, OpenCode ctrl+b parity): move a still-running foreground tool
- * call to the background. Two legs, checked in order:
+ * call to the background. Three legs, checked in order:
  *
  * 1. Bash — the handoff lives in the execution adapter's toolCallId registry:
  *    the entry must exist, be state "foreground" and not aborted. A miss
@@ -26,8 +26,15 @@ import { supportsBashBackgroundRequestByToolCallId } from "../../tool/handlers/b
  *    foreground guard (modelOverride.background === "deny") refuses by leaving
  *    the entry untouched, which surfaces here as NOOP.
  *
- * `unsupported` means neither capability exists in this runtime (stub / old
- * port). Any other miss is `noop`, the same guard semantics as the demote path.
+ * 3. Generic tool (BT 2.0, 2026-11-17) — the executor's DetachedToolTaskStore owns
+ *    in-flight calls of tools whose ToolEntry declares the host-authoritative
+ *    `backgrounding` capability (Grep, Glob, WebFetch, WebSearch). The store flips
+ *    only a running registered call and resolves it with a synthetic result; the
+ *    original handler keeps running and settles through the same background task
+ *    pipeline. Unknown/settled/not-backgroundable calls are a NOOP.
+ *
+ * `unsupported` means no handoff leg exists in this runtime (stub / old port).
+ * Any other miss is `noop`, the same guard semantics as the demote path.
  */
 export async function backgroundRunningToolCall(
   this: AgentRuntimeInternal,
@@ -85,8 +92,21 @@ export async function backgroundRunningToolCall(
     }
   }
 
-  if (!bashHandoffSupported && !agentHandoffSupported) {
-    // Neither port exposes a handoff: the caller reports an unsupported fault.
+  let toolHandoffSupported = false;
+  if (this.executor?.requestBackgroundToolCall) {
+    toolHandoffSupported = true;
+    const generic = this.executor.requestBackgroundToolCall(toolCallId);
+    if (generic.kind === "backgrounded") {
+      this.logger?.info?.("Running tool call moved to background by user", {
+        ...logContext(),
+        workId: generic.workId,
+      });
+      return { kind: "backgrounded", workId: generic.workId };
+    }
+  }
+
+  if (!bashHandoffSupported && !agentHandoffSupported && !toolHandoffSupported) {
+    // No port exposes a handoff: the caller reports an unsupported fault.
     return { kind: "unsupported" };
   }
   return { kind: "noop" };

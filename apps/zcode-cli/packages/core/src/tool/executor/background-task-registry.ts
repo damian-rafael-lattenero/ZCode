@@ -18,6 +18,10 @@ import type { ExecutableToolCall } from "../types.js";
 import type { ToolExecutorDeps } from "./types.js";
 import { isRecord } from "./utils.js";
 import { backgroundTaskOutputMetadata } from "./background-task-output.js";
+import {
+  supportsToolBackgrounding,
+  type DetachedToolTaskSnapshot,
+} from "./detached-tool-tasks.js";
 import { serializeWorkflowArtifact } from "./workflow-artifact.js";
 
 type BackgroundTaskSnapshot =
@@ -26,7 +30,9 @@ type BackgroundTaskSnapshot =
   | WorkflowTaskSnapshot
   // workflow run 的快照沿用 WorkflowTaskSnapshot 的形状但把 output 放宽成 unknown（产物由脚本
   // 的顶层返回值决定），所以它不是 WorkflowTaskSnapshot 的子类型，必须单列一支。
-  | DynamicWorkflowRunSnapshot;
+  | DynamicWorkflowRunSnapshot
+  // User-detached generic tool call (BT 2.0): the executor store's terminal snapshot.
+  | DetachedToolTaskSnapshot;
 
 /**
  * dwf run 的名字分派谓词：CreateWorkflow = 新启动 / ResumeWorkflowRun = 恢复，同一 run
@@ -51,7 +57,7 @@ export function registerRuntimeBackgroundTask(
   output: Record<string, unknown>,
   turnId?: RuntimeTaskSnapshot["turnId"],
 ): void {
-  const taskType = runtimeTaskTypeForToolCall(toolCall);
+  const taskType = runtimeTaskTypeForToolCall(deps, toolCall);
   if (!taskType || !deps.runtimeTaskRegistry) return;
   const existing = deps.runtimeTaskRegistry.get(taskId);
   const description = runtimeTaskDescription(toolCall, output) ?? defaultRuntimeTaskDescription(taskType);
@@ -122,7 +128,7 @@ export function updateRuntimeBackgroundTask(
   status: string,
   snapshot?: BackgroundTaskSnapshot,
 ): void {
-  const taskType = runtimeTaskTypeForToolCall(toolCall);
+  const taskType = runtimeTaskTypeForToolCall(deps, toolCall);
   if (!taskType || !deps.runtimeTaskRegistry) return;
   deps.runtimeTaskRegistry.update(taskId, (current) => ({
     ...(isTerminalRuntimeTask(current)
@@ -159,10 +165,17 @@ function runtimeTaskResultText(
   status: string,
   snapshot: BackgroundTaskSnapshot | undefined,
 ): string | undefined {
-  if (!isDynamicWorkflowRunDispatchToolName(toolCall.name)) return undefined;
   if (status === "running") return undefined;
-  if (!snapshot || !("output" in snapshot)) return undefined;
-  return serializeWorkflowArtifact(snapshot.output);
+  if (!snapshot) return undefined;
+  if (isDynamicWorkflowRunDispatchToolName(toolCall.name)) {
+    return "output" in snapshot ? serializeWorkflowArtifact(snapshot.output) : undefined;
+  }
+  // Detached generic tool call: the executor store's snapshot carries the bounded result
+  // text, and the registry entry is the only source TaskOutput can read after a restart.
+  if ("resultText" in snapshot && typeof snapshot.resultText === "string") {
+    return snapshot.resultText;
+  }
+  return undefined;
 }
 
 export function claimRuntimeBackgroundTaskNotification(
@@ -170,7 +183,7 @@ export function claimRuntimeBackgroundTaskNotification(
   toolCall: ExecutableToolCall,
   taskId: string,
 ): boolean {
-  if (!runtimeTaskTypeForToolCall(toolCall) || !deps.runtimeTaskRegistry) return true;
+  if (!runtimeTaskTypeForToolCall(deps, toolCall) || !deps.runtimeTaskRegistry) return true;
   let claimed = false;
   const task = deps.runtimeTaskRegistry.update(taskId, (current) => {
     if (current.notified) return current;
@@ -185,7 +198,7 @@ export function releaseRuntimeBackgroundTaskNotification(
   toolCall: ExecutableToolCall,
   taskId: string,
 ): void {
-  if (!runtimeTaskTypeForToolCall(toolCall) || !deps.runtimeTaskRegistry) return;
+  if (!runtimeTaskTypeForToolCall(deps, toolCall) || !deps.runtimeTaskRegistry) return;
   deps.runtimeTaskRegistry.update(taskId, (current) =>
     current.notified ? { ...current, notified: false } : current,
   );
@@ -196,22 +209,29 @@ export function removeRuntimeBackgroundTask(
   toolCall: ExecutableToolCall,
   taskId: string,
 ): void {
-  if (!runtimeTaskTypeForToolCall(toolCall) || !deps.runtimeTaskRegistry) return;
+  if (!runtimeTaskTypeForToolCall(deps, toolCall) || !deps.runtimeTaskRegistry) return;
   deps.runtimeTaskRegistry.remove(taskId);
 }
 
-function runtimeTaskTypeForToolCall(toolCall: ExecutableToolCall): RuntimeTaskType | undefined {
+function runtimeTaskTypeForToolCall(
+  deps: ToolExecutorDeps,
+  toolCall: ExecutableToolCall,
+): RuntimeTaskType | undefined {
   switch (toolCall.name) {
     case "Bash":
       return "local_bash";
     case "Workflow":
       return "local_workflow";
+    case "Agent":
+      // local_agent entries are registered by the subagent runner, never here.
+      return undefined;
     default:
       // dwf 的两个入口（CreateWorkflow / ResumeWorkflowRun）共用一个 taskType：缺席则
       // registerRuntimeBackgroundTask 直接 return——会话回收护栏与 TaskOutput 可见性全失。
-      return isDynamicWorkflowRunDispatchToolName(toolCall.name)
-        ? "local_dynamic_workflow"
-        : undefined;
+      if (isDynamicWorkflowRunDispatchToolName(toolCall.name)) return "local_dynamic_workflow";
+      // Generic read-only tool backgrounding (BT 2.0): the capability is host-authoritative
+      // (ToolEntry.backgrounding), never inferred from the tool name.
+      return supportsToolBackgrounding(deps.registry, toolCall.name) ? "local_tool" : undefined;
   }
 }
 
@@ -223,6 +243,8 @@ function defaultRuntimeTaskDescription(taskType: RuntimeTaskType): string {
       return "Workflow background task";
     case "local_dynamic_workflow":
       return "Dynamic workflow run";
+    case "local_tool":
+      return "Background tool call";
     case "local_turn":
       return "Background turn";
     case "local_agent":

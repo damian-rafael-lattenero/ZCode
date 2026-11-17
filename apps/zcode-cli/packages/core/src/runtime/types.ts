@@ -703,10 +703,12 @@ export type BackgroundActiveForegroundExecutionResult =
 /**
  * backgroundRunningToolCall（BT，2026-11-05）的结果：
  * - backgrounded：tool call 已移交后台，workId ≡ 后台任务 taskId（tracker/投影共用）；
- *   Bash 是 adapter 执行的 workId；Agent 是 local_agent 的 taskId（≡ agentId）。
+ *   Bash 是 adapter 执行的 workId；Agent 是 local_agent 的 taskId（≡ agentId）；
+ *   通用工具是 executor DetachedToolTaskStore 的 taskId（`toolbg_<uuid>`，BT 2.0）。
  * - noop：守卫未命中（无该 toolCallId 的在跑前台 / 已移交 / 已终态 / off-peak
- *   借用执行拒绝移交），绝不 abort；
- * - unsupported：executionPort 与 subagentPort 都缺外部移交能力（stub / 旧端口）。
+ *   借用执行拒绝移交 / 该工具未声明 backgrounding 能力），绝不 abort；
+ * - unsupported：没有任何移交腿（executionPort、subagentPort 与 executor 的
+ *   requestBackgroundToolCall 都缺席；stub / 旧端口）。
  */
 export type RuntimeBackgroundRunningToolCallResult =
   | { kind: "backgrounded"; workId: string }

@@ -20,6 +20,7 @@ import {
   type WorkflowNotificationMeta,
 } from "@zcode/contracts";
 import type { ExecutableToolCall } from "../types.js";
+import type { DetachedToolTaskSnapshot } from "./detached-tool-tasks.js";
 import { isRecord } from "./utils.js";
 import {
   buildWorkflowArtifactsManifestSection,
@@ -126,7 +127,9 @@ export type BackgroundTaskSnapshot =
   | WorkflowTaskSnapshot
   // workflow run 的快照沿用 WorkflowTaskSnapshot 的形状但把 output 放宽成 unknown（产物由脚本
   // 的顶层返回值决定），所以它不是 WorkflowTaskSnapshot 的子类型，必须单列一支。
-  | DynamicWorkflowRunSnapshot;
+  | DynamicWorkflowRunSnapshot
+  // User-detached generic tool call (BT 2.0): the executor store's terminal snapshot.
+  | DetachedToolTaskSnapshot;
 
 export function buildWorkflowTaskSummary(input: {
   lost?: boolean;

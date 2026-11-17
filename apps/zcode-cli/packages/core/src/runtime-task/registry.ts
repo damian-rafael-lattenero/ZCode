@@ -11,9 +11,12 @@ import type { AgentOutput } from "@zcode/contracts";
 // 前者是 workflow run（经 DynamicWorkflowRunPort.cancel 可取消）。合成一个类型，取消分派就无法区分。
 // local_turn 是用户 demote 的原 primaryTurn（DT 分组，2026-11-04）：runtime 自己拥有执行，
 // 取消走 detachedTurns 句柄而非端口；它没有 toolCallId，生命周期事件由 runtime 直接发射。
+// local_tool 是用户移交到后台的通用只读工具调用（BT 2.0，2026-11-17）：执行本体留在
+// executor 的 DetachedToolTaskStore，取消走该 store 的 controller；没有 child session。
 export type RuntimeTaskType =
   | "local_agent"
   | "local_bash"
+  | "local_tool"
   | "local_workflow"
   | "local_dynamic_workflow"
   | "local_turn"

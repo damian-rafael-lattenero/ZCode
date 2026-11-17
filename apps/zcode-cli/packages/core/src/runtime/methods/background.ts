@@ -20,6 +20,7 @@ import {
   hasRunningBackgroundRuntimeTask,
   isTerminalRuntimeTask,
 } from "../../runtime-task/registry.js";
+import { supportsToolBackgrounding } from "../../tool/executor/detached-tool-tasks.js";
 
 // 停止分派的类型集中在 background-stop-types.ts（供各分支模块共用）；这里 re-export
 // 保持既有 import 路径不变。
@@ -131,6 +132,10 @@ export async function stopBackgroundTask(
     return stopLocalBashBackgroundTask.call(this, target, traceContext);
   }
 
+  if (target.taskType === "local_tool") {
+    return stopLocalToolBackgroundTask.call(this, target);
+  }
+
   if (target.taskType === "local_turn") {
     return stopLocalTurnBackgroundTask.call(this, target, options.initiator);
   }
@@ -160,7 +165,7 @@ async function resolveBackgroundStopTarget(
     return undefined;
   }
 
-  const taskType = registryTask?.type ?? runtimeTaskTypeFromBackgroundInfo(existing);
+  const taskType = registryTask?.type ?? runtimeTaskTypeFromBackgroundInfo.call(this, existing);
   return {
     currentStatus: registryTask?.status ?? existing?.status,
     existing,
@@ -361,6 +366,39 @@ async function stopLocalBashBackgroundTask(
   };
 }
 
+/**
+ * BT 2.0: a generic tool call the user moved to the background. The handler controller is
+ * owned by the executor's DetachedToolTaskStore; stopping must go through it, never through
+ * a process port. The tracker's direct waiter settles the BackgroundTaskCompleted event.
+ */
+async function stopLocalToolBackgroundTask(
+  this: AgentRuntimeInternal,
+  target: TypedRuntimeBackgroundStopTarget,
+): Promise<RuntimeBackgroundStopResult> {
+  const snapshot = this.executor?.stopDetachedToolTask?.(target.taskId);
+  if (snapshot === undefined) {
+    // The store no longer knows the task (process restart or already reaped): report the
+    // truthful terminal state instead of pretending the stop worked.
+    return {
+      ok: false,
+      reason: "background_task_not_found",
+      status: "lost",
+      taskId: target.taskId,
+      type: "local_tool",
+    };
+  }
+  const status: BackgroundTaskInfoStatus =
+    snapshot.status === "running"
+      ? "cancelled"
+      : (toBackgroundTaskInfoStatus(snapshot.status) ?? "cancelled");
+  return {
+    ok: true,
+    status,
+    taskId: target.taskId,
+    type: "local_tool",
+  };
+}
+
 export async function cancelRunningRuntimeBackgroundTasks(
   this: AgentRuntimeInternal,
   input: { reason: "subagent_cancelled" | "session_closed"; traceContext?: TraceContext },
@@ -369,7 +407,11 @@ export async function cancelRunningRuntimeBackgroundTasks(
   const traceContext = input.traceContext ?? this.rootTraceContext;
   const tasks = Object.values(this.runtimeTaskRegistry.all()).filter(
     (task) =>
-      (task.type === "local_bash" || task.type === "local_turn") &&
+      (task.type === "local_bash" ||
+        task.type === "local_turn" ||
+        // Session close must stop detached tool handlers too: their executor store dies
+        // with the runtime, and an orphaned handler would write into a closed session.
+        task.type === "local_tool") &&
       task.isBackgrounded === true &&
       task.status === "running",
   );
@@ -499,6 +541,7 @@ function commandFromRuntimeTask(
 }
 
 function runtimeTaskTypeFromBackgroundInfo(
+  this: AgentRuntimeInternal,
   task: BackgroundTaskInfo | undefined,
 ): RuntimeTaskType | undefined {
   switch (task?.toolName) {
@@ -514,7 +557,12 @@ function runtimeTaskTypeFromBackgroundInfo(
     case "Turn":
       return "local_turn";
     default:
-      return undefined;
+      // A cold projection can carry the real tool name ("Grep") after the in-process
+      // registry entry is gone. The capability lives on the tool registry, which survives.
+      return task?.toolName !== undefined &&
+        supportsToolBackgrounding(this.registry, task.toolName)
+        ? "local_tool"
+        : undefined;
   }
 }
 
@@ -524,6 +572,10 @@ function toolNameFromRuntimeTaskType(type: RuntimeTaskType): string {
       return "Agent";
     case "local_bash":
       return "Bash";
+    case "local_tool":
+      // The registry snapshot does not carry the concrete tool name; the projected
+      // BackgroundTaskInfo and the tool row (parentToolCallId) keep the real one.
+      return "Tool";
     case "local_workflow":
       return "Workflow";
     case "local_dynamic_workflow":

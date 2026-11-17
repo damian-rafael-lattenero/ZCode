@@ -340,7 +340,7 @@ export interface ConversationEditTarget {
     queueItemId?: string;
     admissionSeq?: number;
     admittedAt?: number;
-    requestedDelivery?: "auto" | "startNow" | "queue" | "guide";
+    requestedDelivery?: "auto" | "startNow" | "queue" | "guide" | "interrupt";
     admittedDelivery?: "startNow" | "queue" | "guide";
     fallbackReasonCode?: string;
     modelSelection?: TurnInputIntentMetadata["modelSelection"];

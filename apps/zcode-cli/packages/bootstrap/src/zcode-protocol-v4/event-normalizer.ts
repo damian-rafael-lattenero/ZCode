@@ -88,7 +88,7 @@ export interface CanonicalUserIntentFact extends CanonicalConversationFactBase {
   queueItemId?: string;
   admissionSeq?: number;
   admittedAt?: number;
-  requestedDelivery?: "auto" | "startNow" | "queue" | "guide";
+  requestedDelivery?: "auto" | "startNow" | "queue" | "guide" | "interrupt";
   admittedDelivery?: "startNow" | "queue" | "guide";
   genUiContext?: import("@zcode/contracts").TurnInputIntentMetadata["genUiContext"];
   sharedContextRefs?: readonly { kind: "shared_context_import"; context_id: string }[];

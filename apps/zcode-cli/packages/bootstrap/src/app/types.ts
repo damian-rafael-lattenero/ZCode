@@ -305,6 +305,8 @@ export type SendInputOptions = SubmitPromptOptions & {
   requireIdle?: boolean;
   expectedTurnId?: TurnId;
   commandKind?: "sendText" | "sendGoalCommand" | "compact";
+  /** U1: cut the current model step and continue the same turn with this input. */
+  interruptCurrentModelStep?: boolean;
 };
 
 export interface UserPromptInput {

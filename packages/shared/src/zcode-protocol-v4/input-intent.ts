@@ -64,7 +64,9 @@ export type ConversationInputSource = z.infer<typeof conversationInputSourceSche
 
 export const conversationInputDeliverySchema = z
   .object({
-    requested: z.enum(["auto", "startNow", "queue", "guide"]),
+    // U1: "interrupt" requests cutting the current model step; admission records the
+    // input as a guide (admittedDelivery stays "guide").
+    requested: z.enum(["auto", "startNow", "queue", "guide", "interrupt"]),
     admitted: z.enum(["startNow", "queue", "guide"]),
     fallbackReasonCode: z.string().optional(),
   })

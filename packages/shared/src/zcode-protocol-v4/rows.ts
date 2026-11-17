@@ -235,6 +235,8 @@ export const toolCallRowSchema = z.object({
   outputPreview: executionOutputPreviewSchema.optional(),
   // status=pendingApproval 时指向 pendingInteractions 项。
   approvalInteractionId: z.string().optional(),
+  // Host-authoritative capability: the row can be handed to the background while running.
+  backgroundable: z.literal(true).optional(),
   backgrounded: z.literal(true).optional(),
   workId: z.string().optional(),
   startedAt: timestampSchema.optional(),

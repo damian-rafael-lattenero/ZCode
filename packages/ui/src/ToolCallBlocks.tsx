@@ -16,6 +16,10 @@ import {
 } from "@/lib/toolCallSummary.js";
 import type { CodeViewerSource } from "@/lib/codeViewer.js";
 import { resolveToolCallRenderer } from "@/ToolCallBlocks/resolveRenderer.js";
+import {
+  canBackgroundToolCall,
+  ToolBackgroundButton,
+} from "@/ToolCallBlocks/ToolBackgroundButton.js";
 import * as PluginUi from "@/plugin-ui/index.js";
 import { resolveToolCallIdentity } from "@/lib/toolIdentity.js";
 import {
@@ -79,7 +83,7 @@ function ToolCallBlockComponent({
   onOpenWorkflowRun?: ToolCallBlockRenderContext["onOpenWorkflowRun"];
   /** 工具卡页脚的 Resume；与 workflowRun 同样不向子工具卡透传。 */
   onResumeWorkflowRun?: ToolCallBlockRenderContext["onResumeWorkflowRun"];
-  /** 运行中 Bash 卡的「Go to background」（ctrl+b parity）；可见性门在 execute renderer。 */
+  /** Per-tool "Go to background" (ctrl+b parity) for any capability-gated row; the generic wrapper owns visibility. */
   onBackgroundToolCall?: ToolCallBlockRenderContext["onBackgroundToolCall"];
   /** 药丸 → 子代理 transcript；同样不向子工具卡透传。 */
   onOpenWorkflowActor?: ToolCallBlockRenderContext["onOpenWorkflowActor"];
@@ -284,6 +288,20 @@ function ToolCallBlockComponent({
   );
 
   const iconOnly = useContext(SummaryIconOnlyContext);
+  // Generic per-tool background facts: the wrapper decides once for every renderer
+  // family (Bash, Agent, Read/Grep/Glob/WebFetch/Search, ...), so individual renderers
+  // stay free of the entry. raw.backgroundable is the host capability gate.
+  const rawToolCall = toolCall.raw;
+  const rawBackgroundFacts =
+    typeof rawToolCall === "object" && rawToolCall !== null && !Array.isArray(rawToolCall)
+      ? (rawToolCall as Record<string, unknown>)
+      : undefined;
+  const backgrounded = rawBackgroundFacts?.backgrounded === true;
+  const canBackground = canBackgroundToolCall(
+    rawBackgroundFacts,
+    onBackgroundToolCall !== undefined,
+    isOfficeMode,
+  );
   const ToolCallRenderer = useMemo(() => {
     const Renderer = resolveToolCallRenderer(renderContext);
     // 插件声明与 session 绑定已由宿主校验，不能再用通用 renderer 身份截断入口。
@@ -311,6 +329,21 @@ function ToolCallBlockComponent({
         data-status={toolCall.status}
       >
         <ToolCallRenderer {...renderContext} />
+        {canBackground && onBackgroundToolCall ? (
+          // Sibling below the card, same placement contract as ToolSnapshotFieldNotice:
+          // stays visible when the body is collapsed. The component owns the 2.5s delay.
+          <ToolBackgroundButton
+            toolCallId={toolCall.toolId}
+            onBackgroundToolCall={onBackgroundToolCall}
+          />
+        ) : null}
+        {backgrounded ? (
+          // The handoff is a fact about the row, not a new design language: keep the
+          // `· Background` suffix near the card for every tool family.
+          <div className="mt-1 px-1 text-ui-sm text-foreground-subtle">
+            {`· ${intl.formatMessage({ id: "chat.toolCall.backgrounded" })}`}
+          </div>
+        ) : null}
       </div>
     </ToolPresentationCapabilitiesProvider>
   );

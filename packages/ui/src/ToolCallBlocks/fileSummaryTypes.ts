@@ -274,10 +274,11 @@ export interface ToolCallBlockRenderContext {
    */
   onResumeWorkflowRun?: (request: { workflowName?: string }) => void;
   /**
-   * 运行中的 Bash 卡把单条命令移交后台（v4 `backgroundToolCall {toolCallId}`，
-   * OpenCode ctrl+b parity）。与轮级 backgroundTurn 不同粒度；可见性门在 renderer
-   * （v4Status=running 且投影尚未翻 backgrounded）。缺席（只读 / runtime 未就绪 /
-   * 非 v4 宿主）即不渲染按钮。
+   * Detach one running tool call to the background (v4 `backgroundToolCall {toolCallId}`,
+   * OpenCode ctrl+b parity). Different granularity from the turn-level backgroundTurn;
+   * the generic ToolCallBlock wrapper gates visibility (host `raw.backgroundable` plus
+   * v4Status=running and no prior backgrounded flip). Absent (read-only mode / runtime
+   * not ready / non-v4 host) means no entry is rendered.
    */
   onBackgroundToolCall?: (toolCallId: string) => void;
   /**

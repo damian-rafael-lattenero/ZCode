@@ -116,9 +116,13 @@ export function toolCallRowToLegacyNode(row: ToolCallRow): TaskChatToolCallTreeN
         toolCallId: row.toolCallId,
         toolName: row.toolName,
         v4Status: row.status,
-        // ctrl+b parity：单工具后台移交的可见性事实。投影把行翻成 backgrounded=true +
-        // workId（移交成功）后 execute renderer 据此收走按钮；真值才落键，与 cuaApp 等
-        // 条目保持同一个「缺席即未发生」的 raw 形状。
+        // Host-authoritative capability for the per-tool "Go to background" entry.
+        // Absent means the row never offers it (AskUserQuestion, MCP, legacy snapshots).
+        ...(row.backgroundable === true ? { backgroundable: true } : {}),
+        // ctrl+b parity: the visibility fact for a single-tool handoff. Once the
+        // projection flips the row to backgrounded=true + workId the generic card
+        // drops the entry; only true values are keyed so absence keeps the same
+        // "never happened" raw shape as cuaApp and friends.
         ...(row.backgrounded === true ? { backgrounded: true } : {}),
         ...(row.workId !== undefined ? { workId: row.workId } : {}),
         ...(row.cuaApp ? { cuaApp: row.cuaApp } : {}),

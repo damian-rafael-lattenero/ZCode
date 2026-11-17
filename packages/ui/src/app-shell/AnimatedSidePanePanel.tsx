@@ -59,6 +59,7 @@ import { SubagentSessionSidePane } from "@/app-shell/SubagentSessionSidePane.js"
 import { SubagentDirectorySidePane } from "@/app-shell/SubagentDirectorySidePane.js";
 import { SelectionSideChatPane } from "@/app-shell/SelectionSideChatPane.js";
 import { BackgroundBashOutputSidePane } from "@/app-shell/BackgroundBashOutputSidePane.js";
+import { BackgroundToolDetailSidePane } from "@/app-shell/BackgroundToolDetailSidePane.js";
 import { PlanDetailSidePane } from "@/app-shell/PlanDetailSidePane.js";
 import {
   usePluginUiPaneTarget,
@@ -110,6 +111,7 @@ import {
   type OpenScopedWorkflowArtifactSideTabRequest,
   type OpenScopedWorkflowRunSideTabRequest,
   type OpenBackgroundBashSideTabRequest,
+  type OpenBackgroundToolSideTabRequest,
   type WorkspaceSidePaneState,
 } from "@/lib/workspaceSidePane.js";
 import { inferMediaPreview, type CodeViewerSource } from "@/lib/codeViewer.js";
@@ -363,6 +365,7 @@ export function AnimatedSidePanePanel({
   onOpenWorkflowArtifact,
   onOpenWorkflowRun,
   onOpenBackgroundBash,
+  onOpenBackgroundTool,
   onRefreshGit,
   onBrowserNavigationRequestHandled,
   onBrowserUrlChange,
@@ -450,6 +453,7 @@ export function AnimatedSidePanePanel({
   onOpenCodeViewer: (source: CodeViewerSource) => void;
   onOpenFileLink?: (target: MessageFileLinkTarget) => void;
   onOpenBackgroundBash?: (request: OpenBackgroundBashSideTabRequest) => void;
+  onOpenBackgroundTool?: (request: OpenBackgroundToolSideTabRequest) => void;
   onOpenSubagentSession: (request: OpenScopedSubagentSideTabRequest) => void;
   /** run 详情页里点 ask 节点 → 打开那个 actor 实例的 transcript tab。 */
   onOpenWorkflowActorSession?: (request: OpenScopedWorkflowActorSessionSideTabRequest) => void;
@@ -935,6 +939,7 @@ export function AnimatedSidePanePanel({
           id: "browser.permission.settings",
         }),
         terminalTitle: intl.formatMessage({ id: "terminal.title" }),
+        backgroundToolTitle: intl.formatMessage({ id: "backgroundTool.title" }),
         subagentTypeLabel: intl.formatMessage({ id: "sidePane.subagent" }),
         subagentDirectoryTitle: intl.formatMessage({
           id: "sidePane.subagentDirectory",
@@ -1201,6 +1206,11 @@ export function AnimatedSidePanePanel({
                             visible={isVisible && tab.id === contentActiveTabId}
                             onOpenCodeViewer={onOpenCodeViewer}
                           />
+                        ) : tab.type === "background-tool" ? (
+                          <BackgroundToolDetailSidePane
+                            tab={tab}
+                            visible={isVisible && tab.id === contentActiveTabId}
+                          />
                         ) : tab.type === "subagent-session" ? (
                           <SubagentSessionSidePane
                             tab={tab}
@@ -1211,6 +1221,7 @@ export function AnimatedSidePanePanel({
                             onOpenFileLink={onOpenFileLink}
                             onOpenSubagentSession={onOpenSubagentSession}
                             onOpenBackgroundBash={onOpenBackgroundBash}
+                            onOpenBackgroundTool={onOpenBackgroundTool}
                           />
                         ) : tab.type === "subagent-directory" ? (
                           <SubagentDirectorySidePane

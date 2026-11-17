@@ -29,11 +29,13 @@ const forkTestFiles = [
   "packages/ui/test/reasoningExpandDefault.test.ts",
   "packages/ui/test/toolLayoutDefaultOpen.test.ts",
   "packages/ui/test/useUiPluginRecommendations.test.ts",
+  "packages/ui/test/v4BackgroundToolWorks.test.ts",
   "packages/ui/test/v4ConversationStatusPanelGitReview.test.ts",
   "packages/ui/test/v4ConversationTurnRenderUnits.test.ts",
   "packages/ui/test/v4ToolBackgroundButton.test.ts",
   "packages/ui/test/v4ComposerInterruptPicker.test.ts",
   "packages/ui/test/v4PlanToggleHooks.test.ts",
+  "apps/zcode-cli/packages/bootstrap/tests/product-projection-background-tool-live-detail.test.ts",
 ];
 
 export default defineConfig({

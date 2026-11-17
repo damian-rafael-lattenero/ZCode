@@ -382,6 +382,7 @@ import type {
   OpenWorkflowWorkspaceSideTabRequest,
   OpenScopedSubagentSideTabRequest,
   OpenBackgroundBashSideTabRequest,
+  OpenBackgroundToolSideTabRequest,
   OpenScopedSubagentDirectorySideTabRequest,
   OpenSelectionSideChatRequest,
   SyncSubagentSessionTabsRequest,
@@ -474,6 +475,7 @@ export interface SessionPaneProps {
   onAutoOpenAssistantPptx?: (request: AssistantPreviewCardsAutoOpenRequest) => void;
   onOpenFileLink?: (target: MessageFileLinkTarget) => void;
   onOpenBackgroundBash?: (request: OpenBackgroundBashSideTabRequest) => void;
+  onOpenBackgroundTool?: (request: OpenBackgroundToolSideTabRequest) => void;
   onOpenSubagentSession?: (request: OpenScopedSubagentSideTabRequest) => void;
   onOpenSubagentDirectory?: (request: OpenScopedSubagentDirectorySideTabRequest) => void;
   onSyncSubagentSessionTabs?: (request: SyncSubagentSessionTabsRequest) => void;
@@ -705,6 +707,7 @@ export function SessionPane({
   onOpenFileLink,
   onOpenSubagentSession,
   onOpenBackgroundBash,
+  onOpenBackgroundTool,
   onOpenSubagentDirectory,
   onSyncSubagentSessionTabs,
   onOpenSelectionSideChat,
@@ -1302,7 +1305,9 @@ export function SessionPane({
   const [paneLocalSummaryPanelVariantOverride, setPaneLocalSummaryPanelVariantOverride] =
     useState<ChatViewSummaryPanelVariant | null>(null);
   const [terminalSectionOpen, setTerminalSectionOpen] = useState(false);
+  const [toolSectionOpen, setToolSectionOpen] = useState(false);
   const [agentSectionOpen, setAgentSectionOpen] = useState(false);
+  const [turnSectionOpen, setTurnSectionOpen] = useState(false);
   const [workflowSectionOpen, setWorkflowSectionOpen] = useState(false);
   const [dropTargetController, handleDropTargetControllerChange] = useConversationDropTarget(
     onDropTargetControllerChange,
@@ -5835,23 +5840,40 @@ export function SessionPane({
   );
   const runningBackgroundWorkCount =
     statusPanelModel.runningBashWorks.length +
+    statusPanelModel.runningToolWorks.length +
     statusPanelModel.runningSubagentWorks.length +
     statusPanelModel.runningWorkflowRuns.length +
     // DT 分组：demote 后的 detached turn 也是运行中的后台工作——否则 DT01 后 composer
     // 徽标的 onOpen 会被关掉，用户失去打开 Task Island 查看该 turn 的入口。
     statusPanelModel.runningTurnWorks.length;
   const runningTerminalCount = statusPanelModel.runningBashWorks.length;
+  const runningToolCount = statusPanelModel.runningToolWorks.length;
   const runningAgentCount = statusPanelModel.runningSubagentWorks.length;
   const runningWorkflowCount = statusPanelModel.runningWorkflowRuns.length;
+  const runningTurnCount = statusPanelModel.runningTurnWorks.length;
   useEffect(() => {
     setTerminalSectionOpen(false);
+    setToolSectionOpen(false);
     setAgentSectionOpen(false);
+    setTurnSectionOpen(false);
   }, [sessionId]);
   useEffect(() => {
     if (runningTerminalCount === 0) {
       setTerminalSectionOpen(false);
     }
   }, [runningTerminalCount]);
+  useEffect(() => {
+    if (runningToolCount === 0) {
+      setToolSectionOpen(false);
+    }
+  }, [runningToolCount]);
+  // Turn section follows the same controlled contract as terminal/agent/tool: the host owns
+  // open state, resets it per session, and closes it when the last detached turn settles.
+  useEffect(() => {
+    if (runningTurnCount === 0) {
+      setTurnSectionOpen(false);
+    }
+  }, [runningTurnCount]);
   // 「工作流」分区跟着「有没有活的 run」走（docs/dynamic-workflow/presentation.md「Other places a
   // run appears」）：在跑数从 0 变成 ≥1 时打开、归零时折起，进入会话时按该会话重新判定。只在这个
   // 布尔翻转（或换会话）时写入，所以读者手动折起后，run 还在跑就一直保持折起。
@@ -5883,7 +5905,9 @@ export function SessionPane({
     // 产品规则：Composer 是全部实时活动的入口；分区拆开后一次点击仍要展开所有非空类型，
     // 但三个区块后续保持独立折叠状态，不能再共享一个 open 布尔值。
     setTerminalSectionOpen(runningTerminalCount > 0);
+    setToolSectionOpen(runningToolCount > 0);
     setAgentSectionOpen(runningAgentCount > 0);
+    setTurnSectionOpen(runningTurnCount > 0);
     setWorkflowSectionOpen(runningWorkflowCount > 0);
     handleSummaryPanelVariantChange("panel");
   }, [
@@ -5892,6 +5916,8 @@ export function SessionPane({
     runningAgentCount,
     runningBackgroundWorkCount,
     runningTerminalCount,
+    runningToolCount,
+    runningTurnCount,
     runningWorkflowCount,
     soleRunningWorkflowRunTarget,
   ]);
@@ -6890,8 +6916,12 @@ export function SessionPane({
               onVariantChange={handleSummaryPanelVariantChange}
               terminalSectionOpen={terminalSectionOpen}
               onTerminalSectionOpenChange={setTerminalSectionOpen}
+              toolSectionOpen={toolSectionOpen}
+              onToolSectionOpenChange={setToolSectionOpen}
               agentSectionOpen={agentSectionOpen}
               onAgentSectionOpenChange={setAgentSectionOpen}
+              turnSectionOpen={turnSectionOpen}
+              onTurnSectionOpenChange={setTurnSectionOpen}
               workflowSectionOpen={workflowSectionOpen}
               onWorkflowSectionOpenChange={setWorkflowSectionOpen}
               onRefreshGit={onRefreshGit}
@@ -6911,6 +6941,20 @@ export function SessionPane({
                 onOpenBackgroundBash && sessionId
                   ? (work) =>
                       onOpenBackgroundBash({
+                        workspacePath,
+                        workspaceIdentity: workspaceIdentity ?? undefined,
+                        remoteSessionId: remoteSessionId ?? undefined,
+                        rootSessionId: rootSessionId ?? sessionId,
+                        sessionId,
+                        workId: work.workId,
+                        title: work.title,
+                      })
+                  : undefined
+              }
+              onOpenBackgroundTool={
+                onOpenBackgroundTool && sessionId
+                  ? (work) =>
+                      onOpenBackgroundTool({
                         workspacePath,
                         workspaceIdentity: workspaceIdentity ?? undefined,
                         remoteSessionId: remoteSessionId ?? undefined,

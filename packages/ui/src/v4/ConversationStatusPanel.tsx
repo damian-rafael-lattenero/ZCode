@@ -38,6 +38,7 @@ import {
   SquareIcon,
   SquareTerminalIcon,
   Workflow,
+  WrenchIcon,
 } from "lucide-react";
 import {
   TID_CHAT_SUMMARY_PANEL,
@@ -161,8 +162,12 @@ export interface ConversationStatusPanelProps {
   onVariantChange?: (variant: ChatViewSummaryPanelVariant | null) => void;
   terminalSectionOpen?: boolean;
   onTerminalSectionOpenChange?: (open: boolean) => void;
+  toolSectionOpen?: boolean;
+  onToolSectionOpenChange?: (open: boolean) => void;
   agentSectionOpen?: boolean;
   onAgentSectionOpenChange?: (open: boolean) => void;
+  turnSectionOpen?: boolean;
+  onTurnSectionOpenChange?: (open: boolean) => void;
   workflowSectionOpen?: boolean;
   onWorkflowSectionOpenChange?: (open: boolean) => void;
   onRefreshGit?: () => void;
@@ -171,6 +176,8 @@ export interface ConversationStatusPanelProps {
   onResumeGoal?: () => void;
   onOpenPlanDetail?: (request: OpenPlanDetailSideTabRequest) => void;
   onOpenBackgroundBash?: (work: BackgroundWorkSummary) => void;
+  /** Open the live-detail side tab of a background tool work. */
+  onOpenBackgroundTool?: (work: BackgroundWorkSummary) => void;
   onCancelBackgroundWork?: (workId: string) => void;
   onStopSubagent?: (control: { taskId: string; executionId: string }) => void;
   onOpenSubagentSession?: (request: OpenSubagentSideTabRequest) => void;
@@ -260,6 +267,7 @@ type StatusSectionKind =
   | "sessionPlans"
   | "plan"
   | "terminal"
+  | "tool"
   | "workflow"
   | "agent"
   | "turn";
@@ -271,6 +279,7 @@ const STATUS_SECTION_SCROLL_POLICY = {
   // 六个双行 Todo（6 × 52px）需要约 20rem；超过后只滚动进程区块。
   plan: "max-h-80",
   terminal: "max-h-48",
+  tool: "max-h-48",
   // workflow 行定高 56px，列表滚到三行半（196px）：露出的半行告诉人下面还有。
   workflow: "max-h-[12.25rem]",
   agent: "max-h-48",
@@ -1041,17 +1050,22 @@ export function buildRunningSubagentOpenRequest({
 }
 
 function RunningStatusItem({
+  kind = "terminal",
   now,
   onOpenBackgroundBash,
+  onOpenBackgroundTool,
   onCancelBackgroundWork,
   work,
 }: {
+  kind?: "terminal" | "tool";
   now: number;
   onOpenBackgroundBash?: (work: BackgroundWorkSummary) => void;
+  onOpenBackgroundTool?: (work: BackgroundWorkSummary) => void;
   onCancelBackgroundWork?: (workId: string) => void;
   work: BackgroundWorkSummary;
 }) {
   const { intl } = useZCodeIntl();
+  const onOpen = kind === "tool" ? onOpenBackgroundTool : onOpenBackgroundBash;
 
   return (
     <li
@@ -1061,16 +1075,24 @@ function RunningStatusItem({
       data-work-status={work.status}
       className="group relative flex min-w-0 items-start gap-2 rounded-lg px-2 py-2 hover:bg-[var(--color-hover)]"
     >
-      {onOpenBackgroundBash ? (
+      {onOpen ? (
         <button
           type="button"
           className="absolute inset-0 rounded-lg focus-visible:outline-ring"
-          aria-label={intl.formatMessage({ id: "bashOutput.open" }, { title: work.title })}
-          data-testid="background-bash-open"
-          onClick={() => onOpenBackgroundBash(work)}
+          aria-label={
+            kind === "tool"
+              ? intl.formatMessage({ id: "backgroundTool.open" }, { title: work.title })
+              : intl.formatMessage({ id: "bashOutput.open" }, { title: work.title })
+          }
+          data-testid={kind === "tool" ? "background-tool-open" : "background-bash-open"}
+          onClick={() => onOpen(work)}
         />
       ) : null}
-      <SquareTerminalIcon className="pointer-events-none relative z-[1] mt-0.5 size-4 shrink-0 text-[var(--color-foreground-subtle)]" />
+      {kind === "tool" ? (
+        <WrenchIcon className="pointer-events-none relative z-[1] mt-0.5 size-4 shrink-0 text-[var(--color-foreground-subtle)]" />
+      ) : (
+        <SquareTerminalIcon className="pointer-events-none relative z-[1] mt-0.5 size-4 shrink-0 text-[var(--color-foreground-subtle)]" />
+      )}
       <div className="pointer-events-none relative z-[1] flex min-w-0 flex-1 flex-col gap-1.5">
         <p className="line-clamp-2 text-ui-base leading-5 text-[var(--color-foreground)]">
           {work.title}
@@ -1093,6 +1115,7 @@ function RunningStatusItem({
 
 function BackgroundWorkStatusSection({
   onOpenBackgroundBash,
+  onOpenBackgroundTool,
   onCancelBackgroundWork,
   onOpenChange,
   open,
@@ -1103,11 +1126,12 @@ function BackgroundWorkStatusSection({
   works,
 }: {
   onOpenBackgroundBash?: (work: BackgroundWorkSummary) => void;
+  onOpenBackgroundTool?: (work: BackgroundWorkSummary) => void;
   onCancelBackgroundWork?: (workId: string) => void;
   onOpenChange?: (open: boolean) => void;
   open?: boolean;
   separated: boolean;
-  section: "terminal" | "agent";
+  section: "terminal" | "tool";
   timersPaused?: boolean;
   title: string;
   works: readonly BackgroundWorkSummary[];
@@ -1170,9 +1194,11 @@ function BackgroundWorkStatusSection({
         {orderedRunningWorks.map((work) => (
           <RunningStatusItem
             key={work.workId}
+            kind={section}
             work={work}
             now={now}
             onOpenBackgroundBash={onOpenBackgroundBash}
+            onOpenBackgroundTool={onOpenBackgroundTool}
             onCancelBackgroundWork={onCancelBackgroundWork}
           />
         ))}
@@ -1232,6 +1258,7 @@ function TurnStatusSection({
   onOpenChange,
   open,
   separated,
+  timersPaused = false,
   title,
   works,
 }: {
@@ -1239,6 +1266,7 @@ function TurnStatusSection({
   onOpenChange?: (open: boolean) => void;
   open?: boolean;
   separated: boolean;
+  timersPaused?: boolean;
   title: string;
   works: readonly BackgroundWorkSummary[];
 }) {
@@ -1250,14 +1278,14 @@ function TurnStatusSection({
   );
 
   useEffect(() => {
-    if (works.length === 0) {
+    if (works.length === 0 || timersPaused) {
       return;
     }
     const timer = setInterval(() => {
       setNow(Date.now());
     }, 1000);
     return () => clearInterval(timer);
-  }, [works.length]);
+  }, [works.length, timersPaused]);
 
   if (works.length === 0) return null;
 
@@ -2143,8 +2171,12 @@ function ConversationStatusPanelImpl({
   onVariantChange,
   terminalSectionOpen,
   onTerminalSectionOpenChange,
+  toolSectionOpen,
+  onToolSectionOpenChange,
   agentSectionOpen,
   onAgentSectionOpenChange,
+  turnSectionOpen,
+  onTurnSectionOpenChange,
   workflowSectionOpen,
   onWorkflowSectionOpenChange,
   onRefreshGit,
@@ -2153,6 +2185,7 @@ function ConversationStatusPanelImpl({
   onResumeGoal,
   onOpenPlanDetail,
   onOpenBackgroundBash,
+  onOpenBackgroundTool,
   onCancelBackgroundWork,
   onStopSubagent,
   pendingSubagentStops,
@@ -2211,6 +2244,8 @@ function ConversationStatusPanelImpl({
   const canRenderSessionPlans = Boolean(model.sessionPlans);
   const canRenderPlan = Boolean(model.plan);
   const canRenderTerminals = model.runningBashWorks.length > 0;
+  // Background tool works get their own section after terminals and before turns.
+  const canRenderTools = model.runningToolWorks.length > 0;
   // 已结束的 run 也开门（与 canRenderAgents 同判断）：重启后活动数为零，若只按它开门，
   // 通往 run 目录的唯一入口会连带消失。
   const canRenderEndedWorkflows = Boolean(
@@ -2277,11 +2312,13 @@ function ConversationStatusPanelImpl({
         data-goal-objective={model.goal?.objective}
         data-running-background-count={
           model.runningBashWorks.length +
+          model.runningToolWorks.length +
           model.runningSubagentWorks.length +
           model.runningWorkflowRuns.length +
           model.runningTurnWorks.length
         }
         data-running-terminal-count={model.runningBashWorks.length}
+        data-running-tool-count={model.runningToolWorks.length}
         data-running-agent-count={model.runningSubagentWorks.length}
         data-running-workflow-count={model.runningWorkflowRuns.length}
         data-running-turn-count={model.runningTurnWorks.length}
@@ -2412,13 +2449,43 @@ function ConversationStatusPanelImpl({
                 onCancelBackgroundWork={onCancelBackgroundWork}
               />
             ) : null}
+            {canRenderTools ? (
+              // Tool calls moved to the background: own rows with a live-detail side tab.
+              <BackgroundWorkStatusSection
+                onOpenBackgroundTool={onOpenBackgroundTool}
+                section="tool"
+                title={intl.formatMessage({ id: "chat.statusPanel.tools" })}
+                works={model.runningToolWorks}
+                open={toolSectionOpen}
+                onOpenChange={onToolSectionOpenChange}
+                separated={
+                  canRenderGit ||
+                  canRenderGoal ||
+                  canRenderSessionPlans ||
+                  canRenderPlan ||
+                  canRenderTerminals
+                }
+                timersPaused={timersPaused}
+                onCancelBackgroundWork={onCancelBackgroundWork}
+              />
+            ) : null}
             {canRenderTurns ? (
-              // DT 分组：demote 后的 detached turn。分区排在 Terminals 之后、Workflows 之前
-              // ——它是「会话本体」级的工作，不是终端/智能体那种旁支。
+              // DT 分组：demote 后的 detached turn。分区排在 Terminals/Tools 之后、Workflows
+              // 之前——它是「会话本体」级的工作，不是终端/智能体那种旁支。
               <TurnStatusSection
                 title={intl.formatMessage({ id: "chat.statusPanel.turns" })}
                 works={model.runningTurnWorks}
-                separated={canRenderGit || canRenderGoal || canRenderSessionPlans || canRenderPlan || canRenderTerminals}
+                open={turnSectionOpen}
+                onOpenChange={onTurnSectionOpenChange}
+                timersPaused={timersPaused}
+                separated={
+                  canRenderGit ||
+                  canRenderGoal ||
+                  canRenderSessionPlans ||
+                  canRenderPlan ||
+                  canRenderTerminals ||
+                  canRenderTools
+                }
                 onCancelBackgroundWork={onCancelBackgroundWork}
               />
             ) : null}
@@ -2435,6 +2502,7 @@ function ConversationStatusPanelImpl({
                   canRenderSessionPlans ||
                   canRenderPlan ||
                   canRenderTerminals ||
+                  canRenderTools ||
                   canRenderTurns
                 }
                 parentSessionId={parentSessionId}
@@ -2460,6 +2528,7 @@ function ConversationStatusPanelImpl({
                   canRenderSessionPlans ||
                   canRenderPlan ||
                   canRenderTerminals ||
+                  canRenderTools ||
                   canRenderTurns ||
                   canRenderWorkflows
                 }

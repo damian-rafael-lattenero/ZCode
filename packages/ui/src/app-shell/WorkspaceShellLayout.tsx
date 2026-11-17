@@ -441,6 +441,7 @@ const WorkspaceShellLayoutContent = memo(function WorkspaceShellLayoutComponent(
   handleAutoOpenAssistantPptx,
   handleOpenSubagentSession,
   handleOpenBackgroundBash,
+  handleOpenBackgroundTool,
   handleOpenSubagentDirectory,
   handleSyncSubagentSessionTabs,
   handleOpenSelectionSideChat,
@@ -2292,6 +2293,7 @@ const WorkspaceShellLayoutContent = memo(function WorkspaceShellLayoutComponent(
       onOpenCodeViewer={handleOpenCodeViewer}
       onOpenFileLink={handleOpenMarkdownFileLink}
       onOpenBackgroundBash={handleOpenBackgroundBash}
+      onOpenBackgroundTool={handleOpenBackgroundTool}
       onOpenSubagentSession={handleOpenSubagentSession}
       onOpenWorkflowActorSession={handleOpenWorkflowActorSession}
       onOpenWorkflowWorkspace={handleOpenWorkflowWorkspace}
@@ -2616,6 +2618,7 @@ const WorkspaceShellLayoutContent = memo(function WorkspaceShellLayoutComponent(
                   }
                   onOpenFileLink={handleOpenMarkdownFileLink}
                   onOpenBackgroundBash={handleOpenBackgroundBash}
+      onOpenBackgroundTool={handleOpenBackgroundTool}
                   onOpenSubagentSession={handleOpenSubagentSession}
                   onOpenSubagentDirectory={handleOpenSubagentDirectory}
                   onSyncSubagentSessionTabs={handleSyncSubagentSessionTabs}
@@ -3085,6 +3088,7 @@ const WorkspaceShellLayoutContent = memo(function WorkspaceShellLayoutComponent(
                                       : undefined
                                   }
                                   onOpenBackgroundBash={handleOpenBackgroundBash}
+      onOpenBackgroundTool={handleOpenBackgroundTool}
                                   onOpenSubagentSession={handleOpenSubagentSession}
                                   onOpenSubagentDirectory={handleOpenSubagentDirectory}
                                   onSyncSubagentSessionTabs={handleSyncSubagentSessionTabs}

@@ -415,7 +415,9 @@ export const backgroundWorkSummarySchema = z.object({
   // 旧桌面收到未知值时整个 state.updated patch 解析失败（已知键的非法值是错误，不是剥离），
   // 于是整帧被 assembler 拒收，且 resync 的 snapshot 携带同一个值、同样失败——不能优雅降级。
   // CLI 与桌面同批发布才使它可接受。
-  kind: z.enum(["bash", "subagent", "workflow", "turn"]),
+  // tool = foreground tool call that was moved to the background and now runs as a
+  // runtime task of its own (Task Island "Tools" section).
+  kind: z.enum(["bash", "subagent", "workflow", "turn", "tool"]),
   title: z.string(),
   // resultPending = 已完成、结果在 continuation inbox 等待前台空闲；
   // 投递后条目消失（结果本体成为 origin=backgroundResult 的 userInput row）。
@@ -426,6 +428,23 @@ export const backgroundWorkSummarySchema = z.object({
   blocked: z.boolean().optional(),
   anchorRowId: z.number().nullable(),
   childSessionId: z.string().optional(),
+  // Live progress for background tool works, mirrored from the runtime lifecycle event.
+  // `text` is already bounded by the projection; `truncated` says the source was cut.
+  liveDetail: z
+    .object({
+      updatedAt: timestampSchema,
+      text: z.string(),
+      truncated: z.boolean(),
+      tool: z
+        .object({
+          toolName: z.string(),
+          status: z.enum(["running", "success", "error", "cancelled"]),
+        })
+        .strict()
+        .optional(),
+    })
+    .strict()
+    .optional(),
 });
 export type BackgroundWorkSummary = z.infer<typeof backgroundWorkSummarySchema>;
 

@@ -6016,10 +6016,17 @@ const zhCN: Record<string, string> = {
   "chat.queue.enqueue": "加入队列",
   "chat.queue.title": "待发送消息（{count}）",
   "chat.queue.drag": "拖拽排序",
-  "chat.queue.sendNow": "立即",
+  "chat.queue.sendNow": "立即发送",
   // compact 队列项曾单独显示“立即执行”，与同一队列中的即时动作文案不一致。
   "chat.queue.runNow": "立即",
   "chat.queue.edit": "编辑",
+  "chat.composer.interruptPicker.title": "本轮运行中发送",
+  "chat.composer.interruptPicker.interrupt": "⚡ 中断并继续",
+  "chat.composer.interruptPicker.interruptDescription":
+    "结束当前模型步骤，并在同一轮继续；正在运行的工具批处理会先执行完。",
+  "chat.composer.interruptPicker.queue": "⏳ 加入队列",
+  "chat.composer.interruptPicker.queueDescription":
+    "当前轮结束后开始；如果本轮已结束，则立即开始。",
   "chat.composerEdit.editingUserQuery": "正在编辑上一条消息",
   "chat.composerEdit.editingQueueItem": "正在编辑排队消息",
   "chat.composerEdit.invalid.notLatest": "这条消息已不是最后一条，发送将作为新消息",

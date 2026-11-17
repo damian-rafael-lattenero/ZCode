@@ -657,6 +657,39 @@ function shareForTransaction<K, V>(
   return map;
 }
 
+/**
+ * Background tool live detail is a mirror of the runtime snapshot, not durable state: four
+ * publishes per second keep the side tab alive without turning every output chunk into a wire
+ * delta. Terminal updates always publish, so the last word is never throttled away.
+ */
+const BACKGROUND_TOOL_LIVE_DETAIL_PUBLISH_INTERVAL_MS = 250;
+/** Bound mirrors the runtime's output tail budget (8 KiB) so a huge result cannot bloat frames. */
+const BACKGROUND_TOOL_LIVE_DETAIL_MAX_TEXT_LENGTH = 8192;
+
+function backgroundToolDetailStatus(
+  status: BackgroundWorkSummary["status"],
+): "running" | "success" | "error" | "cancelled" {
+  if (status === "running") return "running";
+  if (status === "resultPending") return "success";
+  if (status === "cancelled") return "cancelled";
+  return "error";
+}
+
+function backgroundToolStatusLine(
+  toolName: string | undefined,
+  status: BackgroundWorkSummary["status"],
+): string {
+  const label =
+    status === "running"
+      ? "running"
+      : status === "resultPending"
+        ? "completed"
+        : status === "cancelled"
+          ? "cancelled"
+          : "failed";
+  return toolName ? `${toolName} ${label}` : `Background tool ${label}`;
+}
+
 export class ProductProjection {
   private snapshot: ConversationSnapshot;
   // reducer 内部的 rowId 查找必须与 rows.window 同步；冷恢复过去每次 find 都扫描全表，
@@ -681,6 +714,8 @@ export class ProductProjection {
     { taskId: string; executionId: string }
   >();
   private subagentRowIdByAgentId = new Map<string, number>();
+  /** Per-work publish clock for the 4/s throttle on background tool live detail. */
+  private backgroundToolLiveDetailPublishedAtMs = new Map<string, number>();
   private hookRowIdByInvocationId = new Map<string, number>();
   // resume SessionStart 没有 turnId；先保留在 CLI projection，下一条真实 user-intent
   // TurnStarted 到达后再分配 rowId/turnId。不得构造 session-hooks:* synthetic turn。
@@ -5207,6 +5242,10 @@ export class ProductProjection {
       cancellable?: boolean;
       blocked?: boolean;
       childSessionId?: string;
+      /** Bounded runtime snapshot fields consumed by the tool live detail mirror. */
+      resultText?: string;
+      outputTail?: string;
+      outputTruncated?: boolean;
     };
     const workId = payload.taskId;
     if (!workId) return [];
@@ -5304,6 +5343,15 @@ export class ProductProjection {
         : existing?.childSessionId
           ? { childSessionId: existing.childSessionId }
           : {}),
+      ...(() => {
+        // The live detail branch reads the runtime's explicit taskKind, not the panel kind
+        // mapping (a shared hunk owned elsewhere): the mirror exists only for tool works.
+        const liveDetail =
+          payload.taskKind === "tool"
+            ? this.resolveBackgroundToolLiveDetail(event, payload, existing, status)
+            : existing?.liveDetail;
+        return liveDetail ? { liveDetail } : {};
+      })(),
     };
     // 幂等：内容无变化不产 delta。
     if (
@@ -5315,7 +5363,10 @@ export class ProductProjection {
       existing.kind === next.kind &&
       existing.cancellable === next.cancellable &&
       existing.blocked === next.blocked &&
-      existing.childSessionId === next.childSessionId
+      existing.childSessionId === next.childSessionId &&
+      // Reference equality is intentional: the resolver reuses the previous object when the
+      // bounded text did not change, so a throttled no-op never produces a delta.
+      existing.liveDetail === next.liveDetail
     ) {
       return [];
     }
@@ -5327,6 +5378,75 @@ export class ProductProjection {
       ...(subagentRowFlip ? [subagentRowFlip] : []),
       { op: "state.updated", patch: { backgroundWorks } },
     ];
+  }
+
+  /**
+   * Maintain `liveDetail` for a background tool work.
+   *
+   * Terminal statuses always publish (the last result must never be throttled away); running
+   * updates are limited to four per second per work so output chunks do not each become a
+   * delta. A non-terminal event that arrives after the terminal one is ignored — the frozen
+   * result is the truth, not a late "running" line.
+   */
+  private resolveBackgroundToolLiveDetail(
+    event: SessionEvent,
+    payload: {
+      taskId?: string;
+      toolName?: string;
+      resultText?: string;
+      outputTail?: string;
+      outputTruncated?: boolean;
+    },
+    existing: BackgroundWorkSummary | undefined,
+    status: BackgroundWorkSummary["status"],
+  ): NonNullable<BackgroundWorkSummary["liveDetail"]> | undefined {
+    const terminal = status !== "running";
+    if (!terminal && existing && existing.status !== "running") return existing.liveDetail;
+    const workId = payload.taskId;
+    if (!workId) return existing?.liveDetail;
+    const now = this.ms(event);
+    const lastPublishedAt = this.backgroundToolLiveDetailPublishedAtMs.get(workId);
+    if (
+      !terminal &&
+      lastPublishedAt !== undefined &&
+      now - lastPublishedAt < BACKGROUND_TOOL_LIVE_DETAIL_PUBLISH_INTERVAL_MS
+    ) {
+      return existing?.liveDetail;
+    }
+    if (terminal) {
+      this.backgroundToolLiveDetailPublishedAtMs.delete(workId);
+    } else {
+      this.backgroundToolLiveDetailPublishedAtMs.set(workId, now);
+    }
+
+    const resultText = typeof payload.resultText === "string" ? payload.resultText.trim() : "";
+    const outputTail = typeof payload.outputTail === "string" ? payload.outputTail.trim() : "";
+    const source = resultText || outputTail || backgroundToolStatusLine(payload.toolName, status);
+    const truncated =
+      source.length > BACKGROUND_TOOL_LIVE_DETAIL_MAX_TEXT_LENGTH ||
+      payload.outputTruncated === true;
+    const text = source.slice(0, BACKGROUND_TOOL_LIVE_DETAIL_MAX_TEXT_LENGTH);
+    const toolStatus = backgroundToolDetailStatus(status);
+    const tool = payload.toolName
+      ? { toolName: payload.toolName, status: toolStatus }
+      : existing?.liveDetail?.tool;
+    const previous = existing?.liveDetail;
+    if (
+      previous &&
+      previous.text === text &&
+      previous.truncated === truncated &&
+      previous.tool?.toolName === tool?.toolName &&
+      previous.tool?.status === toolStatus
+    ) {
+      // Same bounded payload: reuse the object so the idempotence check can drop the delta.
+      return previous;
+    }
+    return {
+      updatedAt: now,
+      text,
+      truncated,
+      ...(tool ? { tool } : {}),
+    };
   }
 
   // ── dwf 实时运行态：DynamicWorkflowRunProgress → workflowRuns 状态键 ──

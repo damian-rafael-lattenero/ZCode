@@ -27,6 +27,7 @@ import type {
   BrowserSidePaneMetadata,
   OpenScopedSubagentSideTabRequest,
   OpenBackgroundBashSideTabRequest,
+  OpenBackgroundToolSideTabRequest,
   OpenSelectionSideChatRequest,
   OpenScopedPlanDetailSideTabRequest,
   OpenScopedWorkflowRunSideTabRequest,
@@ -358,6 +359,7 @@ export interface WorkspaceShellLayoutProps extends Omit<AppProps, "baseFeedbackS
   handleOpenCodeViewer: (source: CodeViewerSource) => void;
   handleAutoOpenAssistantPptx: (request: AssistantPreviewCardsAutoOpenRequest) => void;
   handleOpenBackgroundBash: (request: OpenBackgroundBashSideTabRequest) => void;
+  handleOpenBackgroundTool: (request: OpenBackgroundToolSideTabRequest) => void;
   handleOpenSubagentSession: (request: OpenScopedSubagentSideTabRequest) => void;
   handleOpenSubagentDirectory: (
     request: import("@/lib/workspaceSidePane.js").OpenScopedSubagentDirectorySideTabRequest,

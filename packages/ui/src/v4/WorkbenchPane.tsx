@@ -21,6 +21,7 @@ import type { MessageFileLinkTarget } from "@/components/ai-elements/message.js"
 import type {
   OpenScopedSubagentSideTabRequest,
   OpenBackgroundBashSideTabRequest,
+  OpenBackgroundToolSideTabRequest,
   OpenScopedSubagentDirectorySideTabRequest,
   OpenSelectionSideChatRequest,
   OpenScopedPlanDetailSideTabRequest,
@@ -230,6 +231,7 @@ export interface WorkbenchShellBinding {
   onAutoOpenAssistantPptx?: (request: AssistantPreviewCardsAutoOpenRequest) => void;
   onOpenFileLink?: (target: MessageFileLinkTarget) => void;
   onOpenBackgroundBash?: (request: OpenBackgroundBashSideTabRequest) => void;
+  onOpenBackgroundTool?: (request: OpenBackgroundToolSideTabRequest) => void;
   onOpenSubagentSession?: (request: OpenScopedSubagentSideTabRequest) => void;
   onOpenSubagentDirectory?: (request: OpenScopedSubagentDirectorySideTabRequest) => void;
   onSyncSubagentSessionTabs?: (request: SyncSubagentSessionTabsRequest) => void;
@@ -463,6 +465,7 @@ export function WorkbenchLeafPane({
           onOpenFileLink={shell.onOpenFileLink}
           onOpenSubagentSession={shell.onOpenSubagentSession}
           onOpenBackgroundBash={shell.onOpenBackgroundBash}
+          onOpenBackgroundTool={shell.onOpenBackgroundTool}
           onOpenSubagentDirectory={shell.onOpenSubagentDirectory}
           onSyncSubagentSessionTabs={shell.onSyncSubagentSessionTabs}
           onOpenSelectionSideChat={shell.onOpenSelectionSideChat}

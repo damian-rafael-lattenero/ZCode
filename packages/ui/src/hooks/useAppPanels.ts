@@ -87,6 +87,8 @@ import {
   type OpenScopedSubagentSideTabRequest,
   type OpenBackgroundBashSideTabRequest,
   openBackgroundBashSidePane,
+  type OpenBackgroundToolSideTabRequest,
+  openBackgroundToolSidePane,
   type OpenScopedSubagentDirectorySideTabRequest,
   type OpenSelectionSideChatRequest,
   type OpenScopedPlanDetailSideTabRequest,
@@ -1328,6 +1330,14 @@ export function useAppPanels(options: {
     [commitOpenedSidePaneState, revealSidePaneForCurrentOwner],
   );
 
+  const handleOpenBackgroundTool = useCallback(
+    (request: OpenBackgroundToolSideTabRequest) => {
+      revealSidePaneForCurrentOwner();
+      commitOpenedSidePaneState((current) => openBackgroundToolSidePane(current, request));
+    },
+    [commitOpenedSidePaneState, revealSidePaneForCurrentOwner],
+  );
+
   const handleOpenSubagentSession = useCallback(
     (request: OpenScopedSubagentSideTabRequest) => {
       const workspaceKey = request.workspaceIdentity?.trim() || request.workspacePath;
@@ -2147,6 +2157,7 @@ export function useAppPanels(options: {
     handleOpenSelectionSideChat,
     handleOpenPlanDetail,
     handleOpenPluginUi,
+    handleOpenBackgroundTool,
     handleOpenWorkflowRun,
     handleOpenWorkflowRunDirectory,
     handleOpenWorkflowActorSession,

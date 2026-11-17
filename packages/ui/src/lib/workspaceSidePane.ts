@@ -184,6 +184,25 @@ export interface BackgroundBashSidePaneTab extends OpenBackgroundBashSideTabRequ
   openedAt?: number;
 }
 
+/** Same scope as the bash output tab; the work identity is the runtime task id. */
+export interface OpenBackgroundToolSideTabRequest {
+  workspacePath: string;
+  workspaceIdentity?: string;
+  remoteSessionId?: string;
+  rootSessionId: string;
+  sessionId: string;
+  workId: string;
+  title: string;
+}
+
+export interface BackgroundToolSidePaneTab extends OpenBackgroundToolSideTabRequest {
+  id: string;
+  type: "background-tool";
+  workspaceKey: string;
+  ownerTaskId: string;
+  openedAt?: number;
+}
+
 export interface SubagentSessionSidePaneTab {
   id: string;
   type: "subagent-session";
@@ -572,6 +591,7 @@ export type WorkspaceSidePaneTab =
   | FileManagerSidePaneTab
   | NewTabSidePaneTab
   | BackgroundBashSidePaneTab
+  | BackgroundToolSidePaneTab
   | BrowserSidePaneTab
   | BrowserPermissionsSidePaneTab
   | GitSidePaneTab
@@ -607,7 +627,13 @@ export function shouldMountSidePaneContent(
   return (
     isVisible ||
     tabs.some(
-      (tab) => tab.type === "browser" || tab.type === "browser-use" || tab.type === "bash-output",
+      (tab) =>
+        tab.type === "browser" ||
+        tab.type === "browser-use" ||
+        tab.type === "bash-output" ||
+        // The tool detail pane keeps the last live detail in a ref; keeping it mounted while
+        // the pane is hidden preserves follow state and the frozen terminal text.
+        tab.type === "background-tool",
     )
   );
 }
@@ -1198,6 +1224,7 @@ export function isSidePaneTabVisibleInScope(
     case "subagent-session":
     case "subagent-directory":
     case "bash-output":
+    case "background-tool":
       return tab.rootSessionId === scope.ownerTaskId;
     case "selection-side-chat":
     case "plan-detail":
@@ -2554,6 +2581,38 @@ export function openBackgroundBashSidePane(
       ...target,
       id,
       type: "bash-output",
+      workspaceKey,
+      ownerTaskId: target.rootSessionId,
+      openedAt: Date.now(),
+    },
+  );
+}
+
+export function openBackgroundToolSidePane(
+  current: WorkspaceSidePaneState | null,
+  target: OpenBackgroundToolSideTabRequest,
+): WorkspaceSidePaneState {
+  const workspaceKey = target.workspaceIdentity?.trim() || target.workspacePath;
+  // Stable identity: workspace + remote connection + root/session + workId. Re-opening the
+  // same work focuses the existing tab instead of stacking duplicates.
+  const id =
+    "background-tool:" +
+    [
+      workspaceKey,
+      target.remoteSessionId ?? "",
+      target.rootSessionId,
+      target.sessionId,
+      target.workId,
+    ]
+      .map(encodeSidePaneTabIdPart)
+      .join(":");
+  const existing = current?.tabs.find((tab) => tab.id === id);
+  return activateSidePaneTab(
+    current,
+    existing ?? {
+      ...target,
+      id,
+      type: "background-tool",
       workspaceKey,
       ownerTaskId: target.rootSessionId,
       openedAt: Date.now(),

@@ -27,6 +27,7 @@ import {
   TerminalIcon,
   WaypointsIcon,
   Workflow as WorkflowIcon,
+  WrenchIcon,
   XIcon,
 } from "lucide-react";
 import { cn } from "@/components/lib/utils.js";
@@ -359,6 +360,10 @@ export function SidePaneTabIcon({ tab }: { tab: WorkspaceSidePaneTab }) {
     return <SquareTerminalIcon className="size-3.5" />;
   }
 
+  if (tab.type === "background-tool") {
+    return <WrenchIcon className="size-3.5" />;
+  }
+
   // 同 getSidePaneTabTitle——browser-use tab 无 source，若不在此拦截会 fallthrough
   // 到下方 `tab.source.type` 读 undefined.type 崩溃。
   // agent 导航后由 <webview> favicon 事件回填 faviconUrl，与 human browser tab 一致地展示真实图标；
@@ -574,6 +579,12 @@ export function getSidePaneTabTitle(
 
   if (tab.type === "terminal" || tab.type === "bash-output") {
     return tab.title || formatMessage({ id: "terminal.title" });
+  }
+
+  // Background tool detail: the work title is frozen at open time; the type fallback keeps
+  // the tab meaningful once the work disappears (terminal result stays visible).
+  if (tab.type === "background-tool") {
+    return tab.title || formatMessage({ id: "backgroundTool.title" });
   }
 
   // browser-use tab 之前未在此分派，会 fallthrough 到底部 `tab.source.title`，

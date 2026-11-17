@@ -16,6 +16,8 @@ export interface SidePaneTabPresentationLabels {
   newTabTitle?: string;
   browserPermissionsTitle: string;
   terminalTitle: string;
+  /** Type label for the background tool live-detail tab. */
+  backgroundToolTitle?: string;
   subagentTypeLabel: string;
   subagentDirectoryTitle: string;
   selectionChatTitle: string;
@@ -86,6 +88,9 @@ export function getSidePaneTabSearchHint(tab: WorkspaceSidePaneTab): string {
   }
   if (tab.type === "terminal" || tab.type === "bash-output")
     return `${tab.title} terminal shell command`;
+  if (tab.type === "background-tool") {
+    return `${tab.title} ${tab.workId} background tool detail live progress`;
+  }
   if (tab.type === "file-manager") return `${tab.target.workspacePath} ${tab.source?.path ?? ""}`;
   return tab.source.path ?? tab.source.title;
 }
@@ -154,5 +159,8 @@ export function getSidePaneTabTypeLabel(
   if (tab.type === "model-trajectory") return labels.modelTrajectoryTitle;
   if (tab.type === "developer-tools") return labels.developerToolsTitle;
   if (tab.type === "terminal" || tab.type === "bash-output") return labels.terminalTitle;
+  if (tab.type === "background-tool") {
+    return labels.backgroundToolTitle ?? labels.terminalTitle;
+  }
   return labels.codeViewerTitle;
 }

@@ -23,6 +23,7 @@ import type {
   OpenScopedSubagentDirectorySideTabRequest,
   OpenScopedSubagentSideTabRequest,
   OpenBackgroundBashSideTabRequest,
+  OpenBackgroundToolSideTabRequest,
   SyncSubagentSessionTabsRequest,
 } from "@/lib/workspaceSidePane.js";
 import { V4ConversationProvider } from "@/v4/V4ConversationContext.js";
@@ -68,6 +69,7 @@ export interface V4ChatPaneProps {
   onAutoOpenAssistantPptx?: (request: AssistantPreviewCardsAutoOpenRequest) => void;
   onOpenFileLink?: (target: MessageFileLinkTarget) => void;
   onOpenBackgroundBash?: (request: OpenBackgroundBashSideTabRequest) => void;
+  onOpenBackgroundTool?: (request: OpenBackgroundToolSideTabRequest) => void;
   onOpenSubagentSession?: (request: OpenScopedSubagentSideTabRequest) => void;
   onOpenSubagentDirectory?: (request: OpenScopedSubagentDirectorySideTabRequest) => void;
   onSyncSubagentSessionTabs?: (request: SyncSubagentSessionTabsRequest) => void;
@@ -119,6 +121,7 @@ export function V4ChatPane({
   onOpenFileLink,
   onOpenSubagentSession,
   onOpenBackgroundBash,
+  onOpenBackgroundTool,
   onOpenSubagentDirectory,
   onSyncSubagentSessionTabs,
   onOpenPlanDetail,
@@ -185,6 +188,7 @@ export function V4ChatPane({
         onOpenFileLink={onOpenFileLink}
         onOpenSubagentSession={onOpenSubagentSession}
         onOpenBackgroundBash={onOpenBackgroundBash}
+        onOpenBackgroundTool={onOpenBackgroundTool}
         onOpenSubagentDirectory={onOpenSubagentDirectory}
         onSyncSubagentSessionTabs={onSyncSubagentSessionTabs}
         onOpenPlanDetail={onOpenPlanDetail}

@@ -4,6 +4,7 @@ import type { CodeViewerSource } from "@/lib/codeViewer.js";
 import type {
   OpenScopedSubagentSideTabRequest,
   OpenBackgroundBashSideTabRequest,
+  OpenBackgroundToolSideTabRequest,
   SubagentSessionSidePaneTab,
 } from "@/lib/workspaceSidePane.js";
 import type { PaneWorkspaceScope } from "@/v4/paneLayoutStore.js";
@@ -19,6 +20,7 @@ export const SubagentSessionSidePane = memo(function SubagentSessionSidePane({
   onOpenFileLink,
   onOpenSubagentSession,
   onOpenBackgroundBash,
+  onOpenBackgroundTool,
 }: {
   tab: SubagentSessionSidePaneTab;
   focused: boolean;
@@ -27,6 +29,7 @@ export const SubagentSessionSidePane = memo(function SubagentSessionSidePane({
   onOpenCodeViewer?: (source: CodeViewerSource) => void;
   onOpenFileLink?: (target: MessageFileLinkTarget) => void;
   onOpenBackgroundBash?: (request: OpenBackgroundBashSideTabRequest) => void;
+  onOpenBackgroundTool?: (request: OpenBackgroundToolSideTabRequest) => void;
   onOpenSubagentSession: (request: OpenScopedSubagentSideTabRequest) => void;
 }) {
   const scope = useMemo<PaneWorkspaceScope>(
@@ -58,6 +61,7 @@ export const SubagentSessionSidePane = memo(function SubagentSessionSidePane({
         onOpenFileLink={onOpenFileLink}
         onOpenSubagentSession={onOpenSubagentSession}
         onOpenBackgroundBash={onOpenBackgroundBash}
+        onOpenBackgroundTool={onOpenBackgroundTool}
       />
     </V4PaneConversationProvider>
   );

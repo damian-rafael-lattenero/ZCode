@@ -3637,6 +3637,7 @@ export class ProductProjection {
       input: payload.input,
       ...(cuaApp ? { cuaApp } : {}),
       ...(payload.display?.kind === "mcp_tool" ? { display: payload.display } : {}),
+      ...(payload.backgroundable === true ? { backgroundable: true } : {}),
     };
     this.toolRowIdByCallId.set(toolCallId, row.rowId);
     return [{ op: "row.appended", row }, ...planDeltas];

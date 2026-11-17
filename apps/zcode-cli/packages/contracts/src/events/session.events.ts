@@ -960,6 +960,11 @@ export interface ToolCallScheduledPayload {
   canRunParallel?: boolean;
   display?: ToolResultDisplayPayload;
   schedule: ToolSchedulePayload;
+  /**
+   * Host-authoritative capability: true when this tool call can be detached to the
+   * background (`backgroundToolCall`). Absent means the entry must not be offered.
+   */
+  backgroundable?: boolean;
 }
 
 export interface ToolCallStartedPayload {

@@ -1277,6 +1277,10 @@ export async function setQueueAutoDrain(
     traceContext: TraceContext;
   },
 ): Promise<void> {
+  // BT 3.1 (2026-11-17): idempotent. The sendText admission re-arms auto-drain when an
+  // explicit queue request arrives (the composer picker's ⏳); repeating the current
+  // value must not emit a redundant QueueAutoDrainChanged event or re-arm the drain.
+  if (this.queueAutoDrain === options.autoDrain) return;
   // false -> true 表示用户从暂停队列恢复。旧暂停项只存在于事件投影，不在新
   // activeTurn.pendingInputs 中；恢复期间改由 CLI 外层按完整投影 FIFO 逐项提升。
   if (options.autoDrain && !this.queueAutoDrain) {

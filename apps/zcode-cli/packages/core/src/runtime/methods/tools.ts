@@ -153,6 +153,12 @@ export async function emitToolScheduledEvents(
         dependencies: item.dependencies,
         parallelGroupIndex: findParallelGroupIndex(schedule, item.toolCallId),
         canRunParallel: item.canRunParallel,
+        // U4 (2026-11-17): host-authoritative detach capability for this running call.
+        // The desktop renders the per-tool "Go to background" pill only when the row
+        // carries this fact; absence means the tool has no detach seam.
+        ...(this.registry.get(toolCall.name)?.backgrounding?.supported === true
+          ? { backgroundable: true as const }
+          : {}),
         // MCP 名称来自 registry discovery，而不是合成的 provider tool name。
         // 在 scheduled 阶段携带，保证 pending/permission/running/stop 全生命周期可展示。
         display: createMcpToolDisplay(this.registry.getMetadata(toolCall.name)?.mcpPresentation),

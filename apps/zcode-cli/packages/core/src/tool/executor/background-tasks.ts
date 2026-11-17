@@ -440,6 +440,14 @@ export class BackgroundTaskTracker {
             ? snapshot.description
             : undefined,
       status,
+      // BT 2.0 (2026-11-17): detached read-only tool tasks carry their bounded result on
+      // the snapshot; the projection mirrors it into the Task Island live detail and the
+      // completion notification. Other task kinds do not have this field.
+      ...(snapshot &&
+      "resultText" in snapshot &&
+      typeof (snapshot as { resultText?: unknown }).resultText === "string"
+        ? { resultText: (snapshot as { resultText: string }).resultText }
+        : {}),
       pid: snapshot && "pid" in snapshot ? snapshot.pid : undefined,
       startedAt: snapshot?.startedAt,
       completedAt: snapshot?.completedAt,

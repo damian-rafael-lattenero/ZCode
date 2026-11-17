@@ -257,7 +257,7 @@ export interface ConversationComposerSendOptions {
   /** renderer-only：ACK accepted 后由 SessionPane 绑定真实 commandId/sessionId。 */
   telemetrySeed?: ConversationPromptTelemetrySeed;
   /** 本次 busy input 的一次性投递覆盖，不改 session 偏好。 */
-  requestedDelivery?: "startNow" | "queue" | "guide";
+  requestedDelivery?: "startNow" | "queue" | "guide" | "interrupt";
   /** 提交命令创建后由 Composer 订阅权威 projection，覆盖 ACK 丢失后的收口。 */
   onCommandCreated?: (commandId: string) => void;
   sharedContextRefs?: Array<{ kind: "shared_context_import"; context_id: string }>;
@@ -271,7 +271,7 @@ type ComposerSubmit = (
   heldQueueDisposition?: "clearQueueAndSend" | "keepQueueAndSend",
   expectedHeldQueueItemIds?: readonly string[],
   existingTelemetrySeed?: ConversationPromptTelemetrySeed,
-  requestedDelivery?: "startNow" | "queue" | "guide",
+  requestedDelivery?: "startNow" | "queue" | "guide" | "interrupt",
 ) => Promise<void>;
 function getComposerAttachmentTypeLabel(filename: string, mimeType: string): string {
   const leaf = filename.split(/[\\/]/u).at(-1) ?? filename;
@@ -738,7 +738,7 @@ function ConversationComposerImpl({
   const [heldQueueConfirmation, setHeldQueueConfirmation] = useState<{
     queueItemIds: readonly string[];
     telemetrySeed: ConversationPromptTelemetrySeed;
-    requestedDelivery?: "startNow" | "queue" | "guide";
+    requestedDelivery?: "startNow" | "queue" | "guide" | "interrupt";
   } | null>(null);
   const [sendTooltipOpen, setSendTooltipOpen] = useState(false);
   // submit 经 ref 读取最新文本/pending，避免回调随每次输入变更引用。
@@ -1468,7 +1468,7 @@ function ConversationComposerImpl({
       heldQueueDisposition?: "clearQueueAndSend" | "keepQueueAndSend",
       expectedHeldQueueItemIds?: readonly string[],
       existingTelemetrySeed?: ConversationPromptTelemetrySeed,
-      requestedDelivery?: "startNow" | "queue" | "guide",
+      requestedDelivery?: "startNow" | "queue" | "guide" | "interrupt",
     ) => {
       // 连接 pending 同步进入 ref，覆盖菜单点击后 React 尚未提交的一帧及快捷键提交。
       // 只阻止新输入，不取消正在执行或已排队消息，也不清空草稿。

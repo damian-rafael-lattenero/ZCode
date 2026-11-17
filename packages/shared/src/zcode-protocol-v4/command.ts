@@ -145,7 +145,9 @@ export const commandPayloadSchemas = {
       attachments: z.array(attachmentRefSchema).optional(),
       // Desktop Cmd/Ctrl+Enter 只覆盖本次 busy input，不改 session followupMode。
       // startNow 由 CLI 原子抢占当前 turn，不经过 queue admission。
-      requestedDelivery: z.enum(["startNow", "queue", "guide"]).optional(),
+      // (FORK) interrupt: the desktop picker ends the current model step and continues the
+      // same turn; when a tool batch is running, the message is delivered at its boundary.
+      requestedDelivery: z.enum(["startNow", "queue", "guide", "interrupt"]).optional(),
       genUiContext: genUiModelContextSchema.optional(),
       browserAmbientContext: zcodeBrowserAmbientContextSchema.optional(),
       // Share handover 只允许当前 session 的一个已导入上下文；完整正文由 runtime 从

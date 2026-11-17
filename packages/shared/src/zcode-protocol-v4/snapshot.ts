@@ -167,6 +167,10 @@ export const sessionActionAvailabilitySchema = z.object({
   setFollowupMode: actionAvailabilitySchema,
   queueEdit: actionAvailabilitySchema,
   sendQueuedNow: actionAvailabilitySchema,
+  // (FORK) Whether a busy composer may deliver its prompt mid-turn as an interrupt.
+  // The base gate only proves a foreground turn is running and compact is not locking
+  // the session; the parent change refines it with runtime steerability.
+  interruptSteer: actionAvailabilitySchema,
   pauseGoal: actionAvailabilitySchema,
   resumeGoal: actionAvailabilitySchema,
   // 文件撤销的 session 锁；目标资格看 turnHeader.actions.canRewindFiles。

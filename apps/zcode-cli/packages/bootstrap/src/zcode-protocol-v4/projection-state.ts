@@ -170,6 +170,14 @@ export function computeAvailability(
       : running
         ? ALLOWED
         : denied("sendQueuedNowRequiresRunning"),
+    // (FORK) Desktop composer "Cut and continue" option. Base gate only proves a
+    // foreground turn exists and compact is not locking the session; the parent change
+    // refines it with runtime steerability before the UI may rely on it.
+    interruptSteer: compacting
+      ? denied("compactOperationLock")
+      : running
+        ? ALLOWED
+        : denied("interruptSteerRequiresRunning"),
     // 独立 pauseGoal 改变 target 产品态；verifier/notSatisfied 期间底层 target 仍是 active，
     // 因此也允许暂停，不能要求当前一定存在 provider abort controller。
     pauseGoal:

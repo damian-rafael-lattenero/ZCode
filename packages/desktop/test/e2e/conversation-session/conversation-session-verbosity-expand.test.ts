@@ -159,7 +159,9 @@ async function collectLiveTurnDiagnostics(): Promise<unknown> {
     );
     return {
       canStop: Boolean(document.querySelector('[data-testid="v4-stop"]')),
-      timelineTail: document.querySelector('[data-testid="v4-timeline"]')?.innerText.slice(-500),
+      timelineTail: document
+        .querySelector<HTMLElement>('[data-testid="v4-timeline"]')
+        ?.innerText.slice(-500),
       toolNames,
     };
   });

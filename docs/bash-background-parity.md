@@ -121,17 +121,58 @@ BGV01–BGV06 验收见 [后台 Bash 输出详情](background-bash-output-detail
   background instead.
 - Phone: the daemon channel exposes the additive query
   `{"kind":"backgroundToolCall","taskId":…,"toolCallId":…}` (same wire shape as
-  `backgroundTurn` but naming the tool call). The bot's live card renders the turn row
+  `backgroundTurn` but naming the tool call). The bot's live card rendered the turn row
   plus one `🌙 <agent>` row per open dispatch lane; the tap answers success
   (`{backgrounded:[toolCallId]}`), an honest noop, or the host's error verbatim.
+  (The generic turn row was removed in BT 3.0 below; only the per-lane rows remain.)
+
+### 2026-11-17 — Per-section background and the interrupt picker (BT 3.0)
+
+Owner verdict: background is **per section, never the whole conversation**. The generic
+turn-level affordance is gone from every surface (the desktop entry was removed in
+`259514cc`; the phone's `bgd:` live-card row is removed in this batch — the route and
+`ChannelQuery.BackgroundTurn` stay for old cards). While the model thinks or writes, the
+composer offers **⚡ Cut and continue / ⏳ Queue** instead of parking the turn.
+
+- **Interrupt (⚡)**: `sendText.requestedDelivery: "interrupt"`. Admission enqueues the
+  text as an in-turn guide FIRST, then aborts a step-scoped `AbortController`
+  (`interruptActiveModelStep`); the model-step catch persists the partial stream,
+  discards unexecuted streaming tool calls, drains the guide and continues the SAME
+  turn. Mid-tool there is no step in flight: the guide waits at the batch boundary. The
+  abort identity `user_steer_model_step_interrupted` is distinct from `TurnCancelled`
+  and is walked through provider wrappers, so Stop still cancels the turn.
+  `availability.interruptSteer` gates the button (running + compact unlocked); the
+  runtime's steerable check stays authoritative and rejects honestly.
+- **Read-only tool detach**: `ToolEntry.backgrounding` (host-authoritative, never name
+  inferred) is set on Grep, Glob, WebFetch and WebSearch only. The executor owns a
+  `DetachedToolTaskStore`; the call runner races the handler against a detach gate,
+  clears the foreground deadline, settles the tool call at once with the generic
+  "moved to the background" result, tracks a `local_tool` runtime task, and defers any
+  MCP lease release to the real completion. The eventual result arrives through the
+  usual task notification, and TaskOutput reads the registry `resultText`.
+- **Deliberately out**: Write/Edit (the mutation would outlive the reported result; the
+  non-concurrent file scheduler, rewind checkpoints and readFileState have no post-hoc
+  channel; Stop would no longer stop the write) and Read this pass (it needs post-hoc
+  readFileState persistence, the partial-view notice in the notification and a
+  large-result path — 1 MB read vs the 120 KB notification cap).
+- **One generic pill**: the v4 tool row carries `backgroundable: true` from the
+  scheduled event, and the desktop mounts a single `ToolBackgroundButton` in the shared
+  wrapper for every family. The pill appears after `PILL_DELAY_MS = 2500` ms of running;
+  the generic wrapper also renders the `· Background` suffix.
+- **Task Island**: `backgroundWorks.kind` gains the honest `"tool"` value with its own
+  Tools section and per-row side tab; the tab reads the bounded `liveDetail` tail
+  (8 KiB, at most 4 updates/s, terminal freeze) that the projection mirrors from the
+  lifecycle events. Turn rows stay elapsed + cancel; there is no live turn view because
+  no UI path creates detached turns anymore.
 
 ## 暂不支持
 
 - provider-visible `background_tasks` control request。
 - 2 秒后提示用户可手动 background 的 UI/UX（我们的按钮常驻于运行中的卡下方）。
-- A generic per-tool switch across every tool schema: Read/Write/Edit are deliberately
-  out — the model needs their result inside the same step — so per-tool backgrounding
-  stays limited to Bash and Agent/subagent runs.
+- A generic per-tool switch across every tool schema: Write/Edit stay out (the model
+  needs their result and the mutation semantics cannot be preserved) and Read is
+  deferred to its three fixes. Supported per-tool families: Bash, Agent/subagent, and
+  the read-only Grep/Glob/WebFetch/WebSearch.
 
 ## 多端边界
 

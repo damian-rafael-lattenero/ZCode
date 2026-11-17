@@ -15214,8 +15214,16 @@ describe("AgentRuntime tool loop", () => {
 
     expect(modelSignals).toHaveLength(2);
     expect(modelSignals[0]).toBeDefined();
-    expect(modelSignals[0]).toBe(modelSignals[1]);
+    expect(modelSignals[1]).toBeDefined();
+    // U1 (2026-11-17): each model STEP owns its own controller (the user may cut ONE step
+    // and continue the same turn), so the two requests carry distinct signals. What stays
+    // true is that neither signal is the turn signal; the linkage (turn abort → step
+    // abort) is proven by "reports turn cancellation when the model request observes abort".
+    expect(modelSignals[0]).not.toBe(modelSignals[1]);
     expect(modelSignals[0]).not.toBe(abortController.signal);
+    expect(modelSignals[1]).not.toBe(abortController.signal);
+    expect(modelSignals[0]?.aborted).toBe(false);
+    expect(modelSignals[1]?.aborted).toBe(false);
     expect(toolSignal).toBeDefined();
     expect(toolSignal).not.toBe(abortController.signal);
     expect(toolSignal?.aborted).toBe(false);

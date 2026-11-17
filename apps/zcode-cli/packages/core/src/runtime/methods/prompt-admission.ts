@@ -61,16 +61,18 @@ export async function admitPrompt(
     }
 
     const activeTurn = this.activeTurn;
+    const interruptRequested = options?.interruptCurrentModelStep === true;
     const canSteer =
       attachments === undefined &&
       activeTurn?.steerable === true &&
-      (options?.queueDelivery === "guide" ||
+      (interruptRequested ||
+        options?.queueDelivery === "guide" ||
         options?.delivery === "auto" ||
         options?.delivery === "steer_active_turn") &&
       options?.queueDelivery !== "queue";
     if (canSteer) {
-      const delivery = options?.queueDelivery === "guide" ? "guide" : undefined;
-      return await this.steerTurn({
+      const delivery = interruptRequested || options?.queueDelivery === "guide" ? "guide" : undefined;
+      const steerResult = await this.steerTurn({
         automationId: options?.automationId,
         commandKind: options?.commandKind,
         delivery,
@@ -84,6 +86,14 @@ export async function admitPrompt(
         toolDisallowlist: options?.toolDisallowlist,
         traceContext: options?.traceContext,
       });
+      if (interruptRequested && steerResult.kind === "queued") {
+        // U1 (2026-11-17): the guide is durable FIRST, then the current model step is
+        // cut; the step catch drains it and continues the same turn. Mid-tool there is
+        // no step controller, so this is a no-op and the guide waits at the batch
+        // boundary (the picker copy states exactly that).
+        this.interruptActiveModelStep();
+      }
+      return steerResult;
     }
 
     const delivery =

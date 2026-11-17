@@ -622,6 +622,12 @@ export interface AgentRuntime {
   releaseForegroundPromotionLease(leaseId: string): boolean;
   enqueueDeferredInput(input: string | TurnSteerInput): Promise<TurnSteerResult>;
   steerTurn(input: string | TurnSteerInput): Promise<TurnSteerResult>;
+  /**
+   * U1 (2026-11-17): cut the CURRENT model step and let the same turn continue with the
+   * already-enqueued steer guide. Mid-tool there is no step in flight, so this is a
+   * no-op and the guide waits at the batch boundary (existing guide semantics).
+   */
+  interruptActiveModelStep(): boolean;
   /** v4 queue 单项删除：按 pendingInputId 移除当前 active turn 的一条排队输入。 */
   removePendingInputById(options: {
     pendingInputId: string;

@@ -170,6 +170,14 @@ export function computeAvailability(
       : running
         ? ALLOWED
         : denied("sendQueuedNowRequiresRunning"),
+    // U1 (2026-11-17): the composer's ⚡ cuts the current model step. The projection is
+    // snapshot-only, so this is an optimistic gate on a running turn; the runtime's
+    // steerable check stays authoritative and rejects honestly (no fake button).
+    interruptSteer: compacting
+      ? denied("compactOperationLock")
+      : running
+        ? ALLOWED
+        : denied("interruptSteerRequiresRunning"),
     // 独立 pauseGoal 改变 target 产品态；verifier/notSatisfied 期间底层 target 仍是 active，
     // 因此也允许暂停，不能要求当前一定存在 provider abort controller。
     pauseGoal:

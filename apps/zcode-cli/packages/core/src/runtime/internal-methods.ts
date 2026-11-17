@@ -122,6 +122,8 @@ export interface AgentRuntimeCoreMethods {
   getActiveTurnInfo(): ActiveTurnInfo | undefined;
   enqueueDeferredInput(input: string | TurnSteerInput): Promise<TurnSteerResult>;
   steerTurn(input: string | TurnSteerInput): Promise<TurnSteerResult>;
+  /** U1: abort the current model step (same turn continues with the pending guide). */
+  interruptActiveModelStep(): boolean;
   beginActiveTurn(
     turnId: TurnId,
     traceContext: TraceContext,

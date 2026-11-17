@@ -167,6 +167,10 @@ export const sessionActionAvailabilitySchema = z.object({
   setFollowupMode: actionAvailabilitySchema,
   queueEdit: actionAvailabilitySchema,
   sendQueuedNow: actionAvailabilitySchema,
+  // U1 (2026-11-17): cut the current model step and continue the same turn with a guide.
+  // Optional only for old-CLI frames: absence = the step interrupt is unavailable and the
+  // composer picker offers enqueue only.
+  interruptSteer: actionAvailabilitySchema.optional(),
   pauseGoal: actionAvailabilitySchema,
   resumeGoal: actionAvailabilitySchema,
   // 文件撤销的 session 锁；目标资格看 turnHeader.actions.canRewindFiles。

@@ -38,7 +38,7 @@ import { amendWorkflowRunSettings } from "./dynamic-workflow-run-settings.js";
 import { getProjection } from "./config.js";
 import { getSessionId } from "./config.js";
 import { enqueueDeferredInput } from "./steering.js";
-import { steerTurn } from "./steering.js";
+import { steerTurn, interruptActiveModelStep } from "./steering.js";
 import { beginActiveTurn } from "./steering.js";
 import { reserveTurnStart } from "./steering.js";
 import { releaseTurnStart } from "./steering.js";
@@ -262,6 +262,7 @@ export function installAgentRuntimeMethods(ctor: AgentRuntimeConstructor): void 
   proto.getSessionId = getSessionId;
   proto.enqueueDeferredInput = enqueueDeferredInput;
   proto.steerTurn = steerTurn;
+  proto.interruptActiveModelStep = interruptActiveModelStep;
   proto.beginActiveTurn = beginActiveTurn;
   proto.reserveTurnStart = reserveTurnStart;
   proto.releaseTurnStart = releaseTurnStart;

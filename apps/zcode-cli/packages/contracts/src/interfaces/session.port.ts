@@ -424,7 +424,7 @@ export interface TurnInputIntentMetadata {
   mode?: "build" | "edit" | "plan" | "yolo" | "guarded";
   admissionSeq: number;
   admittedAt: number;
-  requestedDelivery: "auto" | "startNow" | "queue" | "guide";
+  requestedDelivery: "auto" | "startNow" | "queue" | "guide" | "interrupt";
   admittedDelivery: "startNow" | "queue" | "guide";
   queuePosition?: number;
   fallbackReasonCode?: string;

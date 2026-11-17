@@ -41,6 +41,7 @@ import {
   throwIfTurnAborted,
   isModelContextExceededError,
   isTurnCancellationError,
+  isModelStepInterruptedError,
   buildTurnFileChangeSummary,
 } from "../helpers/index.js";
 import type {
@@ -58,6 +59,8 @@ import {
   persistOutputTokenLimitErrorCarrier,
 } from "./turn-stop.js";
 import { createStreamingToolCoordinator } from "./streaming-tool-coordinator.js";
+import { drainInlineGuideForNextRequest } from "./turn-guide-drain.js";
+import { linkAbortSignal } from "../../tool/executor/timeout.js";
 import { persistCancelledStreamSnapshot } from "./cancelled-stream-persistence.js";
 import { persistTextBlockParts } from "./message-persistence.js";
 import {
@@ -250,13 +253,83 @@ async function runModelBackedTurnStepImpl(
     }
   };
 
+  // U1 (2026-11-17): the one place that persists what already streamed when a step ends
+  // without a normal response (user Stop or a steer interrupt). Returns whether it
+  // committed a history round, so callers do not double-count rounds.
+  const persistPartialStepSnapshot = async (): Promise<boolean> => {
+    await persistCancelledStreamSnapshot(this, {
+      assistantCreatedAt,
+      assistantMessageId,
+      snapshot: latestStreamSnapshot,
+      traceContext: modelTraceContext,
+    });
+    const reasoning = latestStreamSnapshot.reasoning.filter(hasAssistantReasoningContent);
+    const modelRef = state.model
+      ? { providerId: state.model.providerId, modelId: state.model.modelId }
+      : undefined;
+    const orderedBlocks = orderedAssistantHistoryBlocks(latestStreamSnapshot);
+    if (orderedBlocks) {
+      // 有序快照与冷恢复共用 buildAssistantEntries；本地工具仍不进入（已知差异，见 spec）。
+      const entries = buildAssistantEntries({
+        blocks: orderedBlocks,
+        model: modelRef,
+        groupKey: providerToolRoundsCompactGroupKey(latestStreamSnapshot.providerToolRounds),
+      });
+      commitTurnRequestEntries(this, state.turnRequestState, entries);
+      if (entries.length > 0) {
+        recordModelHistoryRound(state);
+        return true;
+      }
+      return false;
+    }
+    // 已收起的服务端内置工具轮在流中就已落盘，取消时同样要进入 live history。
+    const providerRoundEntries = createProviderToolRoundEntries(
+      latestStreamSnapshot.providerToolRounds,
+      modelRef,
+      hasAssistantReasoningContent,
+    );
+    const hasCurrentRound = latestStreamSnapshot.text.length > 0 || reasoning.length > 0;
+    if (!hasCurrentRound && providerRoundEntries.length === 0) return false;
+    // 取消时 durable snapshot 已经持久化，但成功路径的 live history commit
+    // 和 historyRoundCount 不会执行，导致当前进程与 cold resume 的 provider history 不一致。
+    commitTurnRequestEntries(
+      this,
+      state.turnRequestState,
+      withCompactGroupKey(
+        [
+          ...providerRoundEntries,
+          ...(hasCurrentRound
+            ? [
+                createRuntimeAssistantEntry(
+                  latestStreamSnapshot.text,
+                  undefined,
+                  reasoning,
+                  modelRef,
+                ),
+              ]
+            : []),
+        ],
+        providerToolRoundsCompactGroupKey(latestStreamSnapshot.providerToolRounds),
+      ),
+    );
+    recordModelHistoryRound(state);
+    return true;
+  };
+
+  // U1 (2026-11-17): the provider request runs under a STEP-scoped controller. The turn
+  // signal is linked into it, so Stop still aborts the request; a user steer interrupt
+  // aborts ONLY this controller and the catch below continues the same turn.
+  const modelStepController = new AbortController();
+  const unlinkTurnAbort = linkAbortSignal(state.turnAbortSignal, modelStepController);
+  this.activeModelStepController = modelStepController;
+
   let result: RuntimeModelTextResult;
   try {
     const baselineMaxOutputTokens = resolveNormalRequestMaxOutputTokens({
       modelMaxOutputTokens: executionMaxOutputTokens,
     });
     result = await this.runModelTextRequest({
-      abortSignal: state.turnAbortSignal,
+      abortSignal: modelStepController.signal,
       assistantMessageId,
       events: state.events,
       maxOutputTokens: resolveModelStepMaxOutputTokens({
@@ -287,6 +360,48 @@ async function runModelBackedTurnStepImpl(
     });
     throwIfTurnAborted(state.turnAbortSignal);
   } catch (error) {
+    // The provider layer may wrap an abort reason in its own error, so the identity is
+    // read from the step controller itself; the turn signal being aborted means a real
+    // Stop, which keeps the existing cancellation path.
+    if (
+      !state.turnAbortSignal.aborted &&
+      modelStepController.signal.aborted &&
+      isModelStepInterruptedError(modelStepController.signal.reason)
+    ) {
+      // U1 (2026-11-17): the user cut THIS model step to steer the same turn. Persist
+      // what already streamed, drop tools that never executed, then continue the turn
+      // with the guide admission enqueued before the abort. This is a normal boundary:
+      // no turn failure, no TurnCancelled and no "[Request interrupted by user]" marker.
+      await recordMainTurnModelUsage(this, state, {
+        assistantMessageId,
+        error,
+        model,
+        modelTraceContext,
+        networkEventStartIndex,
+        startedAt: modelStartedAt,
+        status: "cancelled",
+      });
+      await streamingToolCoordinator.abandon("cancelled");
+      const committed = await persistPartialStepSnapshot();
+      await this.persistAssistantMessage(
+        assistantMessageId,
+        state.currentUserMessageId,
+        assistantCreatedAt,
+        { completed: Date.now(), finish: "interrupted_by_user_steer" },
+        modelTraceContext,
+        model,
+      );
+      state.modelResponse = "";
+      state.modelStepCount += 1;
+      if (!committed) recordModelHistoryRound(state);
+      state.turnMachine = new TurnMachineImpl(state.turnMachine.receiveModelResponse(""));
+      state.turnMachine = new TurnMachineImpl(state.turnMachine.aggregateResults());
+      if (await drainInlineGuideForNextRequest(this, state)) {
+        state.inputAttachmentCollectionPending = "text_guide";
+      }
+      // No guide (race): still a legal boundary — the next iteration re-requests.
+      return "continue";
+    }
     let finalError = error;
     await recordMainTurnModelUsage(this, state, {
       assistantMessageId,
@@ -458,59 +573,8 @@ async function runModelBackedTurnStepImpl(
       state.turnAbortSignal.aborted &&
       isTurnCancellationError(finalError, state.turnAbortSignal)
     ) {
-      await persistCancelledStreamSnapshot(this, {
-        assistantCreatedAt,
-        assistantMessageId,
-        snapshot: latestStreamSnapshot,
-        traceContext: modelTraceContext,
-      });
-      const reasoning = latestStreamSnapshot.reasoning.filter(hasAssistantReasoningContent);
-      const modelRef = state.model
-        ? { providerId: state.model.providerId, modelId: state.model.modelId }
-        : undefined;
-      const orderedBlocks = orderedAssistantHistoryBlocks(latestStreamSnapshot);
-      if (orderedBlocks) {
-        // 有序快照与冷恢复共用 buildAssistantEntries；本地工具仍不进入（已知差异，见 spec）。
-        const entries = buildAssistantEntries({
-          blocks: orderedBlocks,
-          model: modelRef,
-          groupKey: providerToolRoundsCompactGroupKey(latestStreamSnapshot.providerToolRounds),
-        });
-        commitTurnRequestEntries(this, state.turnRequestState, entries);
-        if (entries.length > 0) recordModelHistoryRound(state);
-      }
-      // 已收起的服务端内置工具轮在流中就已落盘，取消时同样要进入 live history。
-      const providerRoundEntries = createProviderToolRoundEntries(
-        latestStreamSnapshot.providerToolRounds,
-        modelRef,
-        hasAssistantReasoningContent,
-      );
-      const hasCurrentRound = latestStreamSnapshot.text.length > 0 || reasoning.length > 0;
-      if (!orderedBlocks && (hasCurrentRound || providerRoundEntries.length > 0)) {
-        // 取消时 durable snapshot 已经持久化，但成功路径的 live history commit
-        // 和 historyRoundCount 不会执行，导致当前进程与 cold resume 的 provider history 不一致。
-        commitTurnRequestEntries(
-          this,
-          state.turnRequestState,
-          withCompactGroupKey(
-            [
-              ...providerRoundEntries,
-              ...(hasCurrentRound
-                ? [
-                    createRuntimeAssistantEntry(
-                      latestStreamSnapshot.text,
-                      undefined,
-                      reasoning,
-                      modelRef,
-                    ),
-                  ]
-                : []),
-            ],
-            providerToolRoundsCompactGroupKey(latestStreamSnapshot.providerToolRounds),
-          ),
-        );
-        recordModelHistoryRound(state);
-      }
+      // U1: shared with the steer interrupt (persistPartialStepSnapshot).
+      await persistPartialStepSnapshot();
     }
     const finalErrorRecord =
       finalError && typeof finalError === "object"
@@ -559,6 +623,12 @@ async function runModelBackedTurnStepImpl(
       return "continue";
     }
     throw finalError;
+  } finally {
+    // U1: the step controller lives exactly as long as the request/stream.
+    if (this.activeModelStepController === modelStepController) {
+      this.activeModelStepController = undefined;
+    }
+    unlinkTurnAbort();
   }
 
   state.modelResponse = result.text;

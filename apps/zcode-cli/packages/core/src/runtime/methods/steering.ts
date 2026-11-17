@@ -59,6 +59,7 @@ import {
   type RuntimeMessageEntry,
 } from "../../agent/message-history.js";
 import type { AgentRuntimeInternal } from "../internal.js";
+import { createModelStepInterruptedError } from "../helpers/turn-errors.js";
 
 function hasSteerInput(request: Pick<TurnSteerInput, "attachments" | "input" | "intent">): boolean {
   return (
@@ -227,6 +228,28 @@ export async function steerTurn(
     queueLength,
     turnId: activeTurn.turnId,
   };
+}
+
+/**
+ * U1 (2026-11-17): cut the CURRENT model step without touching the turn.
+ *
+ * The step controller exists only while a provider request/stream is in flight. Aborting
+ * it makes the model-step catch persist the partial snapshot, discard streaming tool
+ * calls, drain the pending guide and `continue` the same turn. Mid-tool there is no step
+ * in flight, so this returns false and the guide waits at the batch boundary — the
+ * existing guide semantics, which is exactly the honest copy of the composer picker.
+ */
+export function interruptActiveModelStep(this: AgentRuntimeInternal): boolean {
+  const controller = this.activeModelStepController;
+  if (!controller || controller.signal.aborted) return false;
+  controller.abort(createModelStepInterruptedError());
+  this.logger?.info("Active model step interrupted by user steer", {
+    ...traceContextToLogContext(this.activeTurn?.traceContext ?? this.rootTraceContext),
+    event: "turn.model_step.interrupted",
+    module: "core.runtime",
+    turnId: this.activeTurn?.turnId,
+  });
+  return true;
 }
 
 export async function enqueueDeferredInput(

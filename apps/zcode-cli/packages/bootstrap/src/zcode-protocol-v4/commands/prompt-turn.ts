@@ -266,8 +266,14 @@ async function startPromptTurnAfterPreflight(
         // Bootstrap controller 曾经被当成 Core busy 真相，并由 projection watchdog
         // 清理它；现在 Core admission 自己持有 reservation，Stop 也直接调用 Core execution。
         delivery: "start_turn",
-        ...(params.intent?.requestedDelivery === "guide"
+        ...(params.intent?.requestedDelivery === "guide" ||
+        params.intent?.requestedDelivery === "interrupt"
           ? { queueDelivery: "guide" as const }
+          : {}),
+        // U1 (2026-11-17): interrupt = the guide goes in first, then the current model
+        // step is cut and the SAME turn continues with it (mid-tool: batch boundary).
+        ...(params.intent?.requestedDelivery === "interrupt"
+          ? { interruptCurrentModelStep: true }
           : {}),
         ...(params.browserAmbientContext
           ? { browserAmbientContext: params.browserAmbientContext }

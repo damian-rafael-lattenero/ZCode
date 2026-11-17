@@ -7,7 +7,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   TID_COMPOSER_INTERRUPT_PICKER,
   TID_COMPOSER_INTERRUPT_PICKER_INTERRUPT,
-  TID_COMPOSER_INTERRUPT_PICKER_QUEUE,
+  TID_COMPOSER_INTERRUPT_PICKER_STEER,
 } from "@zcode/shared/test-ids";
 import { ZCodeIntlProvider } from "@/i18n/IntlProvider.js";
 import { ComposerInterruptPicker } from "@/v4/composer/ComposerInterruptPickerStrip.js";
@@ -18,11 +18,13 @@ import {
   type ComposerInterruptPickerGate,
 } from "@/v4/composer/composerInterruptPicker.js";
 
-// Busy composer "Cut and continue / Queue" picker.
+// Busy composer "Cut and continue / Soft steer" picker.
 // DOM contract: the strip lives in the composer surface above the input and never
 // clears or sends anything on its own; only an explicit option click dispatches.
 // The harness below mirrors the composer seam: submit -> controller.request(gate)
 // -> inline picker -> controller.select -> delivery forwarded as requestedDelivery.
+// Soft steer delivers `guide`: the running step finishes first and the SAME turn
+// continues with the message at the next boundary.
 
 afterEach(cleanup);
 
@@ -144,7 +146,7 @@ describe("composer interrupt picker controller", () => {
     expect(result.current!.open).toBe(false);
   });
 
-  it("request does not open while idle and select queue forwards queue", () => {
+  it("request does not open while idle and select soft steer forwards guide", () => {
     const onDeliver = vi.fn();
     const { result } = renderHook(() => useComposerInterruptPickerController({ onDeliver }));
 
@@ -159,9 +161,9 @@ describe("composer interrupt picker controller", () => {
       result.current!.request(composeGate())!;
     });
     act(() => {
-      result.current!.select("queue");
+      result.current!.select("guide");
     });
-    expect(onDeliver).toHaveBeenCalledWith("queue");
+    expect(onDeliver).toHaveBeenCalledWith("guide");
   });
 
   it("dismiss closes without delivering", () => {
@@ -184,7 +186,7 @@ describe("composer interrupt picker strip", () => {
     renderPicker({ interruptAllowed: true, onSelect: () => {}, onDismiss: () => {} });
     expect(screen.getByTestId(TID_COMPOSER_INTERRUPT_PICKER)).toBeTruthy();
     expect(screen.getByTestId(TID_COMPOSER_INTERRUPT_PICKER_INTERRUPT)).toBeTruthy();
-    expect(screen.getByTestId(TID_COMPOSER_INTERRUPT_PICKER_QUEUE)).toBeTruthy();
+    expect(screen.getByTestId(TID_COMPOSER_INTERRUPT_PICKER_STEER)).toBeTruthy();
   });
 
   it("interrupt click dispatches the interrupt delivery", () => {
@@ -194,19 +196,19 @@ describe("composer interrupt picker strip", () => {
     expect(onSelect).toHaveBeenCalledWith("interrupt");
   });
 
-  it("queue click dispatches the queue delivery", () => {
+  it("soft steer click dispatches the guide delivery", () => {
     const onSelect = vi.fn();
     renderPicker({ interruptAllowed: true, onSelect, onDismiss: () => {} });
-    fireEvent.click(screen.getByTestId(TID_COMPOSER_INTERRUPT_PICKER_QUEUE));
-    expect(onSelect).toHaveBeenCalledWith("queue");
+    fireEvent.click(screen.getByTestId(TID_COMPOSER_INTERRUPT_PICKER_STEER));
+    expect(onSelect).toHaveBeenCalledWith("guide");
   });
 
   it("hides the interrupt option when availability denies it", () => {
     const onSelect = vi.fn();
     renderPicker({ interruptAllowed: false, onSelect, onDismiss: () => {} });
     expect(queryByTestId(TID_COMPOSER_INTERRUPT_PICKER_INTERRUPT)).toBeNull();
-    fireEvent.click(screen.getByTestId(TID_COMPOSER_INTERRUPT_PICKER_QUEUE));
-    expect(onSelect).toHaveBeenCalledWith("queue");
+    fireEvent.click(screen.getByTestId(TID_COMPOSER_INTERRUPT_PICKER_STEER));
+    expect(onSelect).toHaveBeenCalledWith("guide");
   });
 
   it("Escape dismisses without selecting or sending", () => {
@@ -228,7 +230,7 @@ describe("composer interrupt picker strip", () => {
 // Mirrors the composer seam: the draft lives outside the picker, submit opens it,
 // and only a confirmed option sends. Dismissal must leave the draft untouched.
 function PickerHarness(props: {
-  onSend: (delivery: "interrupt" | "queue", draft: string) => void;
+  onSend: (delivery: "interrupt" | "guide", draft: string) => void;
 }) {
   const [draft, setDraft] = useState("keep me");
   const controller = useComposerInterruptPickerController({
@@ -263,7 +265,7 @@ function PickerHarness(props: {
   );
 }
 
-function renderHarness(onSend: (delivery: "interrupt" | "queue", draft: string) => void) {
+function renderHarness(onSend: (delivery: "interrupt" | "guide", draft: string) => void) {
   return render(
     createElement(
       ZCodeIntlProvider,
@@ -317,12 +319,12 @@ describe("composer interrupt picker keeps the draft", () => {
     expect(onSend).toHaveBeenCalledWith("interrupt", "keep me");
   });
 
-  it("queue option sends the current draft with the queue delivery", () => {
+  it("soft steer option sends the current draft with the guide delivery", () => {
     const onSend = vi.fn();
     renderHarness(onSend);
 
     fireEvent.click(screen.getByTestId("harness-send"));
-    fireEvent.click(screen.getByTestId(TID_COMPOSER_INTERRUPT_PICKER_QUEUE));
-    expect(onSend).toHaveBeenCalledWith("queue", "keep me");
+    fireEvent.click(screen.getByTestId(TID_COMPOSER_INTERRUPT_PICKER_STEER));
+    expect(onSend).toHaveBeenCalledWith("guide", "keep me");
   });
 });

@@ -2,13 +2,13 @@ import { useEffect, useRef } from "react";
 import {
   TID_COMPOSER_INTERRUPT_PICKER,
   TID_COMPOSER_INTERRUPT_PICKER_INTERRUPT,
-  TID_COMPOSER_INTERRUPT_PICKER_QUEUE,
+  TID_COMPOSER_INTERRUPT_PICKER_STEER,
 } from "@zcode/shared/test-ids";
 import { useZCodeIntl } from "@/i18n/IntlProvider.js";
 import type { ComposerInterruptDelivery } from "@/v4/composer/composerInterruptPicker.js";
 
 export interface ComposerInterruptPickerProps {
-  /** False hides the interrupt option; the queue option always remains. */
+  /** False hides the interrupt option; the soft-steer option always remains. */
   interruptAllowed: boolean;
   onSelect: (delivery: ComposerInterruptDelivery) => void;
   /** Escape, click-away or a draft edit: close without sending or clearing the draft. */
@@ -81,15 +81,15 @@ export function ComposerInterruptPicker({
       ) : null}
       <button
         type="button"
-        data-testid={TID_COMPOSER_INTERRUPT_PICKER_QUEUE}
+        data-testid={TID_COMPOSER_INTERRUPT_PICKER_STEER}
         className={OPTION_CLASS_NAME}
-        onClick={() => onSelect("queue")}
+        onClick={() => onSelect("guide")}
       >
         <span className="text-ui-base font-medium text-foreground">
-          {intl.formatMessage({ id: "chat.composer.interruptPicker.queue" })}
+          {intl.formatMessage({ id: "chat.composer.interruptPicker.steer" })}
         </span>
         <span className="text-ui-sm text-foreground-subtle">
-          {intl.formatMessage({ id: "chat.composer.interruptPicker.queueDescription" })}
+          {intl.formatMessage({ id: "chat.composer.interruptPicker.steerDescription" })}
         </span>
       </button>
     </div>

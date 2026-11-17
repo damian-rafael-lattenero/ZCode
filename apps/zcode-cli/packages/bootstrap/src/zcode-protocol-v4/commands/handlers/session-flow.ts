@@ -91,7 +91,12 @@ async function sendText(
       genUiContext: payload.genUiContext,
     });
   const routingMode = host.getInputRoutingMode?.(envelope.sessionId ?? "") ?? null;
-  const forceStartNow = payload.requestedDelivery === "startNow";
+  // (FORK) The desktop picker can request `interrupt`. The dedicated cut-and-continue
+  // admission path is finalized by the parent change; until then fall back to startNow
+  // (preempt + start) so this branch stays protocol- and type-consistent.
+  const requestedDelivery =
+    payload.requestedDelivery === "interrupt" ? "startNow" : payload.requestedDelivery;
+  const forceStartNow = requestedDelivery === "startNow";
   // 队首被 composer 编辑态冻结时 Core 可能完全空闲；不强制入队会 startNow 越过冻结项。
   const queueHeadEditLocked =
     !forceStartNow &&
@@ -242,9 +247,9 @@ async function sendText(
       botGroupSource: payload.botGroupSource,
       conversationQuotes: payload.conversationQuotes,
       requestedDelivery:
-        payload.requestedDelivery ??
+        requestedDelivery ??
         (routingMode === "guide" ? "guide" : routingMode === "enqueue" ? "queue" : "startNow"),
-      ...(payload.requestedDelivery !== "guide" && routingMode === "guide" && attachments?.length
+      ...(requestedDelivery !== "guide" && routingMode === "guide" && attachments?.length
         ? { fallbackReasonCode: "guide.attachmentsUnsupported" }
         : {}),
       attachmentRefs: payload.attachments,

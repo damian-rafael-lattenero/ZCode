@@ -34,10 +34,12 @@ export function createCwdCapturePlan(
   const wrappedCommand =
     options.dialect === "cmd"
       ? createWindowsCmdCwdCaptureCommand(request.command.command, cwdFilePath)
-      : createPosixCwdCaptureCommand(
-          request.command.command,
-          options.dialect === "git-bash" ? windowsPathToGitBashPath(cwdFilePath) : cwdFilePath,
-        );
+      : options.dialect === "nu"
+        ? createNuCwdCaptureCommand(request.command.command, cwdFilePath)
+        : createPosixCwdCaptureCommand(
+            request.command.command,
+            options.dialect === "git-bash" ? windowsPathToGitBashPath(cwdFilePath) : cwdFilePath,
+          );
 
   return {
     command: {
@@ -54,6 +56,15 @@ function createPosixCwdCaptureCommand(command: string, cwdFilePath: string): str
     "__zcode_status=$?",
     `if [ "$__zcode_status" -eq 0 ]; then pwd -P > ${shellQuote(cwdFilePath)}; fi`,
     'exit "$__zcode_status"',
+  ].join("\n");
+}
+
+function createNuCwdCaptureCommand(command: string, cwdFilePath: string): string {
+  return [
+    command,
+    "let s = ($env.LAST_EXIT_CODE? | default 0)",
+    `if $s == 0 { pwd | save -f ${shellQuote(cwdFilePath)} }`,
+    "exit $s",
   ].join("\n");
 }
 

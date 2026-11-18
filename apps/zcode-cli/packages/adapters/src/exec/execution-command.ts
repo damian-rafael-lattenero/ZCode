@@ -154,7 +154,7 @@ function createShellProviderCommand(
   }
 
   return {
-    args: ["-c", "-l", command],
+    args: provider.dialect === "nu" ? ["-l", "-c", command] : ["-c", "-l", command],
     cwdDialect: provider.dialect,
     envOverlay: provider.envOverlay,
     file: provider.file,
@@ -167,10 +167,18 @@ export function setResolvedShellLoginMode(
   resolved: ResolvedSpawnCommand,
   useLoginShell: boolean,
 ): ResolvedSpawnCommand {
-  if (resolved.shell !== false || resolved.args[0] !== "-c") return resolved;
-  if (resolved.usesLoginShell !== true) return resolved;
+  if (resolved.shell !== false || resolved.usesLoginShell !== true) return resolved;
 
   const command = resolved.args.at(-1) ?? "";
+  // Nushell treats -l as a flag before -c, so login mode is expressed by presence, not position.
+  if (resolved.cwdDialect === "nu") {
+    return {
+      ...resolved,
+      args: useLoginShell ? ["-l", "-c", command] : ["-c", command],
+    };
+  }
+
+  if (resolved.args[0] !== "-c") return resolved;
   return {
     ...resolved,
     args: useLoginShell ? ["-c", "-l", command] : ["-c", command],
@@ -186,6 +194,18 @@ export function applyResolvedShellCommand(
       ...resolved,
       args: [],
       file: command,
+    };
+  }
+
+  if (
+    resolved.cwdDialect === "nu" &&
+    resolved.shell === false &&
+    resolved.usesLoginShell === true
+  ) {
+    const useLoginShell = resolved.args[0] === "-l";
+    return {
+      ...resolved,
+      args: useLoginShell ? ["-l", "-c", command] : ["-c", command],
     };
   }
 

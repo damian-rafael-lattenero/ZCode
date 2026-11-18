@@ -2263,6 +2263,55 @@ describe("NodeExecutionAdapter", () => {
     }
   });
 
+  it("creates a Nushell cwd capture wrapper for nu commands", () => {
+    const plan = createCwdCapturePlan(
+      {
+        command: {
+          mode: "shell",
+          command: "cd subdir",
+          shellProfile: "posix-bash",
+        },
+        captureCwdAfterSuccess: true,
+      },
+      { dialect: "nu", platform: "darwin" },
+    );
+
+    expect(plan.cwdFilePath).toBeDefined();
+    expect(plan.command.mode).toBe("shell");
+    if (plan.command.mode === "shell") {
+      expect(plan.command.command).toContain("let s = ($env.LAST_EXIT_CODE? | default 0)");
+      expect(plan.command.command).toContain("pwd | save -f '");
+      expect(plan.command.command).toContain("exit $s");
+      expect(plan.command.command).not.toContain("__zcode_status");
+    }
+  });
+
+  it("keeps the POSIX cwd capture wrapper unchanged", () => {
+    const plan = createCwdCapturePlan(
+      {
+        command: {
+          mode: "shell",
+          command: "pwd",
+          shellProfile: "posix-bash",
+        },
+        captureCwdAfterSuccess: true,
+      },
+      { dialect: "posix", platform: "linux" },
+    );
+
+    expect(plan.command.mode).toBe("shell");
+    if (plan.command.mode === "shell") {
+      expect(plan.command.command).toBe(
+        [
+          "pwd",
+          "__zcode_status=$?",
+          `if [ "$__zcode_status" -eq 0 ]; then pwd -P > '${plan.cwdFilePath}'; fi`,
+          'exit "$__zcode_status"',
+        ].join("\n"),
+      );
+    }
+  });
+
   it("uses POSIX cwd capture syntax for Windows Git Bash", () => {
     const plan = createCwdCapturePlan(
       {
@@ -3214,6 +3263,106 @@ describe("NodeExecutionAdapter", () => {
         args: ["-c", "-l", "echo ok"],
         file: "/snapshot/bin/zsh",
         shell: false,
+      });
+    },
+  );
+
+  it.skipIf(process.platform === "win32")(
+    "uses a user-config Nushell selection for posix-bash shell commands",
+    () => {
+      const nuPath = "/opt/homebrew/bin/nu";
+      const resolved = resolveExecutionCommand(
+        {
+          mode: "shell",
+          command: "echo ok",
+          shellOverride: {
+            dialect: "nu",
+            display: { name: "Nushell" },
+            id: `nu:${nuPath}`,
+            label: "Nushell",
+            path: nuPath,
+            source: "user-config",
+          },
+          shellProfile: "posix-bash",
+        },
+        {
+          env: { PATH: "/usr/bin", SHELL: "/bin/zsh" },
+          exists: (path) => path === nuPath,
+          platform: "darwin",
+        },
+      );
+
+      expect(resolved).toEqual({
+        args: ["-l", "-c", "echo ok"],
+        cwdDialect: "nu",
+        envOverlay: {
+          GIT_EDITOR: "true",
+          SHELL: nuPath,
+        },
+        file: nuPath,
+        shell: false,
+        usesLoginShell: true,
+      });
+    },
+  );
+
+  it("toggles login mode for Nushell without changing the -l/-c order", () => {
+    const base = {
+      args: ["-l", "-c", "echo ok"],
+      cwdDialect: "nu" as const,
+      file: "/opt/homebrew/bin/nu",
+      shell: false as const,
+      usesLoginShell: true,
+    };
+
+    expect(setResolvedShellLoginMode(base, true).args).toEqual(["-l", "-c", "echo ok"]);
+    expect(setResolvedShellLoginMode(base, false).args).toEqual(["-c", "echo ok"]);
+    expect(applyResolvedShellCommandForTest(base, "pwd").args).toEqual(["-l", "-c", "pwd"]);
+    expect(
+      applyResolvedShellCommandForTest(setResolvedShellLoginMode(base, false), "pwd").args,
+    ).toEqual(["-c", "pwd"]);
+  });
+
+  it.skipIf(process.platform === "win32")("auto-detects Nushell only when SHELL itself is nu", () => {
+    const resolution = resolveEffectiveBashShellSelection({
+      env: { PATH: "/usr/bin", SHELL: "/opt/homebrew/bin/nu" },
+      exists: (path) => path === "/opt/homebrew/bin/nu",
+      platform: "darwin",
+    });
+
+    expect(resolution.selection).toMatchObject({
+      dialect: "nu",
+      display: { name: "Nushell" },
+      id: "auto:nu",
+      label: "nu",
+      path: "/opt/homebrew/bin/nu",
+      source: "auto-detected",
+    });
+    expect(resolution.provider).toMatchObject({
+      dialect: "nu",
+      file: "/opt/homebrew/bin/nu",
+      shell: false,
+    });
+  });
+
+  it.skipIf(process.platform === "win32")(
+    "keeps zsh auto-detection when SHELL is zsh even if nu is installed",
+    () => {
+      const resolution = resolveEffectiveBashShellSelection({
+        env: { PATH: "/opt/homebrew/bin:/bin", SHELL: "/bin/zsh" },
+        exists: (path) => path === "/opt/homebrew/bin/nu" || path === "/bin/zsh",
+        platform: "darwin",
+      });
+
+      expect(resolution.selection).toMatchObject({
+        dialect: "posix",
+        display: { name: "zsh" },
+        path: "/bin/zsh",
+        source: "auto-detected",
+      });
+      expect(resolution.provider).toMatchObject({
+        dialect: "posix",
+        file: "/bin/zsh",
       });
     },
   );

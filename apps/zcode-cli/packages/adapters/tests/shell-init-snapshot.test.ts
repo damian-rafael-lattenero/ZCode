@@ -15,6 +15,7 @@ describe("shell init snapshot", () => {
     expect(supportsShellInitSnapshot("git-bash")).toBe(true);
     expect(supportsShellInitSnapshot("cmd")).toBe(false);
     expect(supportsShellInitSnapshot("legacy-shell")).toBe(false);
+    expect(supportsShellInitSnapshot("nu")).toBe(false);
   });
 
   it("detects rc file path from shell kind", () => {

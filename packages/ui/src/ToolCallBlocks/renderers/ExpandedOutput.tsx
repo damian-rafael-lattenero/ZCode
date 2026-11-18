@@ -5,14 +5,18 @@ import type { ExpandedSegment } from "@/lib/outputTree.js";
 type HighlightSegment = Extract<ExpandedSegment, { kind: "highlight" }>;
 
 // Renders expanded output segments inside the caller's <pre>. Text segments are
-// literal; a highlight segment hands its block to shiki, and every line of a
+// the JSON skeleton, so they are tokenized as json (quoted keys, numbers,
+// booleans); a highlight segment hands its block to shiki, and every line of a
 // block gets the segment's indent (inline segments carry none).
 export function ExpandedOutput({ segments }: { segments: ExpandedSegment[] }) {
   return (
     <>
       {segments.map((segment, index) =>
         segment.kind === "text" ? (
-          <span key={index}>{segment.text}</span>
+          <HighlightedSegment
+            key={index}
+            segment={{ kind: "highlight", language: "json", text: segment.text, indent: "" }}
+          />
         ) : (
           <HighlightedSegment key={index} segment={segment} />
         ),

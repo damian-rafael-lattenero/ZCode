@@ -48,7 +48,7 @@ describe("expandOutputText", () => {
   it("expands an embedded JSON string as its own highlight block", () => {
     const segments = expandOutputText(JSON.stringify({ payload: JSON.stringify({ a: 1 }) }));
     expect(segments).not.toBeNull();
-    expect(segments![0]).toEqual({ kind: "text", text: "{\n  payload:\n" });
+    expect(segments![0]).toEqual({ kind: "text", text: '{\n  "payload":\n' });
     const block = segments![1];
     expect(block?.kind).toBe("highlight");
     if (block?.kind !== "highlight") return;
@@ -60,16 +60,16 @@ describe("expandOutputText", () => {
 
   it("shows multi-line text as real lines", () => {
     expect(expandOutputText(JSON.stringify({ out: "line one\nline two" }))).toEqual([
-      { kind: "text", text: "{\n  out:\n    line one\n    line two\n}" },
+      { kind: "text", text: '{\n  "out":\n    line one\n    line two\n}' },
     ]);
   });
 
   it("highlights an inline Nu command without breaking its line", () => {
     const segments = expandOutputText(JSON.stringify({ command: "let x = 1", out: "a\nb" }));
     expect(segments).toEqual([
-      { kind: "text", text: "{\n  command: " },
+      { kind: "text", text: '{\n  "command": ' },
       { kind: "highlight", language: "nu", text: "let x = 1", indent: "" },
-      { kind: "text", text: "\n  out:\n    a\n    b\n}" },
+      { kind: "text", text: '\n  "out":\n    a\n    b\n}' },
     ]);
   });
 
@@ -79,7 +79,7 @@ describe("expandOutputText", () => {
     );
     expect(segments![0]).toEqual({
       kind: "text",
-      text: "{\n  state: {\n    input: {\n      command: ",
+      text: '{\n  "state": {\n    "input": {\n      "command": ',
     });
     expect(segments![1]).toMatchObject({ kind: "highlight", language: "nu", indent: "" });
   });

@@ -228,8 +228,10 @@ function shiftContinuation(text: string, prefix: string): string {
   return [rows[0], ...rows.slice(1).map((line) => `${prefix}${line}`)].join("\n");
 }
 
+// Keys keep JSON quotes: the card renders the JSON shape it was given, and
+// quoted keys are what the json grammar colors.
 function renderKey(key: string): string {
-  return /^[A-Za-z_][A-Za-z0-9_]*$/.test(key) ? key : JSON.stringify(key);
+  return JSON.stringify(key);
 }
 
 function prettyJson(text: string): string {

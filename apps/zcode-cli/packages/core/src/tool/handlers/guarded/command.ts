@@ -52,7 +52,10 @@ export function matchDangerousCommand(
   command: string,
   dialect: ExecutionShellSelection["dialect"],
 ): DangerousCommandResult {
-  if (command.length > MAX_LENGTH || dialect === "legacy-shell") return { status: "unsupported" };
+  // Nushell commands cannot be proven safe by the Bash AST, so guarded mode must ask.
+  if (command.length > MAX_LENGTH || dialect === "legacy-shell" || dialect === "nu") {
+    return { status: "unsupported" };
+  }
   const windows = dialect === "cmd" || dialect === "git-bash";
   let commands: CommandWord[][];
   let unsupported: boolean;

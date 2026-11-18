@@ -38,10 +38,10 @@ describe("bash source script materializer", () => {
     }
   });
 
-  it("skips CMD and legacy shell dialects", () => {
+  it("skips CMD, legacy, and Nushell shell dialects", () => {
     const rootDir = mkdtempSync(join(tmpdir(), "zcode-bash-startup-"));
     try {
-      for (const shellDialect of ["cmd", "legacy-shell"] as const) {
+      for (const shellDialect of ["cmd", "legacy-shell", "nu"] as const) {
         expect(
           materializeBashInternalSourceScript(
             {

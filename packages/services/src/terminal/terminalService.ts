@@ -1,7 +1,7 @@
 import { accessSync, chmodSync, constants, existsSync, statSync } from "node:fs";
 import { createRequire } from "node:module";
 import { homedir, release } from "node:os";
-import { delimiter, dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
+import { delimiter, dirname, isAbsolute, join, posix, relative, resolve, sep } from "node:path";
 import { Emitter, type Event } from "@zcode/rpc";
 import type { IPty } from "node-pty";
 import type { ISettingService } from "../setting/setting.js";
@@ -66,14 +66,14 @@ export function resolveTerminalWindowsPtyInfo(
   };
 }
 
-function isExecutable(command: string): boolean {
+function isExecutable(command: string, env: NodeJS.ProcessEnv = process.env): boolean {
   try {
     if (/[\\/]/.test(command)) {
       accessSync(command, constants.X_OK);
       return true;
     }
 
-    const pathEnv = process.env.PATH;
+    const pathEnv = env.PATH;
     if (!pathEnv) return false;
 
     return pathEnv.split(delimiter).some((dir) => {
@@ -284,29 +284,65 @@ function spawnTerminalProcess(params: {
   }
 }
 
-export function resolveTerminalShell(): string {
-  if (process.platform === "win32") {
+const POSIX_NU_FALLBACK_PATHS = ["/opt/homebrew/bin/nu", "/usr/local/bin/nu"] as const;
+
+export function resolveTerminalShell(
+  options: {
+    env?: NodeJS.ProcessEnv;
+    isExecutable?: (path: string) => boolean;
+    platform?: NodeJS.Platform;
+  } = {},
+): string {
+  const platform = options.platform ?? process.platform;
+  const env = options.env ?? process.env;
+  const executable = options.isExecutable ?? ((path: string) => isExecutable(path, env));
+
+  if (platform === "win32") {
     // Windows PowerShell 5.1 的 PSReadLine 在 ConPTY 下更容易把输入行空白重绘成 ANSI black 背景。
     // PowerShell 7+ 的终端兼容性更接近桌面端，优先使用已安装的 pwsh，找不到再回退到系统自带 shell。
-    const candidates = ["pwsh.exe", "powershell.exe", process.env.ComSpec, "cmd.exe"];
+    const candidates = ["pwsh.exe", "powershell.exe", env.ComSpec, "cmd.exe"];
 
     for (const candidate of candidates) {
-      if (candidate && isExecutable(candidate)) return candidate;
+      if (candidate && executable(candidate)) return candidate;
     }
 
     throw new Error("No usable Windows shell found for terminal startup");
   }
 
+  // 交互式终端默认进入 Nushell；agent/internal 执行不经此函数，仍走 Bash 工具的 shell 选择。
+  const nuShell = resolvePosixNuShell(env, executable);
+  if (nuShell) return nuShell;
+
   // 之前直接信任 SHELL 环境变量，外部环境如果残留了一个不存在的 shell 路径，
   // node-pty 底层会把这个坏路径直接交给 posix_spawnp，终端创建时就会报错。
   // 这里先校验 SHELL 是否真的可执行，不可用时再按常见 shell 顺序回退，避免启动直接失败。
-  const candidates = [process.env.SHELL, "/bin/zsh", "/bin/bash", "/bin/sh"];
+  const candidates = [env.SHELL, "/bin/zsh", "/bin/bash", "/bin/sh"];
 
   for (const candidate of candidates) {
-    if (candidate && isExecutable(candidate)) return candidate;
+    if (candidate && executable(candidate)) return candidate;
   }
 
   throw new Error("No usable shell found for terminal startup");
+}
+
+function resolvePosixNuShell(
+  env: NodeJS.ProcessEnv,
+  executable: (path: string) => boolean,
+): string | undefined {
+  const pathValue = env.PATH;
+  if (pathValue) {
+    for (const entry of pathValue.split(posix.delimiter)) {
+      if (!entry) continue;
+      const candidate = posix.join(entry, "nu");
+      if (executable(candidate)) return candidate;
+    }
+  }
+
+  for (const candidate of POSIX_NU_FALLBACK_PATHS) {
+    if (executable(candidate)) return candidate;
+  }
+
+  return undefined;
 }
 
 export function resolveTerminalCwd(cwd?: string): string {

@@ -1,5 +1,5 @@
 import { accessSync, constants as fsConstants } from "node:fs";
-import { win32 } from "node:path";
+import { posix, win32 } from "node:path";
 import type { IntegratedTerminalShellOption } from "@zcode/shared";
 
 type ExecutableCheck = (path: string) => boolean;
@@ -9,13 +9,36 @@ const WINDOWS_GIT_BASH_PATHS = [
   "C:\\Program Files (x86)\\Git\\bin\\bash.exe",
 ] as const;
 
+interface PosixShellSpec {
+  dialect: "nu" | "posix";
+  label: string;
+  name: string;
+  systemDirs: readonly string[];
+}
+
+const POSIX_SHELL_SPECS: readonly PosixShellSpec[] = [
+  {
+    dialect: "nu",
+    label: "Nushell",
+    name: "nu",
+    systemDirs: ["/opt/homebrew/bin", "/usr/local/bin", "/usr/bin"],
+  },
+  { dialect: "posix", label: "zsh", name: "zsh", systemDirs: ["/bin", "/usr/bin"] },
+  {
+    dialect: "posix",
+    label: "bash",
+    name: "bash",
+    systemDirs: ["/bin", "/usr/bin", "/usr/local/bin", "/opt/homebrew/bin"],
+  },
+];
+
 export function listIntegratedTerminalShellOptions(options: {
   env: NodeJS.ProcessEnv;
   isExecutable?: ExecutableCheck;
   platform: NodeJS.Platform;
 }): IntegratedTerminalShellOption[] {
   if (options.platform !== "win32") {
-    return [];
+    return listPosixIntegratedTerminalShellOptions(options.env, options.isExecutable);
   }
 
   const shellOptions: IntegratedTerminalShellOption[] = [createCommandPromptOption(options.env)];
@@ -122,4 +145,51 @@ function isExecutableCandidate(path: string, isExecutable?: ExecutableCheck): bo
   } catch {
     return false;
   }
+}
+
+function listPosixIntegratedTerminalShellOptions(
+  env: NodeJS.ProcessEnv,
+  isExecutable?: ExecutableCheck,
+): IntegratedTerminalShellOption[] {
+  return POSIX_SHELL_SPECS.flatMap((spec) => {
+    const resolved = resolvePosixShell(spec, env, isExecutable);
+    if (!resolved) {
+      return [];
+    }
+    return [
+      {
+        dialect: spec.dialect,
+        id: `${spec.name}:${resolved.path}`,
+        label: spec.label,
+        path: resolved.path,
+        source: resolved.source,
+      },
+    ];
+  });
+}
+
+function resolvePosixShell(
+  spec: PosixShellSpec,
+  env: NodeJS.ProcessEnv,
+  isExecutable?: ExecutableCheck,
+): { path: string; source: "path" | "system" } | undefined {
+  const pathValue = env.PATH;
+  if (pathValue) {
+    for (const entry of pathValue.split(posix.delimiter)) {
+      if (!entry) continue;
+      const candidate = posix.join(entry, spec.name);
+      if (isExecutableCandidate(candidate, isExecutable)) {
+        return { path: candidate, source: "path" };
+      }
+    }
+  }
+
+  for (const dir of spec.systemDirs) {
+    const candidate = posix.join(dir, spec.name);
+    if (isExecutableCandidate(candidate, isExecutable)) {
+      return { path: candidate, source: "system" };
+    }
+  }
+
+  return undefined;
 }

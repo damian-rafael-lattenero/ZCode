@@ -21,6 +21,7 @@ import {
   RESUME_WORKFLOW_RUN_TOOL_NAME,
   SAVE_WORKFLOW_TOOL_NAME,
   SUBMIT_RESULT_TOOL_NAME,
+  type ExecutionShellSelection,
   type JsonSchema,
 } from "@zcode/contracts";
 import type { ToolEntry } from "../types.js";
@@ -191,6 +192,8 @@ export function isDynamicWorkflowToolName(toolName: string): boolean {
 
 interface RegisterBuiltInToolsOptions {
   includePluginDiscovery?: boolean;
+  /** Effective session shell dialect; only the Bash prompt depends on it today. */
+  bashShellDialect?: ExecutionShellSelection["dialect"];
   bashTimeoutPolicy?: BashTimeoutPolicy;
   includeSkill?: boolean;
   includeAgent?: boolean;
@@ -349,6 +352,7 @@ function resolveBuiltInToolEntryForBranch(
 ): ToolEntry {
   if (entry.metadata.name === "Bash") {
     return createBashToolEntry({
+      bashShellDialect: options.bashShellDialect,
       bashTimeoutPolicy: options.bashTimeoutPolicy,
       embeddedSearchEnabled: options.embeddedSearchEnabled,
     });

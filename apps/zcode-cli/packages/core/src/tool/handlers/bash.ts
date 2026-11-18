@@ -130,9 +130,9 @@ export function resolveBashPermissionCapability(
     );
     if (match.status === "matched") return { userApprovalRule: match.ruleId };
   }
-  // Bash 会把 # 后的 CMD 命令当注释；异构 shell 不能用 Bash AST 证明整条命令只读。
+  // Bash 会把 # 后的 CMD 命令当注释；异构 shell（CMD/Nushell）不能用 Bash AST 证明整条命令只读。
   const dialect = context?.bashShellSelection?.dialect;
-  if (dialect === "cmd" || dialect === "legacy-shell") return undefined;
+  if (dialect === "cmd" || dialect === "legacy-shell" || dialect === "nu") return undefined;
   if (!command || !isRuntimeReadOnlyBashCommand(command, context)) return undefined;
   return {
     destructive: false,
@@ -648,6 +648,7 @@ export const bashToolEntry: ToolEntry = {
 
 export function createBashToolEntry(
   options: {
+    bashShellDialect?: ExecutionShellSelection["dialect"];
     bashTimeoutPolicy?: BashTimeoutPolicy;
     embeddedSearchEnabled?: boolean;
   } = {},
@@ -664,6 +665,7 @@ export function createBashToolEntry(
         defaultTimeoutMs: timeoutPolicy.defaultTimeoutMs,
         embeddedSearchEnabled: options.embeddedSearchEnabled,
         maxTimeoutMs: timeoutPolicy.maxTimeoutMs,
+        shellDialect: options.bashShellDialect,
       }),
       timeoutMs: timeoutPolicy.defaultTimeoutMs,
     },

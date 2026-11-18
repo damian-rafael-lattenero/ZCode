@@ -27,7 +27,7 @@ import {
 } from "../src/tool/handlers/bash.js";
 
 describe("bash runtime permission capability", () => {
-  it.each(["cmd", "legacy-shell"] as const)(
+  it.each(["cmd", "legacy-shell", "nu"] as const)(
     "does not grant Bash read-only capability to %s commands",
     (dialect) => {
       const bashShellSelection: ExecutionShellSelection = {

@@ -99,10 +99,11 @@ export function createBashPermissionRulePolicy(
   const exactCommands = command === rawCommand ? [rawCommand] : [command, rawCommand];
   const analysis = analyzeBashCommand(command);
   const safe = isAnalysisSafeForPrefix(analysis);
-  // CMD/未知 shell 的 Bash AST 可能漏掉实际执行的后续命令，只保留完整命令的明确授权。
+  // CMD/legacy/Nushell 的命令文法无法用 Bash AST 证明，只保留完整命令的明确授权。
   // 此限制只收紧 allow，不能让已有 deny/ask 规则失效。
   const dialect = context?.bashShellSelection?.dialect;
-  const allowParsedRules = dialect !== "cmd" && dialect !== "legacy-shell";
+  const allowParsedRules =
+    dialect === undefined || dialect === "posix" || dialect === "git-bash";
   const allSubjectGroups = safe ? analysis.commands.map(buildInvocationRuleSubjects) : [];
   const requiredCommands = safe
     ? analysis.commands.filter(

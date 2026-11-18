@@ -3827,7 +3827,7 @@ const enUS: Record<string, string> = {
   "settings.terminalFontFamilyPlaceholder": "Leave blank to inherit, e.g. MesloLGS NF, monospace",
   "settings.integratedTerminalShell": "Integrated terminal shell",
   "settings.integratedTerminalShellDescription":
-    "Used in new sessions and sessions restored after an app restart. Active sessions keep their current shell. On Windows, Bash uses this shell; Auto tries Git Bash, then cmd.exe.",
+    "Used in new sessions and sessions restored after an app restart. Active sessions keep their current shell. The Bash tool uses this shell. Auto picks Nushell when installed (macOS/Linux), then zsh or bash; on Windows it tries Git Bash, then cmd.exe.",
   "settings.integratedTerminalShell.auto": "Auto",
   "settings.toolSearch": "Tool search",
   "settings.toolSearchDescription":

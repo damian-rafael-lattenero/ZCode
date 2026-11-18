@@ -31,6 +31,14 @@ describe("supportsEmbeddedSearchShellSelection", () => {
     ).toBe(false);
     expect(
       supportsEmbeddedSearchShellSelection({
+        dialect: "nu",
+        display: { name: "Nushell" },
+        path: "/opt/homebrew/bin/nu",
+        source: "auto-detected",
+      } satisfies ExecutionShellSelection),
+    ).toBe(false);
+    expect(
+      supportsEmbeddedSearchShellSelection({
         dialect: "legacy-shell",
         display: { name: "system shell" },
         source: "legacy-fallback",

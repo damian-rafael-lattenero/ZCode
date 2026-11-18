@@ -6,7 +6,7 @@ import {
   type ExecutionShellSelection,
 } from "@zcode/contracts";
 
-type PosixShellKind = "bash" | "zsh";
+type PosixShellKind = "bash" | "zsh" | "nu";
 type ExecutableCheck = (path: string) => boolean;
 type EffectiveBashShellResolveOptions = {
   env: NodeJS.ProcessEnv;
@@ -74,6 +74,21 @@ export function resolvePosixBashShell(
   return undefined;
 }
 
+export function resolvePosixNuShell(
+  env: NodeJS.ProcessEnv,
+  exists?: ExecutableCheck,
+): string | undefined {
+  const seen = new Set<string>();
+  for (const candidate of [...pathCandidates("nu", env), ...fixedPosixShellCandidates("nu")]) {
+    if (seen.has(candidate)) continue;
+    seen.add(candidate);
+    if (isExecutableCandidate(candidate, exists)) {
+      return candidate;
+    }
+  }
+  return undefined;
+}
+
 export function resolveWindowsBashShellProvider(options: {
   env: NodeJS.ProcessEnv;
   exists?: ExecutableCheck;
@@ -116,9 +131,12 @@ function createGitBashProvider(shellPath: string): BashShellProvider {
   };
 }
 
-function createPosixShellProvider(shellPath: string): BashShellProvider {
+function createPosixShellProvider(
+  shellPath: string,
+  dialect: "posix" | "nu",
+): BashShellProvider {
   return {
-    dialect: "posix",
+    dialect,
     envOverlay: {
       GIT_EDITOR: "true",
       SHELL: shellPath,
@@ -151,7 +169,10 @@ function createShellProviderFromSelection(
     return createWindowsCmdProvider(selection.path);
   }
   if (selection.dialect === "posix") {
-    return createPosixShellProvider(selection.path);
+    return createPosixShellProvider(selection.path, "posix");
+  }
+  if (selection.dialect === "nu") {
+    return createPosixShellProvider(selection.path, "nu");
   }
   return undefined;
 }
@@ -217,16 +238,51 @@ function resolveEffectiveWindowsBashShellSelection(
 function resolveEffectivePosixBashShellSelection(
   options: EffectiveBashShellResolveOptions,
 ): EffectiveBashShellResolution {
+  const override = options.override;
+  if (
+    override?.source === "user-config" &&
+    override.path &&
+    isExecutableCandidate(override.path, options.exists)
+  ) {
+    if (override.dialect === "nu") {
+      return {
+        provider: createPosixShellProvider(override.path, "nu"),
+        selection: shellSelection({
+          dialect: "nu",
+          displayName: "Nushell",
+          id: override.id,
+          label: override.label,
+          path: override.path,
+          source: "user-config",
+        }),
+      };
+    }
+    if (override.dialect === "posix") {
+      return {
+        provider: createPosixShellProvider(override.path, "posix"),
+        selection: shellSelection({
+          dialect: "posix",
+          displayName: override.display.name,
+          id: override.id,
+          label: override.label,
+          path: override.path,
+          source: "user-config",
+        }),
+      };
+    }
+  }
+
   const bashShell = resolvePosixBashShell(options.env, options.exists);
   if (!bashShell) {
     return legacyShellSelection();
   }
   const kind = posixShellKind(bashShell) ?? "bash";
+  const nu = kind === "nu";
   return {
-    provider: createPosixShellProvider(bashShell),
+    provider: createPosixShellProvider(bashShell, nu ? "nu" : "posix"),
     selection: shellSelection({
-      dialect: "posix",
-      displayName: kind,
+      dialect: nu ? "nu" : "posix",
+      displayName: nu ? "Nushell" : kind,
       id: `auto:${kind}`,
       label: kind,
       path: bashShell,
@@ -324,6 +380,7 @@ function posixShellKind(path: string): PosixShellKind | undefined {
   const name = basename(path);
   if (name.includes("bash")) return "bash";
   if (name.includes("zsh")) return "zsh";
+  if (name === "nu" || name === "nushell") return "nu";
   return undefined;
 }
 

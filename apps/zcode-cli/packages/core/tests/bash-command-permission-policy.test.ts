@@ -5,7 +5,7 @@ import { createBashPermissionRulePolicy } from "../src/tool/handlers/bash-comman
 import { bashToolEntry } from "../src/tool/handlers/bash.js";
 
 describe("Bash command permission rule policy", () => {
-  it.each(["cmd", "legacy-shell"] as const)(
+  it.each(["cmd", "legacy-shell", "nu"] as const)(
     "only suggests and accepts exact command grants for %s",
     (dialect) => {
       const command = "npm run test # & python script.py";

@@ -946,10 +946,6 @@ export function SettingsPage({
         if (!active) return;
         setDefaultHomeDir(info.homedir);
         setHostPlatform(info.platform);
-        if (info.platform !== "win32") {
-          setIntegratedTerminalShellOptions([]);
-          return;
-        }
         void localHostServices.systemService
           .listIntegratedTerminalShells()
           .then((options) => {
@@ -1854,7 +1850,10 @@ export function SettingsPage({
                               httpProxyNoProxy={httpProxyNoProxy}
                               httpProxyCaCertPath={httpProxyCaCertPath}
                               defaultHomeDir={defaultHomeDir}
-                              showIntegratedTerminalShell={hostPlatform === "win32"}
+                              showIntegratedTerminalShell={
+                                hostPlatform === "win32" ||
+                                integratedTerminalShellOptions.length > 0
+                              }
                               setLocalePreference={handleFooterLocaleChange}
                               setNotificationEnabled={(enabled) =>
                                 runUserAction({

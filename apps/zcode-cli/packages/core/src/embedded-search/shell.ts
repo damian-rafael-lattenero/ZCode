@@ -11,5 +11,6 @@ export function shouldInjectEmbeddedSearchBashPrelude(): boolean {
 export function supportsEmbeddedSearchShellSelection(
   selection: ExecutionShellSelection | undefined,
 ): boolean {
+  // Nushell does not source the POSIX find()/grep() prelude.
   return selection?.dialect === "posix" || selection?.dialect === "git-bash";
 }

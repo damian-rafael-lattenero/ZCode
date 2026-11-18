@@ -14,6 +14,8 @@ const forkTestFiles = [
   "packages/services/test/highspeedCardService.test.ts",
   "packages/services/test/manualClaimVerification.test.ts",
   "packages/services/test/manualClaimVerificationAvailable.test.ts",
+  "packages/services/test/integratedTerminalShells.test.ts",
+  "packages/services/test/terminalServiceShell.test.ts",
   "packages/services/test/subagentLaunchAck.test.ts",
   "packages/services/test/subagentSessionRouting.test.ts",
   "packages/services/test/zcodeStdioTransport.test.ts",

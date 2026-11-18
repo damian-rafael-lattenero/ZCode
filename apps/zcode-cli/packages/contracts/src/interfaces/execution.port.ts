@@ -27,14 +27,14 @@ export type ExecutionCommand =
       shellOverride?: ExecutionShellSelection;
     };
 
-export type ExecutionShellDialect = "cmd" | "posix" | "git-bash";
+export type ExecutionShellDialect = "cmd" | "nu" | "posix" | "git-bash";
 
 export type ExecutionShellSource = "auto-detected" | "user-config" | "legacy-fallback";
 
 export interface ExecutionShellDisplay {
   /**
    * Stable provider-visible shell name. Never include absolute paths here.
-   * Examples: "bash", "zsh", "Git Bash", "CMD", "system shell".
+   * Examples: "bash", "zsh", "Nushell", "Git Bash", "CMD", "system shell".
    */
   name: string;
 }

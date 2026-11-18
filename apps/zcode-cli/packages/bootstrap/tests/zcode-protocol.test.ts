@@ -4355,6 +4355,193 @@ describe("ZCodeProtocolAgentServer", () => {
     ]);
   });
 
+  it("defaults POSIX sessions to Nushell when no shell setting exists", async () => {
+    const createdAppOptions: ZCodeAppOptions[] = [];
+    const shellInitializations: unknown[] = [];
+    const tempRoot = await mkdtemp(join(tmpdir(), "zcode-protocol-nu-default-"));
+    const fakeNu = join(tempRoot, "nu");
+    await writeFile(fakeNu, "");
+    await chmod(fakeNu, 0o755);
+    try {
+      const server = new ZCodeProtocolAgentServer({
+        createZCodeApp: (options) =>
+          createShellRecordingFakeApp(options, shellInitializations, createdAppOptions),
+        cwd: workspace.workspacePath,
+        env: { PATH: tempRoot },
+        platform: "darwin",
+        version: "test-version",
+      });
+      attachSessionRuntimePreferencesResponder(server, () => ({
+        nativeSearchEnhancementsEnabled: true,
+      }));
+
+      const created = zcodeSessionStateSnapshotSchema.parse(
+        await requestResult(server, {
+          id: 1,
+          method: zcodeProtocolMethods.sessionCreate,
+          params: {
+            workspace,
+          },
+        }),
+      );
+
+      await requestResult(server, {
+        id: 2,
+        method: zcodeProtocolMethods.sessionSend,
+        params: {
+          sessionId: created.session.sessionId,
+          inputId: "input_nu_default",
+          content: "first prompt",
+        },
+      });
+    } finally {
+      await rm(tempRoot, { force: true, recursive: true });
+    }
+
+    expect(createdAppOptions[0]?.runtimeConfig?.bashShellSelection).toBeUndefined();
+    expect(shellInitializations).toEqual([
+      {
+        display: { name: "Nushell" },
+        dialect: "nu",
+        id: `nu:${fakeNu}`,
+        label: "Nushell",
+        path: fakeNu,
+        source: "auto-detected",
+      },
+    ]);
+  });
+
+  it("keeps an explicit POSIX shell selection ahead of the Nushell default", async () => {
+    const shellInitializations: unknown[] = [];
+    const tempRoot = await mkdtemp(join(tmpdir(), "zcode-protocol-explicit-shell-"));
+    const fakeNu = join(tempRoot, "nu");
+    const fakeZsh = join(tempRoot, "zsh");
+    await writeFile(fakeNu, "");
+    await writeFile(fakeZsh, "");
+    await chmod(fakeNu, 0o755);
+    await chmod(fakeZsh, 0o755);
+    try {
+      const server = new ZCodeProtocolAgentServer({
+        createZCodeApp: (options) => createShellRecordingFakeApp(options, shellInitializations),
+        cwd: workspace.workspacePath,
+        env: { PATH: tempRoot },
+        platform: "darwin",
+        version: "test-version",
+      });
+      attachSessionRuntimePreferencesResponder(server, (scope) => ({
+        nativeSearchEnhancementsEnabled: true,
+        ...(scope === "user-execution"
+          ? {
+              integratedTerminalShell: {
+                mode: "shell" as const,
+                dialect: "posix" as const,
+                id: `zsh:${fakeZsh}`,
+                label: "zsh",
+                path: fakeZsh,
+              },
+            }
+          : {}),
+      }));
+
+      const created = zcodeSessionStateSnapshotSchema.parse(
+        await requestResult(server, {
+          id: 1,
+          method: zcodeProtocolMethods.sessionCreate,
+          params: {
+            workspace,
+          },
+        }),
+      );
+
+      await requestResult(server, {
+        id: 2,
+        method: zcodeProtocolMethods.sessionSend,
+        params: {
+          sessionId: created.session.sessionId,
+          inputId: "input_explicit_shell",
+          content: "first prompt",
+        },
+      });
+    } finally {
+      await rm(tempRoot, { force: true, recursive: true });
+    }
+
+    expect(shellInitializations).toEqual([
+      {
+        display: { name: "zsh" },
+        dialect: "posix",
+        id: `zsh:${fakeZsh}`,
+        label: "zsh",
+        path: fakeZsh,
+        source: "user-config",
+      },
+    ]);
+  });
+
+  it("maps an explicit Nushell selection to the Nushell display name", async () => {
+    const shellInitializations: unknown[] = [];
+    const tempRoot = await mkdtemp(join(tmpdir(), "zcode-protocol-nu-selected-"));
+    const fakeNu = join(tempRoot, "nu");
+    await writeFile(fakeNu, "");
+    await chmod(fakeNu, 0o755);
+    try {
+      const server = new ZCodeProtocolAgentServer({
+        createZCodeApp: (options) => createShellRecordingFakeApp(options, shellInitializations),
+        cwd: workspace.workspacePath,
+        env: { PATH: "" },
+        platform: "darwin",
+        version: "test-version",
+      });
+      attachSessionRuntimePreferencesResponder(server, (scope) => ({
+        nativeSearchEnhancementsEnabled: true,
+        ...(scope === "user-execution"
+          ? {
+              integratedTerminalShell: {
+                mode: "shell" as const,
+                dialect: "nu" as const,
+                id: `nu:${fakeNu}`,
+                label: "Nushell",
+                path: fakeNu,
+              },
+            }
+          : {}),
+      }));
+
+      const created = zcodeSessionStateSnapshotSchema.parse(
+        await requestResult(server, {
+          id: 1,
+          method: zcodeProtocolMethods.sessionCreate,
+          params: {
+            workspace,
+          },
+        }),
+      );
+
+      await requestResult(server, {
+        id: 2,
+        method: zcodeProtocolMethods.sessionSend,
+        params: {
+          sessionId: created.session.sessionId,
+          inputId: "input_nu_selected",
+          content: "first prompt",
+        },
+      });
+    } finally {
+      await rm(tempRoot, { force: true, recursive: true });
+    }
+
+    expect(shellInitializations).toEqual([
+      {
+        display: { name: "Nushell" },
+        dialect: "nu",
+        id: `nu:${fakeNu}`,
+        label: "Nushell",
+        path: fakeNu,
+        source: "user-config",
+      },
+    ]);
+  });
+
   it("does not initialize an unavailable configured integrated terminal shell as the effective snapshot", async () => {
     const createdAppOptions: ZCodeAppOptions[] = [];
     const shellInitializations: unknown[] = [];

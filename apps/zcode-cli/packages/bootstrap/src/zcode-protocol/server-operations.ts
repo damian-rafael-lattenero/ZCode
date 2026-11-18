@@ -3704,12 +3704,19 @@ function resolveProtocolBashShellSelection(
   context: ZCodeProtocolAgentServerContext,
   selection: IntegratedTerminalShellSelection | undefined,
 ): ExecutionShellSelection {
+  const platform = context.deps.platform ?? process.platform;
   const configuredSelection = integratedTerminalShellToExecutionSelection(selection);
-  if (!configuredSelection) {
-    const env = context.deps.env ?? process.env;
+  // A selection synced from another platform must not disable this platform's default.
+  const usableConfiguredSelection =
+    configuredSelection &&
+    (platform === "win32" ||
+      (configuredSelection.dialect !== "cmd" && configuredSelection.dialect !== "git-bash"))
+      ? configuredSelection
+      : undefined;
+  if (!usableConfiguredSelection) {
     const defaultSelection = resolveDefaultSessionBashShellSelection({
-      env,
-      platform: context.deps.platform ?? process.platform,
+      env: context.deps.env ?? process.env,
+      platform,
     });
     if (defaultSelection) {
       return defaultSelection;
@@ -3717,8 +3724,8 @@ function resolveProtocolBashShellSelection(
   }
   return resolveEffectiveBashShellSelection({
     env: context.deps.env ?? process.env,
-    override: configuredSelection,
-    platform: context.deps.platform ?? process.platform,
+    override: usableConfiguredSelection,
+    platform,
   }).selection;
 }
 

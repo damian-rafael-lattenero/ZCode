@@ -263,6 +263,23 @@ describe("app settings", () => {
     expect(appSettingsPatchSchema.parse({ cuaPipMode: true })).toEqual({});
   });
 
+  it("accepts a Nushell integrated terminal shell selection", () => {
+    const selection = {
+      mode: "shell",
+      dialect: "nu",
+      id: "nu:/opt/homebrew/bin/nu",
+      label: "Nushell",
+      path: "/opt/homebrew/bin/nu",
+    } as const;
+
+    expect(
+      appSettingsSchema.parse({ integratedTerminalShell: selection }).integratedTerminalShell,
+    ).toEqual(selection);
+    expect(
+      appSettingsPatchSchema.parse({ integratedTerminalShell: selection }).integratedTerminalShell,
+    ).toEqual(selection);
+  });
+
   it("persists an explicit Windows integrated terminal shell selection", () => {
     const selection = {
       mode: "shell",

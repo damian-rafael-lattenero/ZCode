@@ -94,10 +94,10 @@ export type MessageStreamVerbosity = "summary" | "normal" | "verbose";
 /** 桌面端 Electron 自动更新发布通道。 */
 export type ElectronReleaseChannel = "stable" | "preview";
 
-/** Windows Bash 工具可使用的集成终端 shell 方言。 */
-export type IntegratedTerminalShellDialect = "cmd" | "git-bash";
+/** Bash 工具可使用的集成终端 shell 方言（Windows cmd/Git Bash，POSIX posix/Nushell）。 */
+export type IntegratedTerminalShellDialect = "cmd" | "git-bash" | "nu" | "posix";
 
-/** 设置页中 Windows Bash shell 的用户选择。 */
+/** 设置页中 Bash shell 的用户选择。 */
 export type IntegratedTerminalShellSelection =
   | { mode: "auto" }
   | {
@@ -108,7 +108,7 @@ export type IntegratedTerminalShellSelection =
       path: string;
     };
 
-/** 当前 host 可识别的 Windows shell 选项。 */
+/** 当前 host 可识别的 shell 选项。 */
 export interface IntegratedTerminalShellOption {
   dialect: IntegratedTerminalShellDialect;
   id: string;
@@ -280,7 +280,7 @@ export interface AppSettings {
   terminalInheritSystemProfile?: boolean;
   /** 用户显式覆盖的终端字体；为空时从系统终端配置自动探测 */
   terminalFontFamily?: string;
-  /** Windows 下 Bash 工具使用的本机 shell；未配置时自动选择。 */
+  /** Bash 工具使用的本机 shell；未配置时按平台自动选择（POSIX 优先 Nushell）。 */
   integratedTerminalShell?: IntegratedTerminalShellSelection;
   /** HTTP/HTTPS 出口代理，例如 http://127.0.0.1:7890；为空时直连。下次启动 app/agent 生效。 */
   httpProxy?: string;

@@ -26,6 +26,7 @@ export function refreshBranchAwareBuiltInTools(runtime: AgentRuntimeInternal): v
   }
 
   registerBuiltInTools(runtime.registry, {
+    bashShellDialect: runtime.config.bashShellSelection?.dialect,
     bashTimeoutPolicy: runtime.config.bashTimeoutPolicy,
     includeSkill: Boolean(runtime.skillPort),
     includeAgent: Boolean(runtime.subagentPort),

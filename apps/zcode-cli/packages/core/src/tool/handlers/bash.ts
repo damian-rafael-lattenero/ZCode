@@ -648,6 +648,7 @@ export const bashToolEntry: ToolEntry = {
 
 export function createBashToolEntry(
   options: {
+    bashShellDialect?: ExecutionShellSelection["dialect"];
     bashTimeoutPolicy?: BashTimeoutPolicy;
     embeddedSearchEnabled?: boolean;
   } = {},
@@ -664,6 +665,7 @@ export function createBashToolEntry(
         defaultTimeoutMs: timeoutPolicy.defaultTimeoutMs,
         embeddedSearchEnabled: options.embeddedSearchEnabled,
         maxTimeoutMs: timeoutPolicy.maxTimeoutMs,
+        shellDialect: options.bashShellDialect,
       }),
       timeoutMs: timeoutPolicy.defaultTimeoutMs,
     },

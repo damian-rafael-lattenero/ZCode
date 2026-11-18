@@ -74,6 +74,21 @@ export function resolvePosixBashShell(
   return undefined;
 }
 
+export function resolvePosixNuShell(
+  env: NodeJS.ProcessEnv,
+  exists?: ExecutableCheck,
+): string | undefined {
+  const seen = new Set<string>();
+  for (const candidate of [...pathCandidates("nu", env), ...fixedPosixShellCandidates("nu")]) {
+    if (seen.has(candidate)) continue;
+    seen.add(candidate);
+    if (isExecutableCandidate(candidate, exists)) {
+      return candidate;
+    }
+  }
+  return undefined;
+}
+
 export function resolveWindowsBashShellProvider(options: {
   env: NodeJS.ProcessEnv;
   exists?: ExecutableCheck;

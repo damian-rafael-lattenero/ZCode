@@ -1,4 +1,7 @@
-export { resolveEffectiveBashShellSelection } from "./bash-shell-provider.js";
+export {
+  resolveEffectiveBashShellSelection,
+  resolvePosixNuShell,
+} from "./bash-shell-provider.js";
 export {
   applyResolvedShellCommandForTest,
   buildExecutionEnv,

@@ -20,6 +20,7 @@ import {
   isTaskListSessionType,
 } from "../zcode-protocol-v4/task-list-session-membership.js";
 import { resolveEffectiveBashShellSelection } from "@zcode/adapters/exec";
+import { resolveDefaultSessionBashShellSelection } from "./session-shell-default.js";
 import { inputIntentMetadata } from "../zcode-protocol-v4/commands/input-intent.js";
 import {
   MODEL_UNAVAILABLE_REASON_CODE,
@@ -3682,7 +3683,14 @@ function integratedTerminalShellToExecutionSelection(
   }
   return {
     display: {
-      name: selection.dialect === "git-bash" ? "Git Bash" : "CMD",
+      name:
+        selection.dialect === "nu"
+          ? "Nushell"
+          : selection.dialect === "git-bash"
+            ? "Git Bash"
+            : selection.dialect === "posix"
+              ? selection.label
+              : "CMD",
     },
     dialect: selection.dialect,
     id: selection.id,
@@ -3697,6 +3705,16 @@ function resolveProtocolBashShellSelection(
   selection: IntegratedTerminalShellSelection | undefined,
 ): ExecutionShellSelection {
   const configuredSelection = integratedTerminalShellToExecutionSelection(selection);
+  if (!configuredSelection) {
+    const env = context.deps.env ?? process.env;
+    const defaultSelection = resolveDefaultSessionBashShellSelection({
+      env,
+      platform: context.deps.platform ?? process.platform,
+    });
+    if (defaultSelection) {
+      return defaultSelection;
+    }
+  }
   return resolveEffectiveBashShellSelection({
     env: context.deps.env ?? process.env,
     override: configuredSelection,

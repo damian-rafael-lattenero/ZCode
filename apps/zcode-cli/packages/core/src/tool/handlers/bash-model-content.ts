@@ -9,6 +9,7 @@ import {
   truncateMiddleForModel,
 } from "../result-persistence-format.js";
 import { isBashProviderErrorStatus } from "./bash-semantics.js";
+import { stripAnsi } from "./ansi.js";
 
 const ASSISTANT_BLOCKING_BUDGET_MS = 15_000;
 const READ_TOOL_NAME = "Read";
@@ -55,7 +56,8 @@ export function formatPersistedBashModelContent(input: {
   // serializer 已经把完整 Bash provider-visible content 写入 artifact；
   // 这里必须只预览该 content，不能重进普通 formatter 后把 stderr/provider-error 文本完整追加回模型上下文。
   return formatCompactPersistedOutputContent({
-    content: input.content,
+    // The artifact keeps the colored text for the UI; the model gets it plain.
+    content: stripAnsi(input.content),
     originalBytes: input.originalBytes,
     persistedPath: input.persistedPath,
   });
@@ -115,11 +117,11 @@ function stringifyFallback(output: unknown): string {
 
 function formatStdoutForModel(stdout: string): string {
   if (!stdout) return "";
-  return stdout.replace(/^(\s*\n)+/, "").trimEnd();
+  return stripAnsi(stdout).replace(/^(\s*\n)+/, "").trimEnd();
 }
 
 function formatStderrForModel(result: BashOutput): string {
-  let message = result.stderr.trim();
+  let message = stripAnsi(result.stderr).trim();
   if (result.interrupted) {
     if (message) message += "\n";
     message += "<error>Command was aborted before completion</error>";

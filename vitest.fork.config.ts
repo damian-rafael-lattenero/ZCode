@@ -24,6 +24,7 @@ const forkTestFiles = [
   "packages/shared/test/zcodeApiRetryStatus.test.ts",
   "packages/shared/test/zcodeSessionEventTolerance.test.ts",
   "packages/ui/test/chatApiRetryCountdown.test.ts",
+  "packages/ui/test/ansiText.test.ts",
   "packages/ui/test/consecutiveSummaryGroupDefaultOpen.test.ts",
   "packages/ui/test/conversationExpandDefaultStore.test.ts",
   "packages/ui/test/forkCommandModel.test.ts",

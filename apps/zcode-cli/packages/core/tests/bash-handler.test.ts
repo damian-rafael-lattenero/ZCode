@@ -364,9 +364,14 @@ describe("bashHandler", () => {
       shellProfile: "posix-bash",
     });
     expect(capturedRequest?.cwd).toBe(projectRoot);
-    // 模型输入不带 env；handler 只设置会话上下文变量。
+    // The model input carries no env; the handler sets session context plus the
+    // color vars that let the UI render styled output (model text is stripped).
     expect(capturedRequest?.env).toEqual({
       set: {
+        CLICOLOR_FORCE: "1",
+        COLORTERM: "truecolor",
+        FORCE_COLOR: "1",
+        TERM: "xterm-256color",
         CLAUDE_CODE_SESSION_ID: "sess_test",
         CLAUDE_PROJECT_DIR: projectRoot,
         CLAUDE_SESSION_ID: "sess_test",

@@ -1,6 +1,7 @@
-import { useLayoutEffect, useRef, useState } from "react";
+import { useLayoutEffect, useMemo, useRef, useState } from "react";
 import { logger } from "@/logger.js";
 import { ScrollFadeViewport } from "@/components/ui/scroll-fade-viewport.js";
+import { hasAnsi, parseAnsiText } from "@/lib/ansiText.js";
 
 export function ExecuteOutput({ text, running }: { text: string; running: boolean }) {
   const scroll = useRef<HTMLDivElement>(null);
@@ -9,6 +10,7 @@ export function ExecuteOutput({ text, running }: { text: string; running: boolea
   const [frozen, setFrozen] = useState<string | null>(null);
   const following = frozen === null;
   const display = frozen ?? text;
+  const ansiSpans = useMemo(() => (hasAnsi(display) ? parseAnsiText(display) : null), [display]);
 
   useLayoutEffect(() => {
     if (running) hasStreamed.current = true;
@@ -43,7 +45,13 @@ export function ExecuteOutput({ text, running }: { text: string; running: boolea
         data-testid={running ? "bash-output-preview-full" : "bash-result-output"}
         className="whitespace-pre-wrap break-words font-mono text-ui-base leading-5 text-foreground-subtle"
       >
-        {display}
+        {ansiSpans
+          ? ansiSpans.map((span, index) => (
+              <span key={index} style={span.style}>
+                {span.text}
+              </span>
+            ))
+          : display}
       </pre>
     </ScrollFadeViewport>
   );

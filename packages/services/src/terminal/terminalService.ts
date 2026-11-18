@@ -1,16 +1,7 @@
 import { accessSync, chmodSync, constants, existsSync, statSync } from "node:fs";
 import { createRequire } from "node:module";
 import { homedir, release } from "node:os";
-import {
-  delimiter,
-  dirname,
-  isAbsolute,
-  join,
-  posix,
-  relative,
-  resolve,
-  sep,
-} from "node:path";
+import { delimiter, dirname, isAbsolute, join, posix, relative, resolve, sep } from "node:path";
 import { Emitter, type Event } from "@zcode/rpc";
 import type { IPty } from "node-pty";
 import type { ISettingService } from "../setting/setting.js";
@@ -304,8 +295,7 @@ export function resolveTerminalShell(
 ): string {
   const platform = options.platform ?? process.platform;
   const env = options.env ?? process.env;
-  const executable =
-    options.isExecutable ?? ((path: string) => isExecutable(path, env));
+  const executable = options.isExecutable ?? ((path: string) => isExecutable(path, env));
 
   if (platform === "win32") {
     // Windows PowerShell 5.1 的 PSReadLine 在 ConPTY 下更容易把输入行空白重绘成 ANSI black 背景。

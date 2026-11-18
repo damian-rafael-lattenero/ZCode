@@ -3476,7 +3476,7 @@ const koKR: Record<string, string> = {
   "settings.terminalFontFamilyPlaceholder": "비워 두면 상속(예: MesloLGS NF, monospace)",
   "settings.integratedTerminalShell": "통합 터미널 셸",
   "settings.integratedTerminalShellDescription":
-    "새 세션과 앱 재시작 후 복원된 세션에서 사용합니다. 활성 세션은 현재 셸을 유지합니다. Windows에서는 Bash가 이 셸을 사용하며, 자동은 Git Bash를 먼저 시도한 다음 cmd.exe를 시도합니다.",
+    "새 세션과 앱 재시작 후 복원된 세션에서 사용합니다. 활성 세션은 현재 셸을 유지합니다. Bash 도구가 이 셸을 사용합니다. 자동은 macOS/Linux에서 설치된 Nushell을 우선 사용하고, 없으면 zsh 또는 bash를 사용하며, Windows에서는 Git Bash를 먼저 시도한 다음 cmd.exe를 시도합니다.",
   "settings.integratedTerminalShell.auto": "자동",
   "settings.toolSearch": "도구 검색",
   "settings.toolSearchDescription":

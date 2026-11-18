@@ -3541,7 +3541,7 @@ const ruRU: Record<string, string> = {
   "settings.terminalFontFamilyPlaceholder": "Пусто — наследовать, например MesloLGS NF, monospace",
   "settings.integratedTerminalShell": "Shell встроенного терминала",
   "settings.integratedTerminalShellDescription":
-    "Используется в новых сеансах и сеансах, восстановленных после перезапуска. Активные сеансы сохраняют текущий shell. В Windows Bash использует этот shell; «Авто» пробует Git Bash, затем cmd.exe.",
+    "Используется в новых сеансах и сеансах, восстановленных после перезапуска. Активные сеансы сохраняют текущий shell. Bash использует этот shell. «Авто» на macOS/Linux предпочитает установленный Nushell, затем zsh или bash; в Windows пробует Git Bash, затем cmd.exe.",
   "settings.integratedTerminalShell.auto": "Авто",
   "settings.toolSearch": "Поиск инструментов",
   "settings.toolSearchDescription":

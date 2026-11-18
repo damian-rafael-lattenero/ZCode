@@ -3568,7 +3568,7 @@ const jaJP: Record<string, string> = {
   "settings.terminalFontFamilyPlaceholder": "空欄で継承（例: MesloLGS NF, monospace）",
   "settings.integratedTerminalShell": "統合ターミナルのシェル",
   "settings.integratedTerminalShellDescription":
-    "新しいセッションとアプリ再起動後に復元されたセッションで使用します。実行中のセッションは現在のシェルを維持します。Windows では Bash がこのシェルを使用します。「自動」は Git Bash、次に cmd.exe を試します。",
+    "新しいセッションとアプリ再起動後に復元されたセッションで使用します。実行中のセッションは現在のシェルを維持します。Bash ツールはこのシェルを使用します。「自動」は macOS/Linux でインストール済みの Nushell、次に zsh または bash を選び、Windows では Git Bash、次に cmd.exe を試します。",
   "settings.integratedTerminalShell.auto": "自動",
   "settings.toolSearch": "ツール検索",
   "settings.toolSearchDescription":

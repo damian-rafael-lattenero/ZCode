@@ -1,7 +1,8 @@
-import { useId, useLayoutEffect, useRef, useState } from "react";
+import { useEffect, useId, useLayoutEffect, useRef, useState } from "react";
 import { ChevronDownIcon } from "lucide-react";
 import { Button } from "@/components/ui/button.js";
 import { useZCodeIntl } from "@/i18n/IntlProvider.js";
+import { highlightCode, type TokenizedCode } from "@/lib/shikiHighlighter.js";
 import { logger } from "@/logger.js";
 
 export function ExecuteCommand({ command }: { command: string | undefined }) {
@@ -10,6 +11,24 @@ export function ExecuteCommand({ command }: { command: string | undefined }) {
   const content = useRef<HTMLDivElement>(null);
   const [expanded, setExpanded] = useState(false);
   const [overflowing, setOverflowing] = useState(false);
+  const [tokens, setTokens] = useState<TokenizedCode | null>(null);
+
+  // The shell is Nushell (fork build 2026-11-17): highlight the command with
+  // shiki's bundled `nushell` grammar so the transcript card matches Ghostty.
+  useEffect(() => {
+    if (!command) {
+      setTokens(null);
+      return;
+    }
+    let cancelled = false;
+    const immediate = highlightCode(command, "nu", undefined, (result) => {
+      if (!cancelled) setTokens(result);
+    });
+    if (immediate) setTokens(immediate);
+    return () => {
+      cancelled = true;
+    };
+  }, [command]);
 
   useLayoutEffect(() => {
     const element = content.current;
@@ -37,7 +56,23 @@ export function ExecuteCommand({ command }: { command: string | undefined }) {
           <span data-testid="execute-command-prompt" className="shrink-0 text-foreground-subtle">
             $
           </span>
-          <pre className="min-w-0 flex-1 whitespace-pre-wrap break-words">{command}</pre>
+          <pre className="min-w-0 flex-1 whitespace-pre-wrap break-words">
+            {tokens
+              ? tokens.tokens.map((line, lineIndex) => (
+                  <span key={lineIndex}>
+                    {line.map((token, tokenIndex) => (
+                      <span
+                        key={tokenIndex}
+                        style={token.color ? { color: token.color } : undefined}
+                      >
+                        {token.content}
+                      </span>
+                    ))}
+                    {lineIndex < tokens.tokens.length - 1 ? "\n" : null}
+                  </span>
+                ))
+              : command}
+          </pre>
         </div>
       </div>
       {overflowing || expanded ? (

@@ -302,6 +302,7 @@ describe("Guarded finite command contract", () => {
   });
   it("does not apply Bash grammar to legacy or unsupported shells", () => {
     expect(matchDangerousCommand("rm -rf build", "legacy-shell").status).toBe("unsupported");
+    expect(matchDangerousCommand("rm -rf build", "nu").status).toBe("unsupported");
   });
 
   it.each(["posix", "git-bash", "cmd"] as const)(

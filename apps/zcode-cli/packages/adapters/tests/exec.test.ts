@@ -2286,6 +2286,25 @@ describe("NodeExecutionAdapter", () => {
     }
   });
 
+  it("skips the nu cwd wrapper for value-producing commands", () => {
+    const plan = createCwdCapturePlan(
+      {
+        command: {
+          mode: "shell",
+          command: '{"a": 1} | to json',
+          shellProfile: "posix-bash",
+        },
+        captureCwdAfterSuccess: true,
+      },
+      { dialect: "nu", platform: "darwin" },
+    );
+
+    expect(plan.cwdFilePath).toBeUndefined();
+    if (plan.command.mode === "shell") {
+      expect(plan.command.command).toBe('{"a": 1} | to json');
+    }
+  });
+
   it("keeps the POSIX cwd capture wrapper unchanged", () => {
     const plan = createCwdCapturePlan(
       {
@@ -3323,27 +3342,30 @@ describe("NodeExecutionAdapter", () => {
     ).toEqual(["-c", "pwd"]);
   });
 
-  it.skipIf(process.platform === "win32")("auto-detects Nushell only when SHELL itself is nu", () => {
-    const resolution = resolveEffectiveBashShellSelection({
-      env: { PATH: "/usr/bin", SHELL: "/opt/homebrew/bin/nu" },
-      exists: (path) => path === "/opt/homebrew/bin/nu",
-      platform: "darwin",
-    });
+  it.skipIf(process.platform === "win32")(
+    "auto-detects Nushell only when SHELL itself is nu",
+    () => {
+      const resolution = resolveEffectiveBashShellSelection({
+        env: { PATH: "/usr/bin", SHELL: "/opt/homebrew/bin/nu" },
+        exists: (path) => path === "/opt/homebrew/bin/nu",
+        platform: "darwin",
+      });
 
-    expect(resolution.selection).toMatchObject({
-      dialect: "nu",
-      display: { name: "Nushell" },
-      id: "auto:nu",
-      label: "nu",
-      path: "/opt/homebrew/bin/nu",
-      source: "auto-detected",
-    });
-    expect(resolution.provider).toMatchObject({
-      dialect: "nu",
-      file: "/opt/homebrew/bin/nu",
-      shell: false,
-    });
-  });
+      expect(resolution.selection).toMatchObject({
+        dialect: "nu",
+        display: { name: "Nushell" },
+        id: "auto:nu",
+        label: "nu",
+        path: "/opt/homebrew/bin/nu",
+        source: "auto-detected",
+      });
+      expect(resolution.provider).toMatchObject({
+        dialect: "nu",
+        file: "/opt/homebrew/bin/nu",
+        shell: false,
+      });
+    },
+  );
 
   it.skipIf(process.platform === "win32")(
     "keeps zsh auto-detection when SHELL is zsh even if nu is installed",

@@ -25,6 +25,14 @@ export function createCwdCapturePlan(
     return { command: request.command };
   }
 
+  // Nushell prints a pipeline's final value only when it is the script's last
+  // statement. A trailing pwd capture would swallow `ls`, `to json`, `table`…
+  // so it is only safe for a bare `cd` (which produces no value). Everything
+  // else runs unwrapped; cwd persistence for compound commands is lost.
+  if (options.dialect === "nu" && !isSimpleCdCommand(request.command.command)) {
+    return { command: request.command };
+  }
+
   const cwdCaptureDir = tmpdir();
   mkdirSync(cwdCaptureDir, { recursive: true });
   const cwdFilePath = join(cwdCaptureDir, `zcode-${crypto.randomUUID()}-cwd`);
@@ -48,6 +56,11 @@ export function createCwdCapturePlan(
     },
     cwdFilePath,
   };
+}
+
+// `cd`, `cd /tmp`, `cd "a b"` — no separators, no pipelines, no newlines.
+function isSimpleCdCommand(command: string): boolean {
+  return /^\s*cd(\s+[^\n;|]*)?\s*$/.test(command);
 }
 
 function createPosixCwdCaptureCommand(command: string, cwdFilePath: string): string {
@@ -100,10 +113,7 @@ export function readCapturedCwd(
   }
 }
 
-export function normalizeCapturedCwdForHost(
-  value: string,
-  dialect: ExecutionShellDialect,
-): string {
+export function normalizeCapturedCwdForHost(value: string, dialect: ExecutionShellDialect): string {
   return dialect === "git-bash" ? gitBashPathToWindowsPath(value) : value;
 }
 

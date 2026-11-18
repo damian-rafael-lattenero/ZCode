@@ -27,6 +27,7 @@ const forkTestFiles = [
   "packages/ui/test/ansiText.test.ts",
   "packages/ui/test/commandFormat.test.ts",
   "packages/ui/test/outputSyntax.test.ts",
+  "packages/ui/test/outputTree.test.ts",
   "packages/ui/test/consecutiveSummaryGroupDefaultOpen.test.ts",
   "packages/ui/test/conversationExpandDefaultStore.test.ts",
   "packages/ui/test/forkCommandModel.test.ts",

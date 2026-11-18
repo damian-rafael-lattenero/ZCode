@@ -4,6 +4,8 @@ import { ScrollFadeViewport } from "@/components/ui/scroll-fade-viewport.js";
 import { hasAnsi, parseAnsiText } from "@/lib/ansiText.js";
 import { highlightCode, type TokenizedCode } from "@/lib/shikiHighlighter.js";
 import { detectOutputSyntax, formatOutputForDisplay } from "@/lib/outputSyntax.js";
+import { expandOutputText } from "@/lib/outputTree.js";
+import { ExpandedOutput } from "@/ToolCallBlocks/renderers/ExpandedOutput.js";
 
 export function ExecuteOutput({ text, running }: { text: string; running: boolean }) {
   const scroll = useRef<HTMLDivElement>(null);
@@ -28,6 +30,13 @@ export function ExecuteOutput({ text, running }: { text: string; running: boolea
     [formatted],
   );
   const activeSyntax = hasAnsi(formatted) ? null : syntax;
+
+  // JSON that carries structured strings inside gets expanded before any shiki
+  // pass (embedded JSON, multi-line text, Nu code); null keeps the plain path.
+  const expanded = useMemo(
+    () => (ansiSpans === null && syntax === "json" ? expandOutputText(display) : null),
+    [ansiSpans, syntax, display],
+  );
 
   useEffect(() => {
     if (!activeSyntax) {
@@ -77,33 +86,34 @@ export function ExecuteOutput({ text, running }: { text: string; running: boolea
         data-testid={running ? "bash-output-preview-full" : "bash-result-output"}
         className="whitespace-pre-wrap break-words font-mono text-ui-base leading-5 text-foreground-subtle"
       >
-        {ansiSpans
-          ? ansiSpans.map((span, index) => (
-              <span key={index} style={span.style}>
-                {span.text}
-              </span>
-            ))
-          : formattedSpans
-            ? formattedSpans.map((span, index) => (
-                <span key={index} style={span.style}>
-                  {span.text}
+        {expanded ? (
+          <ExpandedOutput segments={expanded} />
+        ) : ansiSpans ? (
+          ansiSpans.map((span, index) => (
+            <span key={index} style={span.style}>
+              {span.text}
+            </span>
+          ))
+        ) : formattedSpans ? (
+          formattedSpans.map((span, index) => (
+            <span key={index} style={span.style}>
+              {span.text}
+            </span>
+          ))
+        ) : activeSyntax && syntaxTokens ? (
+          syntaxTokens.tokens.map((line, lineIndex) => (
+            <span key={lineIndex}>
+              {line.map((token, tokenIndex) => (
+                <span key={tokenIndex} style={token.color ? { color: token.color } : undefined}>
+                  {token.content}
                 </span>
-              ))
-            : activeSyntax && syntaxTokens
-              ? syntaxTokens.tokens.map((line, lineIndex) => (
-                  <span key={lineIndex}>
-                    {line.map((token, tokenIndex) => (
-                      <span
-                        key={tokenIndex}
-                        style={token.color ? { color: token.color } : undefined}
-                      >
-                        {token.content}
-                      </span>
-                    ))}
-                    {lineIndex < syntaxTokens.tokens.length - 1 ? "\n" : null}
-                  </span>
-                ))
-              : formatted}
+              ))}
+              {lineIndex < syntaxTokens.tokens.length - 1 ? "\n" : null}
+            </span>
+          ))
+        ) : (
+          formatted
+        )}
       </pre>
     </ScrollFadeViewport>
   );

@@ -8,11 +8,13 @@ export function createBashResultDisplay(output: unknown): ToolResultDisplayPaylo
     return undefined;
   const outputPath = result.persistedOutputPath ?? result.rawOutputPath;
   const truncated = result.stdoutTruncated === true || result.stderrTruncated === true;
-  if (!truncated && !outputPath) return undefined;
-
+  // Always emit the raw stdout/stderr: this is the only UI channel that still
+  // carries the ANSI color codes (the model text is stripped separately), so
+  // the transcript card can render the command's real colors.
+  const text = [result.stdout, result.stderr].filter(Boolean).join("\n");
+  if (!text) return undefined;
   // 原因：模型 envelope 会再次缩短正文且隐藏 Bash 的截断事实；Desktop 必须使用
   // 独立的有界头部展示，不能解析模型文案或把文件路径误当协议按需读取 ref。
-  const text = [result.stdout, result.stderr].filter(Boolean).join("\n");
   const exceedsDisplayBudget = Buffer.byteLength(text, "utf8") > 150_000;
   const bounded = exceedsDisplayBudget
     ? new TextDecoder().decode(Buffer.from(text).subarray(0, 150_000), { stream: true })

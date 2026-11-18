@@ -53,12 +53,13 @@ export function shouldOfferComposerInterruptPicker(gate: ComposerInterruptPicker
 }
 
 /**
- * Whether the projection allows the interrupt option. Old CLI frames lack the field;
- * in that case keep the option visible and let admission reject it (the queue option
- * remains a safe fallback).
+ * Whether the projection allows the interrupt option. The protocol's law
+ * (`sessionActionAvailabilitySchema.interruptSteer`): the field is optional only
+ * for old-CLI frames, and ABSENCE means the step interrupt is UNAVAILABLE — the
+ * picker offers enqueue only. Never assume a capability the frame did not grant.
  */
 export function isInterruptSteerOffered(availability: ActionAvailability | undefined): boolean {
-  return availability?.allowed !== false;
+  return availability?.allowed === true;
 }
 
 export interface ComposerInterruptPickerController {

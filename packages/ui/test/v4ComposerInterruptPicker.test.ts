@@ -220,10 +220,10 @@ describe("composer interrupt picker strip", () => {
     expect(onSelect).not.toHaveBeenCalled();
   });
 
-  it("treats a missing availability field as allowed for old frames", () => {
+  it("treats a missing availability field as unavailable (protocol: absence = enqueue only)", () => {
     expect(isInterruptSteerOffered({ allowed: true })).toBe(true);
     expect(isInterruptSteerOffered({ allowed: false, reasonCode: "x" })).toBe(false);
-    expect(isInterruptSteerOffered(undefined)).toBe(true);
+    expect(isInterruptSteerOffered(undefined)).toBe(false);
   });
 });
 

@@ -1,0 +1,5 @@
+# THE HOUSE'S SECRETS GATE (audit item 4): the STAGED diff only, values
+# redacted. The ZCode fork keeps husky as its hooksPath, so the gate rides
+# husky's own pre-commit instead of the symlink the other repos use.
+# A hook that cannot run must NEVER pass silently (secret-scan exits 1).
+/Users/lattenero/.local/bin/nu-nightly /Users/lattenero/Scripts/secret-scan.nu "$(git rev-parse --show-toplevel)" --staged

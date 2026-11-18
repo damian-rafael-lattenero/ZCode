@@ -74,6 +74,7 @@ import {
   type BashPermissionMatcher,
 } from "./bash-semantics.js";
 import { isBashAutoBackgroundEligible } from "./bash-background-policy.js";
+import { isNuReadOnlyCommand } from "./nu-read-only.js";
 import { supportsBashBackgroundLifecycle } from "./bash-background-lifecycle.js";
 import { resolveBashPermissionRulePolicy } from "./bash-command-permission-policy.js";
 import {
@@ -132,8 +133,18 @@ export function resolveBashPermissionCapability(
   }
   // Bash 会把 # 后的 CMD 命令当注释；异构 shell（CMD/Nushell）不能用 Bash AST 证明整条命令只读。
   const dialect = context?.bashShellSelection?.dialect;
-  if (dialect === "cmd" || dialect === "legacy-shell" || dialect === "nu") return undefined;
-  if (!command || !isRuntimeReadOnlyBashCommand(command, context)) return undefined;
+  if (dialect === "cmd" || dialect === "legacy-shell") return undefined;
+  if (!command) return undefined;
+  if (dialect === "nu") {
+    // Nushell cannot be proven with the bash AST; a conservative allowlist keeps
+    // read-only commands usable in plan mode without opening writes.
+    return isNuReadOnlyCommand(command) ? readOnlyBashCapability() : undefined;
+  }
+  if (!isRuntimeReadOnlyBashCommand(command, context)) return undefined;
+  return readOnlyBashCapability();
+}
+
+function readOnlyBashCapability(): ToolRuntimePermissionCapability {
   return {
     destructive: false,
     needsApproval: false,

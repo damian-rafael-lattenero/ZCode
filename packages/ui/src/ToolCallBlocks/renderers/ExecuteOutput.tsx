@@ -1,7 +1,9 @@
-import { useLayoutEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { logger } from "@/logger.js";
 import { ScrollFadeViewport } from "@/components/ui/scroll-fade-viewport.js";
 import { hasAnsi, parseAnsiText } from "@/lib/ansiText.js";
+import { highlightCode, type TokenizedCode } from "@/lib/shikiHighlighter.js";
+import { detectOutputSyntax, formatOutputForDisplay } from "@/lib/outputSyntax.js";
 
 export function ExecuteOutput({ text, running }: { text: string; running: boolean }) {
   const scroll = useRef<HTMLDivElement>(null);
@@ -11,6 +13,30 @@ export function ExecuteOutput({ text, running }: { text: string; running: boolea
   const following = frozen === null;
   const display = frozen ?? text;
   const ansiSpans = useMemo(() => (hasAnsi(display) ? parseAnsiText(display) : null), [display]);
+  const [syntaxTokens, setSyntaxTokens] = useState<TokenizedCode | null>(null);
+  const syntax = useMemo(
+    () => (ansiSpans === null ? detectOutputSyntax(display) : null),
+    [ansiSpans, display],
+  );
+  const formatted = useMemo(
+    () => (syntax ? formatOutputForDisplay(display, syntax) : display),
+    [display, syntax],
+  );
+
+  useEffect(() => {
+    if (!syntax) {
+      setSyntaxTokens(null);
+      return;
+    }
+    let cancelled = false;
+    const immediate = highlightCode(formatted, syntax, undefined, (result) => {
+      if (!cancelled) setSyntaxTokens(result);
+    });
+    if (immediate) setSyntaxTokens(immediate);
+    return () => {
+      cancelled = true;
+    };
+  }, [formatted, syntax]);
 
   useLayoutEffect(() => {
     if (running) hasStreamed.current = true;
@@ -51,7 +77,18 @@ export function ExecuteOutput({ text, running }: { text: string; running: boolea
                 {span.text}
               </span>
             ))
-          : display}
+          : syntax && syntaxTokens
+            ? syntaxTokens.tokens.map((line, lineIndex) => (
+                <span key={lineIndex}>
+                  {line.map((token, tokenIndex) => (
+                    <span key={tokenIndex} style={token.color ? { color: token.color } : undefined}>
+                      {token.content}
+                    </span>
+                  ))}
+                  {lineIndex < syntaxTokens.tokens.length - 1 ? "\n" : null}
+                </span>
+              ))
+            : formatted}
       </pre>
     </ScrollFadeViewport>
   );

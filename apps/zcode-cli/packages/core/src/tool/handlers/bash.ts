@@ -261,9 +261,7 @@ async function executeBashHandler(
     // auto_on_timeout 只在超时计时器到点时转后台，所以这里记录的就是触发转后台的超时。
     // 用户移交（requestedBy:"user"）改走 backgroundedByUser 文案，不携带超时记录。
     const timedOutAfterMs =
-      !parsed.run_in_background &&
-      eligibleForAutoBackground &&
-      runResult.requestedBy === undefined
+      !parsed.run_in_background && eligibleForAutoBackground && runResult.requestedBy === undefined
         ? request.timeoutMs
         : undefined;
     return toBackgroundedBashOutput(runResult.task, parsed, timedOutAfterMs, runResult.requestedBy);
@@ -509,10 +507,15 @@ function createBashSessionEnv(context: ToolExecutionContext): Record<string, str
   // 工作区根目录是会话创建时的工作目录，不随 `cd` 变化。
   // FORCE_COLOR makes commands emit color even though stdout is a pipe; the UI
   // renders it, and formatBashModelContent strips the escapes for the model.
+  // Git ignores FORCE_COLOR, so GIT_CONFIG_* forces color.ui=always for it
+  // (porcelain/--no-color outputs stay plain).
   return {
     CLICOLOR_FORCE: "1",
     COLORTERM: "truecolor",
     FORCE_COLOR: "1",
+    GIT_CONFIG_COUNT: "1",
+    GIT_CONFIG_KEY_0: "color.ui",
+    GIT_CONFIG_VALUE_0: "always",
     TERM: "xterm-256color",
     CLAUDE_CODE_SESSION_ID: context.sessionId,
     CLAUDE_PROJECT_DIR: context.workspaceRoot,

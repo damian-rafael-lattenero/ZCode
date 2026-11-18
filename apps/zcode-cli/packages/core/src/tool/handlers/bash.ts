@@ -507,7 +507,13 @@ async function emitProgressEvent(
 
 function createBashSessionEnv(context: ToolExecutionContext): Record<string, string> {
   // 工作区根目录是会话创建时的工作目录，不随 `cd` 变化。
+  // FORCE_COLOR makes commands emit color even though stdout is a pipe; the UI
+  // renders it, and formatBashModelContent strips the escapes for the model.
   return {
+    CLICOLOR_FORCE: "1",
+    COLORTERM: "truecolor",
+    FORCE_COLOR: "1",
+    TERM: "xterm-256color",
     CLAUDE_CODE_SESSION_ID: context.sessionId,
     CLAUDE_PROJECT_DIR: context.workspaceRoot,
     CLAUDE_SESSION_ID: context.sessionId,

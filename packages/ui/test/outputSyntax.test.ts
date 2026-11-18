@@ -49,6 +49,28 @@ describe("formatOutputForDisplay", () => {
     );
   });
 
+  it("renders uniform object arrays as an aligned ANSI table", () => {
+    const table = formatOutputForDisplay(
+      '[{"name":"Ana","age":30},{"name":"Bob","age":4}]',
+      "json",
+    );
+    expect(table.split("\n")[0]).toContain("name");
+    expect(table).toContain("\u001b[1;36mname");
+    expect(table).toContain("Ana   ");
+    expect(table).toContain("\u001b[32m30");
+  });
+
+  it("keeps non-uniform object arrays as pretty JSON", () => {
+    const output = formatOutputForDisplay('[{"a":1},{"b":2}]', "json");
+    expect(output.startsWith("[\n  {")).toBe(true);
+  });
+
+  it("expands JSON Lines with blank lines between records", () => {
+    expect(formatOutputForDisplay('{"a":1}\n{"b":2}', "jsonl")).toBe(
+      '{\n  "a": 1\n}\n\n{\n  "b": 2\n}',
+    );
+  });
+
   it("aligns CSV and TSV columns", () => {
     expect(formatOutputForDisplay("name,age\nAna,3\nBob,42", "csv")).toBe(
       "name  age\nAna   3\nBob   42",

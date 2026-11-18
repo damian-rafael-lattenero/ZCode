@@ -22,21 +22,27 @@ export function ExecuteOutput({ text, running }: { text: string; running: boolea
     () => (syntax ? formatOutputForDisplay(display, syntax) : display),
     [display, syntax],
   );
+  // The formatter can emit ANSI itself (JSON array table); that path skips shiki.
+  const formattedSpans = useMemo(
+    () => (hasAnsi(formatted) ? parseAnsiText(formatted) : null),
+    [formatted],
+  );
+  const activeSyntax = hasAnsi(formatted) ? null : syntax;
 
   useEffect(() => {
-    if (!syntax) {
+    if (!activeSyntax) {
       setSyntaxTokens(null);
       return;
     }
     let cancelled = false;
-    const immediate = highlightCode(formatted, syntax, undefined, (result) => {
+    const immediate = highlightCode(formatted, activeSyntax, undefined, (result) => {
       if (!cancelled) setSyntaxTokens(result);
     });
     if (immediate) setSyntaxTokens(immediate);
     return () => {
       cancelled = true;
     };
-  }, [formatted, syntax]);
+  }, [formatted, activeSyntax]);
 
   useLayoutEffect(() => {
     if (running) hasStreamed.current = true;
@@ -77,18 +83,27 @@ export function ExecuteOutput({ text, running }: { text: string; running: boolea
                 {span.text}
               </span>
             ))
-          : syntax && syntaxTokens
-            ? syntaxTokens.tokens.map((line, lineIndex) => (
-                <span key={lineIndex}>
-                  {line.map((token, tokenIndex) => (
-                    <span key={tokenIndex} style={token.color ? { color: token.color } : undefined}>
-                      {token.content}
-                    </span>
-                  ))}
-                  {lineIndex < syntaxTokens.tokens.length - 1 ? "\n" : null}
+          : formattedSpans
+            ? formattedSpans.map((span, index) => (
+                <span key={index} style={span.style}>
+                  {span.text}
                 </span>
               ))
-            : formatted}
+            : activeSyntax && syntaxTokens
+              ? syntaxTokens.tokens.map((line, lineIndex) => (
+                  <span key={lineIndex}>
+                    {line.map((token, tokenIndex) => (
+                      <span
+                        key={tokenIndex}
+                        style={token.color ? { color: token.color } : undefined}
+                      >
+                        {token.content}
+                      </span>
+                    ))}
+                    {lineIndex < syntaxTokens.tokens.length - 1 ? "\n" : null}
+                  </span>
+                ))
+              : formatted}
       </pre>
     </ScrollFadeViewport>
   );

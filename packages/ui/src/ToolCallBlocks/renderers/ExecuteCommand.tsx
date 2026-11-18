@@ -1,8 +1,9 @@
-import { useEffect, useId, useLayoutEffect, useRef, useState } from "react";
+import { useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { ChevronDownIcon } from "lucide-react";
 import { Button } from "@/components/ui/button.js";
 import { useZCodeIntl } from "@/i18n/IntlProvider.js";
 import { highlightCode, type TokenizedCode } from "@/lib/shikiHighlighter.js";
+import { formatCommandForDisplay } from "@/lib/commandFormat.js";
 import { logger } from "@/logger.js";
 
 export function ExecuteCommand({ command }: { command: string | undefined }) {
@@ -12,23 +13,28 @@ export function ExecuteCommand({ command }: { command: string | undefined }) {
   const [expanded, setExpanded] = useState(false);
   const [overflowing, setOverflowing] = useState(false);
   const [tokens, setTokens] = useState<TokenizedCode | null>(null);
+  // Display-only: top-level pipes and `;` become lines; strings/closures stay intact.
+  const formatted = useMemo(
+    () => (command ? formatCommandForDisplay(command) : command),
+    [command],
+  );
 
   // The shell is Nushell (fork build 2026-11-17): highlight the command with
   // shiki's bundled `nushell` grammar so the transcript card matches Ghostty.
   useEffect(() => {
-    if (!command) {
+    if (!formatted) {
       setTokens(null);
       return;
     }
     let cancelled = false;
-    const immediate = highlightCode(command, "nu", undefined, (result) => {
+    const immediate = highlightCode(formatted, "nu", undefined, (result) => {
       if (!cancelled) setTokens(result);
     });
     if (immediate) setTokens(immediate);
     return () => {
       cancelled = true;
     };
-  }, [command]);
+  }, [formatted]);
 
   useLayoutEffect(() => {
     const element = content.current;
@@ -39,7 +45,7 @@ export function ExecuteCommand({ command }: { command: string | undefined }) {
     const observer = new ResizeObserver(measure);
     observer.observe(element);
     return () => observer.disconnect();
-  }, [command, expanded]);
+  }, [formatted, expanded]);
 
   return (
     <div className="min-w-0 flex-1 grid grid-cols-[1ch_minmax(0,1fr)] gap-x-2 gap-y-1 font-mono">
@@ -71,7 +77,7 @@ export function ExecuteCommand({ command }: { command: string | undefined }) {
                     {lineIndex < tokens.tokens.length - 1 ? "\n" : null}
                   </span>
                 ))
-              : command}
+              : formatted}
           </pre>
         </div>
       </div>

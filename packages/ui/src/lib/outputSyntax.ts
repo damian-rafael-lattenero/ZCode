@@ -3,6 +3,14 @@
 // conservative — a false positive paints prose as YAML, which is worse than
 // plain text. Only shapes with an unambiguous signature are accepted.
 const MAX_SYNTAX_HIGHLIGHT_BYTES = 64_000;
+const MAX_FORMATTED_DISPLAY_BYTES = 150_000;
+
+// ANSI SGR for the generated table; ExecuteOutput already renders ANSI spans.
+const ANSI_RESET = "\u001b[0m";
+const ANSI_HEADER = "\u001b[1;36m";
+const ANSI_NUMBER = "\u001b[32m";
+const ANSI_BOOLEAN = "\u001b[33m";
+const ANSI_NULL = "\u001b[2m";
 
 export type OutputSyntaxLanguage = "json" | "jsonl" | "yaml" | "toml" | "xml" | "csv" | "tsv";
 
@@ -24,6 +32,34 @@ export function detectOutputSyntax(text: string): OutputSyntaxLanguage | null {
   if (looksLikeSeparated(lines, ",")) return "csv";
   if (looksLikeSeparated(lines, "\t")) return "tsv";
   return null;
+}
+
+// Display-only formatting: the model keeps the original text, the card shows
+// JSON pretty-printed (uniform object arrays as an aligned table), JSON Lines
+// expanded, and delimited rows aligned. YAML/TOML/XML are already structured.
+export function formatOutputForDisplay(text: string, language: OutputSyntaxLanguage): string {
+  if (language === "json") {
+    const table = jsonArrayToAnsiTable(text);
+    if (table) return table;
+    return bounded(prettyJson(text), text);
+  }
+  if (language === "jsonl") {
+    const pretty = text
+      .trim()
+      .split("\n")
+      .filter((line) => line.trim().length > 0)
+      .map((line) => prettyJson(line.trim()))
+      .join("\n\n");
+    return bounded(pretty, text);
+  }
+  if (language === "csv" || language === "tsv") {
+    return bounded(alignDelimited(text, language === "csv" ? "," : "\t"), text);
+  }
+  return text;
+}
+
+function bounded(candidate: string, fallback: string): string {
+  return candidate.length <= MAX_FORMATTED_DISPLAY_BYTES ? candidate : fallback;
 }
 
 function isJsonDocument(trimmed: string): boolean {
@@ -78,23 +114,6 @@ function looksLikeSeparated(lines: string[], delimiter: string): boolean {
   return first >= 1 && counts.every((count) => count === first);
 }
 
-const MAX_FORMATTED_DISPLAY_BYTES = 150_000;
-
-// Display-only formatting: the model keeps the original text, the card shows
-// JSON pretty-printed and delimited rows aligned. YAML/TOML/XML are already
-// structured line by line, so they render as-is.
-export function formatOutputForDisplay(text: string, language: OutputSyntaxLanguage): string {
-  if (language === "json") {
-    const pretty = prettyJson(text);
-    return pretty.length <= MAX_FORMATTED_DISPLAY_BYTES ? pretty : text;
-  }
-  if (language === "csv" || language === "tsv") {
-    const aligned = alignDelimited(text, language === "csv" ? "," : "\t");
-    return aligned.length <= MAX_FORMATTED_DISPLAY_BYTES ? aligned : text;
-  }
-  return text;
-}
-
 function prettyJson(text: string): string {
   try {
     return JSON.stringify(JSON.parse(text.trim()), null, 2);
@@ -122,4 +141,63 @@ function alignDelimited(text: string, delimiter: string): string {
         .trimEnd(),
     )
     .join("\n");
+}
+
+type Scalar = string | number | boolean | null;
+type ScalarRow = Record<string, Scalar>;
+
+// A JSON array of uniform scalar records reads far better as a table than as
+// pretty-printed objects; the header and typed cells carry ANSI colors.
+function jsonArrayToAnsiTable(text: string): string | null {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(text.trim());
+  } catch {
+    return null;
+  }
+  if (!Array.isArray(parsed) || parsed.length < 2 || !parsed.every(isScalarRow)) return null;
+
+  const rows = parsed as ScalarRow[];
+  const keys = Object.keys(rows[0]!);
+  if (keys.length === 0) return null;
+  const uniform = rows.every(
+    (row) => Object.keys(row).length === keys.length && keys.every((key) => key in row),
+  );
+  if (!uniform) return null;
+
+  const cells = rows.map((row) => keys.map((key) => renderCell(row[key]!)));
+  const widths = keys.map((key, index) =>
+    Math.max(key.length, ...cells.map((row) => row[index]!.plain.length)),
+  );
+  const header = keys
+    .map((key, index) => `${ANSI_HEADER}${key.padEnd(widths[index]!)}${ANSI_RESET}`)
+    .join("  ");
+  const body = cells.map((row) =>
+    row
+      .map((cell, index) => `${cell.prefix}${cell.plain.padEnd(widths[index]!)}${cell.suffix}`)
+      .join("  "),
+  );
+  return bounded([header, ...body].join("\n"), text);
+}
+
+function isScalarRow(value: unknown): value is ScalarRow {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) return false;
+  return Object.values(value).every(
+    (item) =>
+      item === null ||
+      typeof item === "string" ||
+      typeof item === "number" ||
+      typeof item === "boolean",
+  );
+}
+
+function renderCell(value: Scalar): { plain: string; prefix: string; suffix: string } {
+  if (value === null) return { plain: "null", prefix: ANSI_NULL, suffix: ANSI_RESET };
+  if (typeof value === "number") {
+    return { plain: String(value), prefix: ANSI_NUMBER, suffix: ANSI_RESET };
+  }
+  if (typeof value === "boolean") {
+    return { plain: String(value), prefix: ANSI_BOOLEAN, suffix: ANSI_RESET };
+  }
+  return { plain: value.replace(/\n/g, "\\n"), prefix: "", suffix: "" };
 }

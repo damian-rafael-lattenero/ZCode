@@ -2406,7 +2406,11 @@ app.whenReady().then(async () => {
   // 不向 Preview 渠道提供更新。构建期未启用自动更新时同样不更新
   // （见 docs/desktop/build-time-optional-capabilities.md）。
   void initAutoUpdater({
-    enabled: ZCODE_PRODUCT_FLAVOR === "production" && ZCODE_AUTO_UPDATE_ENABLED,
+    // Fork law: the updater is HARD-DISABLED. A live updater self-swaps this fork
+    // for the official build (measured 2026-11-20: the backend served v3.19.1 with
+    // an Update pill while the source mirror had nothing to merge). Fork upgrades
+    // are merge-then-build only.
+    enabled: false,
     onBeforeQuitAndInstall: async () => {
       notifyStabilityLifecycle("update_install");
       await prepareAppQuit("auto-update quitAndInstall", "update-install");

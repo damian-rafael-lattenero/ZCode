@@ -58,6 +58,11 @@ def build-bundle [repo: string]: nothing -> string {
         ZCODE_ENV: "production"
         CSC_IDENTITY_AUTO_DISCOVERY: "false"
         ELECTRON_MIRROR: "https://artifacts.electronjs.org/"
+        # Fork law: freeze the auto-updater OFF at build time (empty string reads
+        # as disabled in scripts/build-time-config.mjs). Belt-and-suspenders for
+        # the hard disable in packages/desktop/src/main/index.ts — a live updater
+        # would self-swap the fork for the official build.
+        ZCODE_AUTO_UPDATE: ""
     } {
         do { ^$MISE exec -- node scripts/mise-run.mjs pnpm bundle:desktop } | complete
     })

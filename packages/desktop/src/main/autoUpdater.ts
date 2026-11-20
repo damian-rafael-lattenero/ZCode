@@ -1472,6 +1472,17 @@ export async function hydratePendingPostUpdateReleaseNotes(settingService: Setti
   pendingPostUpdateReleaseNotes = settings.pendingPostUpdateReleaseNotes ?? null;
   deliveredPostUpdateReleaseNotesWebContentsId = null;
 
+  // Fork law: with the updater hard-disabled there is no real package behind a
+  // persisted pending payload — restoring a ready update from it resurrects a
+  // ghost Update pill for a version this fork will never install. Discard it.
+  if (autoUpdaterDisabledForProductFlavor && pendingPostUpdateReleaseNotes) {
+    logger.info(
+      `[auto-update] updater disabled — discard pending release notes version=${pendingPostUpdateReleaseNotes.version}`,
+    );
+    await clearPendingPostUpdateReleaseNotes(settingService, "updater-disabled");
+    return;
+  }
+
   if (pendingPostUpdateReleaseNotes) {
     logger.info(
       `[auto-update] hydrated pending post-update release notes version=${pendingPostUpdateReleaseNotes.version}`,

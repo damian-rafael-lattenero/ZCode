@@ -84,7 +84,11 @@ export function ExecuteOutput({ text, running }: { text: string; running: boolea
     >
       <pre
         data-testid={running ? "bash-output-preview-full" : "bash-result-output"}
-        className="whitespace-pre-wrap break-words font-mono text-ui-base leading-5 text-foreground-subtle"
+        // No wrap: over-wide lines (tables, stack traces) must keep their
+        // border alignment — the container scrolls horizontally instead of
+        // soft-wrapping the whole line (the card soft-wrap was visually
+        // breaking every table border below the wrap point).
+        className="whitespace-pre font-mono text-ui-base leading-5 text-foreground-subtle"
       >
         {expanded ? (
           <ExpandedOutput segments={expanded} />

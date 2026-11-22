@@ -55,13 +55,13 @@ def grep-has [file: string, marker: string]: nothing -> bool {
 
 def check-markers [file: string, markers: list<string>, kind: string]: nothing -> nothing {
     if not (($file | path type) == "file") {
-        fail "[verify-deploy]" $"falta ($kind): ($file)"
+        fail "[verify-deploy]" $"missing ($kind): ($file)"
     }
     let missing: list<string> = ($markers | where {|m| not (grep-has $file $m) })
     if ($missing | length) > 0 {
-        fail "[verify-deploy]" $"($kind) sin marker: ($missing | str join ', ')"
+        fail "[verify-deploy]" $"($kind) missing markers: ($missing | str join ', ')"
     }
-    print $"[verify-deploy] ok: ($kind) tiene todos los markers \(($markers | length)\)"
+    print $"[verify-deploy] ok: ($kind) carries all markers \(($markers | length)\)"
 }
 
 def main []: nothing -> nothing {
@@ -70,7 +70,7 @@ def main []: nothing -> nothing {
 
     print $"[verify-deploy] app: ($APP)"
     if not (($APP | path type) == "dir") {
-        fail "[verify-deploy]" $"no existe ($APP)"
+        fail "[verify-deploy]" $"does not exist: ($APP)"
     }
 
     # Warn only about copies of the SAME product (dev.zcode.app); unrelated
@@ -78,18 +78,18 @@ def main []: nothing -> nothing {
     for extra in (glob "/Applications/ZCode*.app" | where {|p| $p != $APP }) {
         let bid: record = (do { ^defaults read $"($extra)/Contents/Info.plist" CFBundleIdentifier } | complete)
         if ($bid.exit_code == 0) and (($bid.stdout | str trim) == "dev.zcode.app") {
-            print "[verify-deploy] WARN: hay apps ZCode extra \(Dock/Spotlight pueden abrir la vieja\):"
+            print "[verify-deploy] WARN: extra ZCode apps exist \(Dock/Spotlight may open the old one\):"
             print $"  - ($extra)"
         }
     }
 
-    check-markers $BUNDLE $AGENT_MARKERS "bundle del app (agent)"
-    check-markers $ASAR $UI_MARKERS "asar del app (UI/shared)"
+    check-markers $BUNDLE $AGENT_MARKERS "app bundle (agent)"
+    check-markers $ASAR $UI_MARKERS "app asar (UI/shared)"
 
     if (($DIST | path type) == "file") {
         check-markers $DIST $AGENT_MARKERS "repo dist"
     } else {
-        print "[verify-deploy] note: sin repo dist \(checkout limpio\) — el agent saldrá del bundle del app"
+        print "[verify-deploy] note: no repo dist \(clean checkout\) — the agent ships from the app bundle"
     }
 
     # When the app is launched from the Dock, argv[0] is just "ZCode" (no
@@ -97,7 +97,7 @@ def main []: nothing -> nothing {
     # source.
     let pids: list<string> = (^ps -A -o pid=,comm= | lines | parse "{pid} {comm}" | where comm == ZCode | get pid)
     if ($pids | is-empty) {
-        print "[verify-deploy] note: ZCode no está corriendo — abrir y volver a correr este script"
+        print "[verify-deploy] note: ZCode is not running — open it and re-run this script"
         print "[verify-deploy] PASS"
         return
     }
@@ -107,8 +107,8 @@ def main []: nothing -> nothing {
     let start: record = (do { ^date -j -f "%a %b %d %H:%M:%S %Y" $start_line +%s } | complete)
     let start_epoch: int = if $start.exit_code == 0 { $start.stdout | str trim | into int } else { 0 }
     if ($start_epoch > 0) and ($start_epoch < $bundle_epoch) {
-        fail "[verify-deploy]" $"la ZCode corriendo \(pid ($main_pid), iniciada ($start_line)\) es anterior al bundle instalado — hacer ⌘Q y reabrir"
+        fail "[verify-deploy]" $"the running ZCode \(pid ($main_pid), started ($start_line)\) predates the installed bundle — ⌘Q and reopen"
     }
-    print $"[verify-deploy] ok: la app corriendo es el build instalado \(pid ($main_pid)\)"
+    print $"[verify-deploy] ok: the running app IS the installed build \(pid ($main_pid)\)"
     print "[verify-deploy] PASS"
 }

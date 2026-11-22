@@ -30,8 +30,8 @@
 
 use lib/fork-ops.nu *
 
-const MISE = "/opt/homebrew/bin/mise"
-const WAITER_LABEL = "com.zcode.fork-swap-waiter"
+const MISE: string = "/opt/homebrew/bin/mise"
+const WAITER_LABEL: string = "com.zcode.fork-swap-waiter"
 
 def build-bundle [repo: string]: nothing -> string {
     cd $repo
@@ -50,7 +50,7 @@ def build-bundle [repo: string]: nothing -> string {
     print $install.stdout
     if $install.exit_code != 0 {
         print -e $install.stderr
-        fail "[fork]" $"pnpm install falló \(exit ($install.exit_code)\)"
+        fail "[fork]" $"pnpm install failed \(exit ($install.exit_code)\)"
     }
     print "[fork] bundle:desktop (ZCODE_ENV=production, no signing)..."
     announce "🚀 deploy Fork ZCode — bundle:desktop (el tramo largo, ~10-15 min)…"
@@ -69,13 +69,13 @@ def build-bundle [repo: string]: nothing -> string {
     print $bundle.stdout
     if $bundle.exit_code != 0 {
         print -e $bundle.stderr
-        fail "[fork]" $"bundle:desktop falló \(exit ($bundle.exit_code)\)"
+        fail "[fork]" $"bundle:desktop failed \(exit ($bundle.exit_code)\)"
     }
     let zips: table = (ls ($repo | path join "packages/desktop/dist")
         | where name =~ 'ZCode-.*-mac-arm64\.zip$'
         | sort-by modified -r)
     if ($zips | is-empty) {
-        fail "[fork]" "el build no produjo ningún ZCode-*-mac-arm64.zip"
+        fail "[fork]" "the build produced no ZCode-*-mac-arm64.zip"
     }
     announce $"✅ deploy Fork ZCode — build listo \(($zips | first).name | path basename\)"
     (($zips | first).name)
@@ -100,21 +100,21 @@ def quit-zcode []: nothing -> nothing {
             }
         }
         if $dead { return }
-        print $"[fork] quit intento ($attempt): ZCode sigue viva — reintento…"
+        print $"[fork] quit attempt ($attempt): ZCode still alive — retrying…"
     }
-    fail "[fork]" "ZCode no murió tras 3 intentos — el zip quedó construido; cuando la cierres, instalá con --zip <path>"
+    fail "[fork]" "ZCode survived 3 quit attempts — the zip is built; once you close it, install with --zip <path>"
 }
 
 def install-zip [repo: string, zip: string, keep_prev: bool]: nothing -> nothing {
     if not (($zip | path type) == "file") {
-        fail "[fork]" $"no existe el zip: ($zip)"
+        fail "[fork]" $"zip does not exist: ($zip)"
     }
     let stage: path = ((mktemp -d) | path join "stage")
     mkdir $stage
     ^ditto -x -k $zip $stage
     let apps: list<string> = (glob $"($stage)/ZCode*.app")
     if ($apps | is-empty) {
-        fail "[fork]" $"no hay .app dentro de ($zip)"
+        fail "[fork]" $"no .app inside ($zip)"
     }
     let app: string = ($apps | first)
     if $keep_prev and (("/Applications/ZCode.app" | path type) == "dir") {
@@ -212,11 +212,11 @@ def main [
     cd $repo
 
     if not ($zip | is-empty) and not (($zip | path type) == "file") {
-        fail "[fork]" $"no existe el zip: ($zip)"
+        fail "[fork]" $"zip does not exist: ($zip)"
     }
 
     if $when_quit {
-        let built = if ($zip | is-empty) { build-bundle $repo } else { $zip }
+        let built: string = if ($zip | is-empty) { build-bundle $repo } else { $zip }
         arm-waiter $repo $built $keep_prev
         return
     }
@@ -229,7 +229,7 @@ def main [
         return
     }
 
-    let built = (build-bundle $repo)
+    let built: string = (build-bundle $repo)
     print $"[fork] built: ($built)"
 
     if $quit {
@@ -254,7 +254,7 @@ def main [
     ^ditto -x -k $built $stage
     let apps: list<string> = (glob $"($stage)/ZCode*.app")
     if ($apps | is-empty) {
-        fail "[fork]" $"no hay .app dentro de ($built)"
+        fail "[fork]" $"no .app inside ($built)"
     }
     print "[fork] smoke: launching the built app from staging (close it manually when satisfied)..."
     ^open ($apps | first)

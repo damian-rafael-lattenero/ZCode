@@ -20,6 +20,9 @@ def main [
         fail "[waiter]" "--zip is required"
     }
     print $"[waiter] armed for ($zip | path basename) — waiting for ZCode to quit..."
+    # The 2 s poll is a JUSTIFIED wait (the waiting law's probe exception):
+    # it waits for an ABSENCE — a process exit has no file event to watch,
+    # the job is launchd-owned (detached), and each pass is one cheap ps.
     while (zcode-running) {
         sleep 2sec
     }

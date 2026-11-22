@@ -3265,6 +3265,79 @@ describe("AgentRuntime tool loop", () => {
     expect(requestOrder).toEqual(["verifier-fail", "continuation", "verifier-pass"]);
   });
 
+  it("stops the runtime-owned active target loop when the round budget is exhausted", async () => {
+    // THE ZOMBIE GUARD (22/11): a verifier that never passes used to loop
+    // forever (measured live: one round every ~47s for 1.5 days). The
+    // budget stops the loop, leaves the target active, and the last turn's
+    // result still returns to the caller.
+    const sessionId = createSessionId("runtime-target-loop-budget");
+    const eventStore = createTestSessionEventStore();
+    const sessionStore = new RecordingSessionStore();
+    const requestOrder: string[] = [];
+
+    const runtime = createTestAgentRuntime(
+      sessionId,
+      {
+        mode: "build",
+        workingDirectory: "/tmp/zcode-runtime-target-loop-budget",
+        targetContinuationBudget: { maxRounds: 2 },
+      },
+      {
+        eventStore,
+        modelFactory: createTestModelFactory({
+          async generateText(request: any) {
+            const latestText = providerContentToText(
+              withoutAgentListingMessages(request.messages).at(-1)?.content,
+            );
+            if (latestText.includes("Verify whether the active session goal")) {
+              requestOrder.push("verifier-fail");
+              return {
+                finishReason: "stop",
+                providerMetadata: undefined,
+                text: JSON.stringify({
+                  nextAction: "Keep going forever.",
+                  passed: false,
+                  reason: "Never done.",
+                }),
+                usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 },
+              };
+            }
+            if (latestText.includes("Continue working toward the active session goal.")) {
+              requestOrder.push("continuation");
+              return {
+                finishReason: "stop",
+                providerMetadata: undefined,
+                text: "continued target",
+                usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 },
+              };
+            }
+            throw new Error(`unexpected request: ${latestText}`);
+          },
+        } as never),
+        sessionStore,
+      },
+    );
+
+    await runtime.ensureSessionPersistedForExternalActivity("/goal Budget loop");
+    await sessionStore.setTarget({
+      objective: "Loop until the budget stops it",
+      sessionID: sessionId,
+    });
+
+    const result = await runtime.continueActiveTargetLoop({
+      trigger: "manual",
+      verifyBeforeFirstContinue: true,
+    });
+
+    expect(result?.response).toBe("continued target");
+    expect(requestOrder).toEqual([
+      "verifier-fail",
+      "continuation",
+      "verifier-fail",
+      "continuation",
+    ]);
+  });
+
   it("prompt command can run post-turn active target loop when requested", async () => {
     const sessionId = createSessionId("runtime-target-loop-prompt-opt-in");
     const eventStore = createTestSessionEventStore();

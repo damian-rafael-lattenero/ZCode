@@ -147,6 +147,15 @@ export interface AgentRuntimeConfig {
   permissionTimeoutMs?: number;
   compact?: AutoCompactPolicyConfig;
   targetCompletionVerification?: { enabled?: boolean };
+  /**
+   * The auto-continuation loop's convergence budget: whichever limit trips
+   * first (rounds or wall-clock, counted per loop run) stops the loop and
+   * leaves the target active — the honest stop, resumable by the next user
+   * submission. Guards against a verifier that never passes (measured live
+   * 22/11: a zombie session looped one verification round every ~47s for
+   * 1.5 days). Defaults: 240 rounds / 8h.
+   */
+  targetContinuationBudget?: { maxRounds?: number; maxMs?: number };
   midConversationSystem?: {
     mode?: "auto" | "force";
   };

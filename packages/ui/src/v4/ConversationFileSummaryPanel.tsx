@@ -30,6 +30,17 @@ import {
   getConversationExpandDefaultSnapshot,
   subscribeConversationExpandDefault,
 } from "@/ToolCallBlocks/conversationExpandDefaultStore.js";
+// FORK CHANGE (damian-rafael-lattenero): the end-of-turn file click opens the
+// Diff Ask plugin panel first (same primitives as the Changes row in
+// ConversationStatusPanel); the stock patch viewer stays as the fallback.
+import {
+  FORK_DIFF_ASK_PLUGIN_ID,
+  FORK_DIFF_ASK_SURFACE_ID,
+} from "@/plugin-ui/adapters/useUiPluginRecommendations.js";
+import { useOpenPluginUi } from "@/plugin-ui/index.js";
+import { documentViewerInstance } from "@/plugin-ui/contract.js";
+import { resolvePluginUiSurfaceTitle } from "@/plugin-ui/adapters/usePluginUiSurfaces.js";
+import { useOptionalServices } from "@/hooks/useServices.js";
 import type {
   ConversationFileChangesRequestOptions,
   ConversationRowRenderContext,
@@ -82,7 +93,53 @@ export function ConversationFileSummaryPanel({
   context,
   assistantText = "",
 }: ConversationFileSummaryPanelProps) {
-  const { intl } = useZCodeIntl();
+  const { intl, locale } = useZCodeIntl();
+  // FORK CHANGE (damian-rafael-lattenero): hooks must stay above the early
+  // return. The end-of-turn file click opens Diff Ask first; the stock patch
+  // viewer stays as the fallback (same contract as the Changes row).
+  const openPluginUi = useOpenPluginUi();
+  const services = useOptionalServices();
+  const openDiffAsk = useCallback(async (): Promise<boolean> => {
+    const bridge = services?.pluginUiBridgeService;
+    const parentSessionId = context.sessionId ?? null;
+    if (!openPluginUi || !bridge || !parentSessionId) return false;
+    try {
+      const surfaces = await bridge.listSurfaces({
+        workspacePath: context.workspacePath,
+        workspaceIdentity: context.workspaceIdentity,
+      });
+      const resolved = surfaces.find(
+        (surface) =>
+          surface.pluginId === FORK_DIFF_ASK_PLUGIN_ID && surface.id === FORK_DIFF_ASK_SURFACE_ID,
+      );
+      if (!resolved) return false;
+      openPluginUi({
+        parentSessionId,
+        surfaceId: resolved.id,
+        serverName: resolved.server,
+        pluginId: resolved.pluginId,
+        resourceUri: resolved.resourceUri,
+        ...documentViewerInstance(resolved.resourceUri),
+        title: resolvePluginUiSurfaceTitle(resolved.title, locale),
+        workspacePath: context.workspacePath,
+        ...(context.workspaceIdentity ? { workspaceIdentity: context.workspaceIdentity } : {}),
+        remoteSessionId: null,
+      });
+      return true;
+    } catch {
+      return false;
+    }
+  }, [context, locale, openPluginUi, services]);
+  // Diff Ask first, stock patch viewer as fallback (the panel boots on the
+  // latest turn — the same list this summary shows).
+  const handleFileOpen = useCallback(
+    (item: FileChangeItem) => {
+      void openDiffAsk().then((opened) => {
+        if (!opened) openDiff(item, context);
+      });
+    },
+    [context, openDiffAsk],
+  );
   const genUiSources = useMemo(() => collectGenUiSourcePaths(assistantText), [assistantText]);
   const filtersSources = genUiSources.length > 0;
   // 「默认展开全部」偏好（spec：docs/specs/conversation-verbosity-views.md §2）：
@@ -335,6 +392,9 @@ export function ConversationFileSummaryPanel({
               items.map((item) => {
                 const relativePath = toWorkspaceRelativePath(context.workspacePath, item.path);
                 const canReview = item.patches.length > 0 && Boolean(context.onOpenCodeViewer);
+                // Diff Ask reads the workspace itself: the row is clickable
+                // even without cached patches when the panel can be opened.
+                const canOpen = canReview || Boolean(context.sessionId);
                 const filePreviewSource = buildChangeSummaryFilePreviewSource({
                   path: item.path,
                   relativePath,
@@ -345,19 +405,19 @@ export function ConversationFileSummaryPanel({
                 return (
                   <div key={item.path} className="w-full bg-background/50 overflow-hidden">
                     <div
-                      aria-disabled={!canReview}
+                      aria-disabled={!canOpen}
                       className={cn(
                         "flex w-full items-center gap-1 px-2 py-2 text-left transition-colors",
-                        canReview ? "cursor-pointer hover:bg-hover/30" : "cursor-default",
+                        canOpen ? "cursor-pointer hover:bg-hover/30" : "cursor-default",
                       )}
-                      onClick={() => openDiff(item, context)}
+                      onClick={() => handleFileOpen(item)}
                       onKeyDown={(event) => {
                         if (event.key !== "Enter" && event.key !== " ") return;
                         event.preventDefault();
-                        openDiff(item, context);
+                        handleFileOpen(item);
                       }}
                       role="button"
-                      tabIndex={canReview ? 0 : -1}
+                      tabIndex={canOpen ? 0 : -1}
                       title={item.path}
                     >
                       <div className="flex min-w-0 flex-1 items-center gap-2">

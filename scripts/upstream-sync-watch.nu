@@ -17,7 +17,11 @@ const STATE_PATH: string = "/Users/lattenero/.zcode/fork/upstream-watch.json"
 # The tip at watcher birth: upstream/main == v3.18.2 (already merged into damian).
 const SEED_TIP: string = "fec975905a2abd4c07e35c40d51fa097a2258ec9"
 
-def load-state []: nothing -> record {
+# The type aliases (the owner's 22/11 law): the shapes read once, the
+# signatures spell the name.
+type WatchState = record<lastTip: string, announcedTip: string>
+
+def load-state []: nothing -> WatchState {
     try {
         open $STATE_PATH
     } catch {
@@ -25,7 +29,7 @@ def load-state []: nothing -> record {
     }
 }
 
-def save-state [st: record]: nothing -> nothing {
+def save-state [st: WatchState]: nothing -> nothing {
     mkdir ($STATE_PATH | path dirname)
     $st | to json | save -f $STATE_PATH
 }

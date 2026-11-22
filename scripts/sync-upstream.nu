@@ -8,14 +8,27 @@
 
 use lib/fork-ops.nu *
 
-const MISE = "/opt/homebrew/bin/mise"
+const MISE: string = "/opt/homebrew/bin/mise"
+
+# One gated step: nu does NOT raise on an external's non-zero exit, so a
+# bare `^git fetch/merge` or a failing gate SILENTLY CONTINUES — a stale
+# fetch false-passed "up to date" and a conflicted merge would run the test
+# suite against a broken tree (the 22/11 audit finding). complete + the
+# fork's fail voice (which announces LOUD) is the honest gate.
+def gated [prefix: string, what: string, steps: closure]: nothing -> nothing {
+    let r: record = (do $steps | complete)
+    if $r.exit_code != 0 {
+        print -e ($r.stderr | str trim)
+        fail $prefix $"($what) failed — exit ($r.exit_code)"
+    }
+}
 
 def main []: nothing -> nothing {
     let repo: path = ($env.FILE_PWD | path dirname)
     cd $repo
 
     print "[fork] fetching upstream..."
-    ^git fetch upstream main
+    gated "[fork]" "git fetch upstream" {|| ^git fetch upstream main }
 
     let behind: int = (^git rev-list --count damian..upstream/main | str trim | into int)
     if $behind == 0 {
@@ -36,14 +49,14 @@ def main []: nothing -> nothing {
     }
 
     print "[fork] merging upstream/main into damian..."
-    ^git merge upstream/main
+    gated "[fork]" "git merge upstream/main" {|| ^git merge upstream/main }
 
     print "[fork] gates: the fork test suite (vitest.fork.config.ts) + typecheck..."
-    ^$MISE exec -- pnpm exec vitest run -c vitest.fork.config.ts
-    ^$MISE run typecheck
+    gated "[fork]" "the fork test suite" {|| ^$MISE exec -- pnpm exec vitest run -c vitest.fork.config.ts }
+    gated "[fork]" "typecheck" {|| ^$MISE run typecheck }
 
     let merged_version: string = (^git show upstream/main:package.json | from json | get version)
-    let tag = $"damian-v($merged_version)-(date now | format date "%Y%m%d")"
+    let tag: string = $"damian-v($merged_version)-(date now | format date "%Y%m%d")"
 
     print ""
     print "[fork] merge complete. Next steps:"

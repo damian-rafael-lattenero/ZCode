@@ -1,3 +1,4 @@
+import { committedToolSearchDelivery } from "./turn-output-token-continuation.js";
 import type { ToolSearchExecutionContext } from "@zcode/contracts";
 import { getTurnTools } from "./turn-tool-visibility.js";
 import { isOffPeakUserTakeover, refreshOffPeakTurnAfterTakeover } from "../off-peak/turn.js";
@@ -115,7 +116,6 @@ export async function runModelBackedTurnStep(
     messages: RunModelTextRequestOptions["messages"];
     sourceEntries: readonly (RuntimeMessageEntry | undefined)[];
     originEntries?: readonly (readonly RuntimeMessageEntry[])[];
-    recordedMessages: RunModelTextRequestOptions["messages"];
     requestEntries: readonly RuntimeMessageEntry[];
     tools: ModelToolContract[];
     toolSearch?: ToolSearchExecutionContext;
@@ -162,7 +162,6 @@ async function runModelBackedTurnStepImpl(
     messages: RunModelTextRequestOptions["messages"];
     sourceEntries: readonly (RuntimeMessageEntry | undefined)[];
     originEntries?: readonly (readonly RuntimeMessageEntry[])[];
-    recordedMessages: RunModelTextRequestOptions["messages"];
     requestEntries: readonly RuntimeMessageEntry[];
     tools: ModelToolContract[];
     toolSearch?: ToolSearchExecutionContext;
@@ -218,8 +217,7 @@ async function runModelBackedTurnStepImpl(
   const modelRequestEvent = this.createEvent(
     SessionEventType.ModelRequest,
     {
-      // 自动续写提示只属于本次请求，不应写入持久化的 ModelRequest 轨迹。
-      messages: options.recordedMessages,
+      messages: options.messages,
       providerId: String(model.providerId),
       modelId: String(model.modelId),
       querySource,
@@ -397,7 +395,7 @@ async function runModelBackedTurnStepImpl(
       state.turnMachine = new TurnMachineImpl(state.turnMachine.receiveModelResponse(""));
       state.turnMachine = new TurnMachineImpl(state.turnMachine.aggregateResults());
       if (await drainInlineGuideForNextRequest(this, state)) {
-        state.inputAttachmentCollectionPending = "text_guide";
+        state.normalInputPreparationPending = "text_guide";
       }
       // No guide (race): still a legal boundary — the next iteration re-requests.
       return "continue";
@@ -469,6 +467,7 @@ async function runModelBackedTurnStepImpl(
         state.userMessageId,
         assistantCreatedAt,
         {
+          toolSearchDelivery: committedToolSearchDelivery(state.turnRequestState),
           completed: Date.now(),
           finish: "off_peak_request_replaced",
         },
@@ -521,6 +520,7 @@ async function runModelBackedTurnStepImpl(
         state.userMessageId,
         assistantCreatedAt,
         {
+          toolSearchDelivery: committedToolSearchDelivery(state.turnRequestState),
           completed: Date.now(),
           finish: "start_plan_admission_retry_discarded",
         },
@@ -591,6 +591,7 @@ async function runModelBackedTurnStepImpl(
       state.userMessageId,
       assistantCreatedAt,
       {
+        toolSearchDelivery: committedToolSearchDelivery(state.turnRequestState),
         completed: Date.now(),
         error: {
           name: finalError instanceof Error ? finalError.name : "UnknownError",
@@ -897,7 +898,7 @@ async function runModelBackedTurnStepImpl(
     });
     if (assistantCommitted) recordModelHistoryRound(state);
     if (outputTokenContinuation === "continue") {
-      appendOutputTokenContinuation(state.turnRequestState);
+      await appendOutputTokenContinuation(this, state);
       state.reactiveCompactAttemptedInCurrentModelStep = false;
       state.turnMachine = new TurnMachineImpl(state.turnMachine.aggregateResults());
       return "output_continuation";

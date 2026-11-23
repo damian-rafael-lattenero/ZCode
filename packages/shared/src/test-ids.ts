@@ -416,6 +416,13 @@ export const TID_SETTINGS_PERSONALIZATION_SIZE_HINT = "settings-personalization-
 export const TID_SETTINGS_TOOL_SEARCH_SELECT = "settings-tool-search-select";
 export const TID_SETTINGS_TOOL_SEARCH_OPTION = "settings-tool-search-option";
 export const TID_SETTINGS_NATIVE_SEARCH_SWITCH = "settings-native-search-switch";
+/** 行为与工具中的 token 预算提醒开关 */
+export const TID_SETTINGS_TOTAL_TOKENS_REMINDER_SWITCH = "settings-total-tokens-reminder-switch";
+/** 行为与工具中的 Agent 总在后台运行开关 */
+export const TID_SETTINGS_AGENT_ALWAYS_BACKGROUND_SWITCH =
+  "settings-agent-always-background-switch";
+/** 行为与工具中的 Agent 回复语言输入框 */
+export const TID_SETTINGS_REPLY_LANGUAGE_INPUT = "settings-reply-language-input";
 /** 常规设置中的数据存储路径只读输入框 */
 export const TID_SETTINGS_DATA_BASE_DIR_INPUT = "settings-data-base-dir-input";
 /** 常规设置中的数据存储路径目录选择按钮 */
@@ -557,6 +564,10 @@ export const TID_MODEL_PROVIDER_ADD_MODEL_BUTTON = "model-provider-add-model-but
 // Chat Toolbar
 /** 聊天工具栏模型选择按钮 */
 export const TID_CHAT_MODEL_SELECT_TRIGGER = "chat-model-select-trigger";
+/** 模型选择按钮上的引导气泡（如服务端规则切换草稿模型后的提示） */
+export const TID_CHAT_MODEL_GUIDE = "chat-model-guide";
+/** 模型引导气泡的关闭按钮 */
+export const TID_CHAT_MODEL_GUIDE_DISMISS = "chat-model-guide-dismiss";
 /** 聊天工具栏模型供应商分组（动态后缀为 provider group key） */
 export const TID_CHAT_MODEL_SELECT_GROUP = "chat-model-select-group";
 /** 聊天工具栏模型选择条目（动态后缀为模型 value） */
@@ -627,7 +638,7 @@ export const TID_V4_WORKSPACE_MCP_PENDING_DISMISS = "v4-workspace-mcp-pending-di
 export const TID_V4_COMPOSER = "v4-composer";
 /** v4 composer 文本输入 */
 export const TID_V4_COMPOSER_INPUT = "v4-composer-input";
-/** v4 composer 当前会话后台任务入口 */
+/** v4 composer 当前会话后台任务入口（fork badge；upstream v4.0.0 已由状态胶囊取代） */
 export const TID_V4_COMPOSER_BACKGROUND_WORK_TRIGGER = "v4-composer-background-work-trigger";
 /** v4 composer 电脑操作（CUA）常驻入口按钮 */
 export const TID_V4_COMPOSER_CUA_ENTRY = "v4-composer-cua-entry";

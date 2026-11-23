@@ -1,13 +1,9 @@
 import { accessSync, constants as fsConstants } from "node:fs";
-import { posix, win32 } from "node:path";
+import { posix } from "node:path";
 import type { IntegratedTerminalShellOption } from "@zcode/shared";
+import { discoverWindowsGitBash, type WindowsGitBashDiscoveryOptions } from "@zcode/shared/node";
 
-type ExecutableCheck = (path: string) => boolean;
-
-const WINDOWS_GIT_BASH_PATHS = [
-  "C:\\Program Files\\Git\\bin\\bash.exe",
-  "C:\\Program Files (x86)\\Git\\bin\\bash.exe",
-] as const;
+type ExecutableCheck = (path: string) => boolean | Promise<boolean>;
 
 interface PosixShellSpec {
   dialect: "nu" | "posix";
@@ -32,17 +28,24 @@ const POSIX_SHELL_SPECS: readonly PosixShellSpec[] = [
   },
 ];
 
-export function listIntegratedTerminalShellOptions(options: {
+export async function listIntegratedTerminalShellOptions(options: {
   env: NodeJS.ProcessEnv;
-  isExecutable?: ExecutableCheck;
+  gitBashDiscovery?: Omit<WindowsGitBashDiscoveryOptions, "env" | "platform" | "isExecutable">;
+  isExecutable?: WindowsGitBashDiscoveryOptions["isExecutable"];
   platform: NodeJS.Platform;
-}): IntegratedTerminalShellOption[] {
+}): Promise<IntegratedTerminalShellOption[]> {
   if (options.platform !== "win32") {
     return listPosixIntegratedTerminalShellOptions(options.env, options.isExecutable);
   }
 
   const shellOptions: IntegratedTerminalShellOption[] = [createCommandPromptOption(options.env)];
-  const gitBash = resolveWindowsGitBash(options.env, options.isExecutable);
+  // 原来重复的固定目录/PATH 发现会漏掉非标准安装；共享发现修复漏检，选择与来源映射保持不变。
+  const gitBash = await discoverWindowsGitBash({
+    ...options.gitBashDiscovery,
+    env: options.env,
+    isExecutable: options.isExecutable,
+    platform: options.platform,
+  });
   if (gitBash) {
     shellOptions.push({
       dialect: "git-bash",
@@ -67,76 +70,15 @@ function createCommandPromptOption(env: NodeJS.ProcessEnv): IntegratedTerminalSh
   };
 }
 
-function resolveWindowsGitBash(
-  env: NodeJS.ProcessEnv,
-  isExecutable?: ExecutableCheck,
-): { path: string; source: "system" | "path" } | undefined {
-  for (const candidate of WINDOWS_GIT_BASH_PATHS) {
-    if (isExecutableCandidate(candidate, isExecutable)) {
-      return { path: candidate, source: "system" };
-    }
-  }
-
-  const gitExe = windowsExecutableCandidates("git", env).find((candidate) =>
-    isExecutableCandidate(candidate, isExecutable),
-  );
-  if (!gitExe) {
-    return undefined;
-  }
-
-  const inferred = inferWindowsGitBashPathsFromGitExe(gitExe).find((candidate) =>
-    isExecutableCandidate(candidate, isExecutable),
-  );
-  return inferred ? { path: inferred, source: "path" } : undefined;
-}
-
-function inferWindowsGitBashPathsFromGitExe(gitExe: string): string[] {
-  const gitDir = win32.dirname(gitExe);
-  return [
-    win32.normalize(win32.join(gitDir, "..", "bin", "bash.exe")),
-    win32.normalize(win32.join(gitDir, "..", "..", "bin", "bash.exe")),
-  ];
-}
-
-function windowsExecutableCandidates(command: string, env: NodeJS.ProcessEnv): string[] {
-  if (/[\\/]/.test(command)) {
-    return [command];
-  }
-
-  const pathValue = getWindowsEnvValue(env, "PATH");
-  if (!pathValue) {
-    return [command];
-  }
-
-  const extensions = windowsExecutableExtensions(env);
-  return pathValue
-    .split(win32.delimiter)
-    .filter((entry) => entry.trim().length > 0)
-    .flatMap((entry) => extensions.map((extension) => win32.join(entry, `${command}${extension}`)));
-}
-
-function windowsExecutableExtensions(env: NodeJS.ProcessEnv): string[] {
-  const rawExtensions = getWindowsEnvValue(env, "PATHEXT")?.split(win32.delimiter) ?? [
-    ".COM",
-    ".EXE",
-    ".BAT",
-    ".CMD",
-  ];
-  const normalized = rawExtensions
-    .map((extension) => extension.trim().toLowerCase())
-    .filter((extension) => extension.length > 0);
-  return normalized.includes(".exe") ? normalized : [".exe", ...normalized];
-}
-
 function getWindowsEnvValue(env: NodeJS.ProcessEnv, key: string): string | undefined {
   const lowerKey = key.toLowerCase();
   const match = Object.keys(env).find((envKey) => envKey.toLowerCase() === lowerKey);
   return match ? env[match] : undefined;
 }
 
-function isExecutableCandidate(path: string, isExecutable?: ExecutableCheck): boolean {
+async function isExecutableCandidate(path: string, isExecutable?: ExecutableCheck): Promise<boolean> {
   if (isExecutable) {
-    return isExecutable(path);
+    return await isExecutable(path);
   }
 
   try {
@@ -147,38 +89,37 @@ function isExecutableCandidate(path: string, isExecutable?: ExecutableCheck): bo
   }
 }
 
-function listPosixIntegratedTerminalShellOptions(
+async function listPosixIntegratedTerminalShellOptions(
   env: NodeJS.ProcessEnv,
   isExecutable?: ExecutableCheck,
-): IntegratedTerminalShellOption[] {
-  return POSIX_SHELL_SPECS.flatMap((spec) => {
-    const resolved = resolvePosixShell(spec, env, isExecutable);
-    if (!resolved) {
-      return [];
-    }
-    return [
-      {
+): Promise<IntegratedTerminalShellOption[]> {
+  const shellOptions: IntegratedTerminalShellOption[] = [];
+  for (const spec of POSIX_SHELL_SPECS) {
+    const resolved = await resolvePosixShell(spec, env, isExecutable);
+    if (resolved) {
+      shellOptions.push({
         dialect: spec.dialect,
         id: `${spec.name}:${resolved.path}`,
         label: spec.label,
         path: resolved.path,
         source: resolved.source,
-      },
-    ];
-  });
+      });
+    }
+  }
+  return shellOptions;
 }
 
-function resolvePosixShell(
+async function resolvePosixShell(
   spec: PosixShellSpec,
   env: NodeJS.ProcessEnv,
   isExecutable?: ExecutableCheck,
-): { path: string; source: "path" | "system" } | undefined {
+): Promise<{ path: string; source: "path" | "system" } | undefined> {
   const pathValue = env.PATH;
   if (pathValue) {
     for (const entry of pathValue.split(posix.delimiter)) {
       if (!entry) continue;
       const candidate = posix.join(entry, spec.name);
-      if (isExecutableCandidate(candidate, isExecutable)) {
+      if (await isExecutableCandidate(candidate, isExecutable)) {
         return { path: candidate, source: "path" };
       }
     }
@@ -186,10 +127,11 @@ function resolvePosixShell(
 
   for (const dir of spec.systemDirs) {
     const candidate = posix.join(dir, spec.name);
-    if (isExecutableCandidate(candidate, isExecutable)) {
+    if (await isExecutableCandidate(candidate, isExecutable)) {
       return { path: candidate, source: "system" };
     }
   }
 
   return undefined;
 }
+

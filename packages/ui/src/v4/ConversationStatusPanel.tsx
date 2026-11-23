@@ -54,8 +54,10 @@ import type {
 } from "@zcode/shared";
 import type {
   BackgroundWorkSummary,
+  ConversationSnapshot,
   GoalState,
   PlanState,
+  SubagentProjectionState,
   ToolCallRow,
   WorkflowRunState,
 } from "@zcode/shared/zcode-protocol-v4";
@@ -151,6 +153,11 @@ export interface ConversationStatusPanelProps {
    */
   endedWorkflowRunCount?: number;
   endedSubagentCount?: number;
+  // Upstream v4.0.0 activity capsules feed these; the fork's section panel ignores them
+  // (it keeps its own ended-directory counts), but SessionPane passes them through.
+  endedSubagents?: SubagentProjectionState["ended"];
+  completedActivityCount?: number | null;
+  activitySummaryDismissed?: ConversationSnapshot["activitySummaryDismissed"];
   rootSessionId?: string;
   parentSessionId?: string;
   /** 当前 pane 是否由手机 Web 远控壳承载。 */
@@ -2564,6 +2571,16 @@ function ConversationStatusPanelImpl({
       </aside>
     </div>
   );
+}
+
+/**
+ * Composer 的状态行容器。Upstream v4.0.0 renders status capsules inside it; the fork
+ * keeps the section-based panel, so the row is just the layout slot between the
+ * composer banners and the input surface (one open detail at a time is handled by the
+ * panel itself).
+ */
+export function ComposerStatusRow({ children }: { children: ReactNode }) {
+  return <div className="min-w-0">{children}</div>;
 }
 
 export const ConversationStatusPanel = memo(ConversationStatusPanelImpl);

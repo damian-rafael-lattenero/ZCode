@@ -1,9 +1,9 @@
 import { describe, expect, it } from "vitest";
 import { listIntegratedTerminalShellOptions } from "../src/system/integratedTerminalShells.js";
 
-describe("integrated terminal shell options", () => {
-  it("lists Nushell first for POSIX hosts when nu is executable", () => {
-    const options = listIntegratedTerminalShellOptions({
+describe("integrated terminal shell options", async () => {
+  it("lists Nushell first for POSIX hosts when nu is executable", async () => {
+    const options = await listIntegratedTerminalShellOptions({
       env: { PATH: "/home/user/.local/bin" },
       isExecutable: (path) => path === "/opt/homebrew/bin/nu" || path === "/usr/bin/zsh",
       platform: "darwin",
@@ -27,8 +27,8 @@ describe("integrated terminal shell options", () => {
     ]);
   });
 
-  it("marks a PATH-discovered nu as a path option", () => {
-    const options = listIntegratedTerminalShellOptions({
+  it("marks a PATH-discovered nu as a path option", async () => {
+    const options = await listIntegratedTerminalShellOptions({
       env: { PATH: "/custom/bin:/usr/bin" },
       isExecutable: (path) => path === "/custom/bin/nu",
       platform: "linux",
@@ -45,8 +45,8 @@ describe("integrated terminal shell options", () => {
     ]);
   });
 
-  it("keeps Windows options free of Nushell", () => {
-    const options = listIntegratedTerminalShellOptions({
+  it("keeps Windows options free of Nushell", async () => {
+    const options = await listIntegratedTerminalShellOptions({
       env: { ComSpec: "C:\\Windows\\System32\\cmd.exe", PATH: "" },
       isExecutable: (path) => path === "C:\\Program Files\\Git\\bin\\bash.exe",
       platform: "win32",

@@ -83,6 +83,8 @@ export const SETTINGS_USER_ACTION_FEATURES = {
     "toggle_show_todos",
     "change_verbosity",
     "toggle_expand_by_default",
+    "toggle_total_tokens_reminder",
+    "toggle_agent_always_background",
   ],
   "settings.task": ["toggle_auto_archive", "change_auto_archive_days"],
   "settings.storage": ["change_data_directory"],

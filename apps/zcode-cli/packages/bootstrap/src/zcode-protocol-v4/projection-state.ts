@@ -244,6 +244,7 @@ const REVISION_BEARING_PATCH_KEYS: ReadonlyArray<keyof StatePatch> = [
   "queue",
   "pendingInteractions",
   "backgroundWorks",
+  "activitySummaryDismissed",
   "subagents",
   "goal",
   "plan",

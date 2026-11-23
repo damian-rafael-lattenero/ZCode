@@ -276,10 +276,7 @@ import { buildConversationTurnRenderUnits } from "@/v4/conversationTurnRenderUni
 import { SessionPluginReferenceIconBoundary } from "@/v4/SessionPluginReferenceIconProvider.js";
 import type { ConversationStatusPanelWorkflowRunTarget } from "@/v4/conversationStatusPanelModel.js";
 import type { ChatViewSummaryPanelVariant } from "@/v4/legacyChatViewTypes.js";
-import {
-  buildConversationStatusPanelModel,
-  resolveSoleRunningWorkflowRunTarget,
-} from "@/v4/conversationStatusPanelModel.js";
+import { buildConversationStatusPanelModel } from "@/v4/conversationStatusPanelModel.js";
 import {
   resolveConversationStatusPanelVariant,
   shouldUseConversationStatusPanelInlineLayout,
@@ -5953,14 +5950,6 @@ export function SessionPane({
       workspacePath,
     ],
   );
-  const runningBackgroundWorkCount =
-    statusPanelModel.runningBashWorks.length +
-    statusPanelModel.runningToolWorks.length +
-    statusPanelModel.runningSubagentWorks.length +
-    statusPanelModel.runningWorkflowRuns.length +
-    // DT 分组：demote 后的 detached turn 也是运行中的后台工作——否则 DT01 后 composer
-    // 徽标的 onOpen 会被关掉，用户失去打开 Task Island 查看该 turn 的入口。
-    statusPanelModel.runningTurnWorks.length;
   const runningTerminalCount = statusPanelModel.runningBashWorks.length;
   const runningToolCount = statusPanelModel.runningToolWorks.length;
   const runningAgentCount = statusPanelModel.runningSubagentWorks.length;
@@ -6003,39 +5992,7 @@ export function SessionPane({
       setAgentSectionOpen(false);
     }
   }, [runningAgentCount]);
-  // composer 徽标直达：唯一在跑的是一条可开
-  // 详情页的 workflow run 时，徽标点击直接开它的 side tab，胶囊不动。判定吃胶囊的同一份模型；
-  // 宿主没给 onOpenWorkflowRun（面板行同样不可点）时不直达。
-  const soleRunningWorkflowRunTarget = useMemo(
-    () => (onOpenWorkflowRun ? resolveSoleRunningWorkflowRunTarget(statusPanelModel) : null),
-    [onOpenWorkflowRun, statusPanelModel],
-  );
-  const handleOpenRunningBackgroundWorks = useCallback(() => {
-    if (runningBackgroundWorkCount === 0) return;
-    if (soleRunningWorkflowRunTarget) {
-      // 与面板行同一个 handler：不存在第二条打开路径。
-      handleOpenWorkflowRunFromPanel(soleRunningWorkflowRunTarget);
-      return;
-    }
-    // 产品规则：Composer 是全部实时活动的入口；分区拆开后一次点击仍要展开所有非空类型，
-    // 但三个区块后续保持独立折叠状态，不能再共享一个 open 布尔值。
-    setTerminalSectionOpen(runningTerminalCount > 0);
-    setToolSectionOpen(runningToolCount > 0);
-    setAgentSectionOpen(runningAgentCount > 0);
-    setTurnSectionOpen(runningTurnCount > 0);
-    setWorkflowSectionOpen(runningWorkflowCount > 0);
-    handleSummaryPanelVariantChange("panel");
-  }, [
-    handleOpenWorkflowRunFromPanel,
-    handleSummaryPanelVariantChange,
-    runningAgentCount,
-    runningBackgroundWorkCount,
-    runningTerminalCount,
-    runningToolCount,
-    runningTurnCount,
-    runningWorkflowCount,
-    soleRunningWorkflowRunTarget,
-  ]);
+  // 徽标已随 upstream v4.0.0 退役（状态行是唯一入口）；分区开合仍由下面的 effect 维护。
   const statusPanelVariant = resolveConversationStatusPanelVariant({
     variantOverride: effectiveSummaryPanelVariantOverride,
   });

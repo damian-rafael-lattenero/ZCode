@@ -8,7 +8,7 @@
 # The announce rung lives in nushell-fp (single source, audit wave 6): the
 # 10/11 lesson (a null param is a PARSE error) and the silent-by-design law
 # ride that module. Imported here so `announce` keeps the same call.
-use ~/Projects/nushell-fp/mods/telegram.nu send-telegram
+use /Users/lattenero/Scripts/nushell-fp/mods/telegram.nu send-telegram
 
 export def log [prefix: string, msg: string]: nothing -> nothing {
     print $"($prefix) ($msg)"

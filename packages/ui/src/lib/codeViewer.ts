@@ -143,6 +143,10 @@ export type CodeViewerSource =
   | PdfCodeViewerSource
   | PptxCodeViewerSource;
 
+// Shiki ships these grammars itself (nushell/kotlin/haskell/java are bundled and lazily
+// imported), so no grammar download is required — only the extension mapping was missing,
+// which is why .nu/.kt/.hs files rendered as plain log text in the read preview and the
+// inline write/edit diffs.
 const EXTENSION_TO_LANGUAGE: Record<string, BundledLanguage> = {
   bash: "bash",
   c: "c",
@@ -152,16 +156,21 @@ const EXTENSION_TO_LANGUAGE: Record<string, BundledLanguage> = {
   diff: "diff",
   go: "go",
   h: "c",
+  hs: "haskell",
   htm: "html",
   html: "html",
   java: "java",
   js: "javascript",
   json: "json",
   jsx: "jsx",
+  kt: "kotlin",
+  kts: "kotlin",
+  lhs: "haskell",
   md: "markdown",
   mermaid: "mermaid",
   mmd: "mermaid",
   mjs: "javascript",
+  nu: "nushell",
   py: "python",
   rb: "ruby",
   rs: "rust",

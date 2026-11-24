@@ -1,7 +1,7 @@
 #!/Users/lattenero/.local/bin/nu-nightly
 # FORK (damian-rafael-lattenero): rebuild the fork and swap it into
 # /Applications.
-# Usage: scripts/build-install.nu [--keep-prev] [--yes] [--when-quit] [--zip <path>]
+# Usage: scripts/build-install.nu [--keep-prev] [--yes] [--quit] [--when-quit] [--zip <path>]
 #
 # Ritual (see FORK.md):
 #   1. bundle the desktop app from the CURRENT working tree (branch damian)
@@ -15,6 +15,11 @@
 #   default        interactive: build → smoke → Enter → swap (app must be closed)
 #   --yes          unattended: no smoke window, no prompt (CI, detached runs —
 #                  a closed stdin used to kill the old script AT the read)
+#   --quit         build, then CLOSE ZCode, swap and reopen in one arc. If the
+#                  app refuses to quit (its quit handler cancels with -128
+#                  while a turn runs), the swap is ARMED instead — the zip
+#                  waits for the owner's ⌘Q. A force-kill here would destroy
+#                  in-flight work; the deploy is delivered either way.
 #   --when-quit    arm a DETACHED launchd job that installs the LAST built zip
 #                  the moment the app quits, then reopens it and announces on
 #                  Telegram. Damian's whole gesture becomes ⌘Q.
@@ -81,16 +86,17 @@ def build-bundle [repo: string]: nothing -> string {
     (($zips | first).name)
 }
 
-# EL CIERRE AUTOMÁTICO (4/11, el owner: «eso al ser ejecutado desde un Ghostty
-# separada debería poder cerrar zcode sin necesidad de command q»): exacto — el
-# ⌘Q fue una elección, no un límite. Escalera honesta: osascript quit → ≤15 s
-# → re-quit ×2 (anti-resurrección, la ley de la cutover vieja). Si no murió,
-# FAIL honesto: el zip queda construido y el swap espera.
-def quit-zcode []: nothing -> nothing {
-    if not (zcode-running) { return }
+# THE AUTOMATIC CLOSE (4/11, the owner: «run from a separate Ghostty, it should
+# be able to close zcode without ⌘Q»): exact — ⌘Q was a choice, not a limit.
+# Honest ladder: osascript quit → ≤15 s → re-quit ×2 (anti-resurrection, the
+# old cutover law). Returns false when the app survives: its quit handler
+# cancels with -128 while a turn runs, and that cancel is CORRECT — the caller
+# decides (main arms the waiter instead of dying).
+def quit-zcode []: nothing -> bool {
+    if not (zcode-running) { return true }
     announce "🔒 cerrando ZCode para el swap (~15 s)…"
     for attempt in 1..3 {
-        do -i { ^osascript -e "quit app \"ZCode\"" }
+        do -i { ^osascript -e "quit app \"ZCode\"" out+err> /dev/null }
         mut dead: bool = false
         for _ in 1..15 {
             sleep 1sec
@@ -99,10 +105,10 @@ def quit-zcode []: nothing -> nothing {
                 break
             }
         }
-        if $dead { return }
+        if $dead { return true }
         print $"[fork] quit attempt ($attempt): ZCode still alive — retrying…"
     }
-    fail "[fork]" "ZCode survived 3 quit attempts — the zip is built; once you close it, install with --zip <path>"
+    false
 }
 
 def install-zip [repo: string, zip: string, keep_prev: bool]: nothing -> nothing {
@@ -233,10 +239,17 @@ def main [
     print $"[fork] built: ($built)"
 
     if $quit {
-        # EL ARCO AUTOMÁTICO (4/11): el build corrió con la app VIVA (la
-        # sesión del owner siguió trabajando los ~15 min); recién acá se
-        # cierra — el swap son segundos y install-zip reabre y anuncia.
-        quit-zcode
+        # THE AUTOMATIC ARC (4/11): the build ran with the app ALIVE (the
+        # owner's session kept working the ~15 min); only now does it close —
+        # the swap is seconds and install-zip reopens and announces. A refused
+        # quit means a turn is in flight: forcing would destroy it, so the
+        # waiter (the --when-quit door) takes over — same result, owner-paced.
+        if not (quit-zcode) {
+            arm-waiter $repo $built $keep_prev
+            announce-loud "⏳ <b>FORK BUILD READY</b> — ZCode refused to quit (a task is running); the swap is ARMED — ⌘Q when free and it installs + reopens automatically"
+            print "[fork] quit refused (a task was running) — swap armed; ⌘Q when free and it installs + reopens"
+            return
+        }
         install-zip $repo $built $keep_prev
         return
     }

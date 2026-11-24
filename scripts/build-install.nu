@@ -96,7 +96,12 @@ def quit-zcode []: nothing -> bool {
     if not (zcode-running) { return true }
     announce "🔒 cerrando ZCode para el swap (~15 s)…"
     for attempt in 1..3 {
-        do -i { ^osascript -e "quit app \"ZCode\"" out+err> /dev/null }
+        let r: record = (^osascript -e "quit app \"ZCode\"" | complete)
+        # -128 = the quit handler CANCELED (a turn is running): that is an
+        # answer, not a miss. Retrying only re-raises the same dialog — hand
+        # the decision to the caller at once (measured 24/11: the modal kept
+        # the script blocked and burned the whole ladder).
+        if $r.exit_code != 0 { return false }
         mut dead: bool = false
         for _ in 1..15 {
             sleep 1sec

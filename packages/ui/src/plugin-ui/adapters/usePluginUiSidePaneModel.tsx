@@ -11,6 +11,7 @@ import {
   deliverOfficeViewerDocumentIfReady,
   subscribeOfficeViewerPendingOpen,
 } from "@/plugin-ui/officeViewerOpen.js";
+import { deliverDiffAskFocusIfReady, subscribeDiffAskFocus } from "@/plugin-ui/diffAskFocus.js";
 import type {
   PluginUiPresentation,
   PluginUiSessionScope,
@@ -219,6 +220,16 @@ export function usePluginUiSidePaneModel({
       deliverOfficeViewerDocumentIfReady(tab.id, host.pageKey);
     });
   }, [host.phase, host.pageKey, tab.id, tab.surfaceId]);
+  // Diff Ask focus (fork, 2026-11-24): the end-of-turn summary parks the
+  // clicked file for this tab; once the panel is running the host calls the
+  // plugin's `get_turn_diff { turn, focus }` for it (the panel then opens that
+  // file and collapses the rest).
+  useEffect(() => {
+    if (host.phase !== "running") return;
+    return subscribeDiffAskFocus(tab.id, () => {
+      deliverDiffAskFocusIfReady(tab.id, host.pageKey);
+    });
+  }, [host.phase, host.pageKey, tab.id]);
 
   return {
     visible,

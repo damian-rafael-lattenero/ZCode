@@ -38,7 +38,8 @@ import {
   FORK_DIFF_ASK_SURFACE_ID,
 } from "@/plugin-ui/adapters/useUiPluginRecommendations.js";
 import { useOpenPluginUi } from "@/plugin-ui/index.js";
-import { documentViewerInstance } from "@/plugin-ui/contract.js";
+import { buildPluginUiSidePaneTabId, documentViewerInstance } from "@/plugin-ui/contract.js";
+import { requestDiffAskFocus } from "@/plugin-ui/diffAskFocus.js";
 import { resolvePluginUiSurfaceTitle } from "@/plugin-ui/adapters/usePluginUiSurfaces.js";
 import { useOptionalServices } from "@/hooks/useServices.js";
 import type {
@@ -99,42 +100,51 @@ export function ConversationFileSummaryPanel({
   // viewer stays as the fallback (same contract as the Changes row).
   const openPluginUi = useOpenPluginUi();
   const services = useOptionalServices();
-  const openDiffAsk = useCallback(async (): Promise<boolean> => {
-    const bridge = services?.pluginUiBridgeService;
-    const parentSessionId = context.sessionId ?? null;
-    if (!openPluginUi || !bridge || !parentSessionId) return false;
-    try {
-      const surfaces = await bridge.listSurfaces({
-        workspacePath: context.workspacePath,
-        workspaceIdentity: context.workspaceIdentity,
-      });
-      const resolved = surfaces.find(
-        (surface) =>
-          surface.pluginId === FORK_DIFF_ASK_PLUGIN_ID && surface.id === FORK_DIFF_ASK_SURFACE_ID,
-      );
-      if (!resolved) return false;
-      openPluginUi({
-        parentSessionId,
-        surfaceId: resolved.id,
-        serverName: resolved.server,
-        pluginId: resolved.pluginId,
-        resourceUri: resolved.resourceUri,
-        ...documentViewerInstance(resolved.resourceUri),
-        title: resolvePluginUiSurfaceTitle(resolved.title, locale),
-        workspacePath: context.workspacePath,
-        ...(context.workspaceIdentity ? { workspaceIdentity: context.workspaceIdentity } : {}),
-        remoteSessionId: null,
-      });
-      return true;
-    } catch {
-      return false;
-    }
-  }, [context, locale, openPluginUi, services]);
+  const openDiffAsk = useCallback(
+    async (focusPath?: string): Promise<boolean> => {
+      const bridge = services?.pluginUiBridgeService;
+      const parentSessionId = context.sessionId ?? null;
+      if (!openPluginUi || !bridge || !parentSessionId) return false;
+      try {
+        const surfaces = await bridge.listSurfaces({
+          workspacePath: context.workspacePath,
+          workspaceIdentity: context.workspaceIdentity,
+        });
+        const resolved = surfaces.find(
+          (surface) =>
+            surface.pluginId === FORK_DIFF_ASK_PLUGIN_ID && surface.id === FORK_DIFF_ASK_SURFACE_ID,
+        );
+        if (!resolved) return false;
+        const request = {
+          parentSessionId,
+          surfaceId: resolved.id,
+          serverName: resolved.server,
+          pluginId: resolved.pluginId,
+          resourceUri: resolved.resourceUri,
+          ...documentViewerInstance(resolved.resourceUri),
+          title: resolvePluginUiSurfaceTitle(resolved.title, locale),
+          workspacePath: context.workspacePath,
+          ...(context.workspaceIdentity ? { workspaceIdentity: context.workspaceIdentity } : {}),
+          remoteSessionId: null,
+        };
+        openPluginUi(request);
+        // The clicked file rides as Diff Ask's focus (fork, 2026-11-24): the
+        // side-pane model delivers `get_turn_diff { turn, focus }` to the panel
+        // once it is running, and the panel opens only that file.
+        if (focusPath) requestDiffAskFocus(buildPluginUiSidePaneTabId(request), focusPath);
+        return true;
+      } catch {
+        return false;
+      }
+    },
+    [context, locale, openPluginUi, services],
+  );
   // Diff Ask first, stock patch viewer as fallback (the panel boots on the
-  // latest turn — the same list this summary shows).
+  // latest turn — the same list this summary shows). The click also names the
+  // file, so the panel expands exactly it and collapses the rest.
   const handleFileOpen = useCallback(
     (item: FileChangeItem) => {
-      void openDiffAsk().then((opened) => {
+      void openDiffAsk(item.path).then((opened) => {
         if (!opened) openDiff(item, context);
       });
     },
@@ -456,11 +466,13 @@ export function ConversationFileSummaryPanel({
                           title={intl.formatMessage({
                             id: "chat.changeSummary.review",
                           })}
-                          disabled={!canReview}
+                          disabled={!canOpen}
                           className="h-7 gap-1.5 rounded-lg bg-input px-2 text-ui-base"
                           onClick={(event) => {
                             event.stopPropagation();
-                            openDiff(item, context);
+                            // Review = review THIS file's diff in Diff Ask (the
+                            // stock viewer remains the fallback inside).
+                            handleFileOpen(item);
                           }}
                           onPointerDown={(event) => event.stopPropagation()}
                         >

@@ -1,4 +1,3 @@
-import { ComposerStatusRow } from "@/v4/ConversationStatusPanel.js";
 import type { SessionLifecycleSnapshot } from "@zcode/shared";
 import {
   WorkspaceHookPendingIndicator,
@@ -391,7 +390,6 @@ function arePromptHistoryEntriesEqual(left: readonly string[], right: readonly s
 }
 
 export interface ConversationComposerProps {
-  statusContent?: ReactNode;
   queueContent?: ReactNode;
 
   snapshot: ConversationSnapshot | null;
@@ -574,7 +572,6 @@ const WEB_ELEMENT_CONTEXT_IMAGE_OPTIONS: ContextImageAttachmentsOptions<WebEleme
   { toFiles: webElementScreenshotFiles, removeStrategy: "attached" };
 
 function ConversationComposerImpl({
-  statusContent,
   queueContent,
 
   snapshot,
@@ -3055,13 +3052,6 @@ function ConversationComposerImpl({
           ) : null}
         </div>
       ) : null}
-      {/* 与横幅实际渲染条件一致，仅隐藏入口，不清除任务状态。 */}
-      {!visibleError && initialization?.status !== "failed" ? (
-        <ComposerStatusRow key={JSON.stringify([workspaceIdentity, workspacePath, sessionId])}>
-          {statusContent}
-        </ComposerStatusRow>
-      ) : null}
-      {/* 队列的负下边距用于衔接输入框；必须紧邻输入框，避免遮挡状态胶囊。 */}
       {queueContent}
 
       <div

@@ -244,7 +244,7 @@ import { projectPendingGuideQueue } from "@/v4/pendingGuideProjection.js";
 import { ConversationQuotaBanner } from "@/v4/ConversationQuotaBanner.js";
 import { PendingCommandRecoveryBanner } from "@/v4/PendingCommandRecoveryBanner.js";
 import { AgentRuntimeExitBanner, useAgentRuntimeExitNotice } from "@/v4/AgentRuntimeExitBanner.js";
-import { ComposerStatusRow, ConversationStatusPanel } from "@/v4/ConversationStatusPanel.js";
+import { ConversationStatusPanel } from "@/v4/ConversationStatusPanel.js";
 import { SessionSubscriptionErrorPanel } from "@/v4/SessionSubscriptionErrorPanel.js";
 import { ConversationTimeline } from "@/v4/ConversationTimeline.js";
 import type { ConversationLatestTurnSummary } from "@/v4/conversationTimelineLiveTail.js";
@@ -6543,7 +6543,10 @@ export function SessionPane({
     quotaBanner.state.visible &&
     !quotaBanner.dismissed &&
     (!projectedComposerError || quotaBanner.takesOverError || quotaBanner.state.blocksSubmit);
-  const statusCapsules = !isDraft ? (
+  // 状态面板回到 v3 的右上角悬浮位（ConversationStatusPanel 自身 absolute top-0 + pt-4）：
+  // v4.0.0 的 composer 状态行是给 upstream 通行式胶囊设计的，塞进 fork 的绝对定位面板会让
+  // 胶囊压在输入框第一行上。
+  const statusPanelNode = !isDraft ? (
     <ConversationStatusPanel
       workspacePath={workspacePath}
       gitCwd={sessionCwd}
@@ -6670,7 +6673,6 @@ export function SessionPane({
     ) : null;
   const composerNode = readOnly ? null : (
     <ConversationComposer
-      statusContent={showQuotaBanner ? null : statusCapsules}
       queueContent={blockingInteractionId ? null : queueNode}
       key="conversation-composer"
       // Snapshot 仍服务用量、路由与运行态；工具栏的 mode/model 只读下方 Composer Draft。
@@ -6860,7 +6862,6 @@ export function SessionPane({
   // 目录失效仍禁止输入；将宿主已有原因放回原输入区，不在 pane 内探测或恢复目录。
   const conversationBottomDockContent = readOnly ? (
     <>
-      <ComposerStatusRow key={sessionId}>{statusCapsules}</ComposerStatusRow>
       {readOnlyReason ? (
         <div
           role="status"
@@ -7103,6 +7104,10 @@ export function SessionPane({
             onConfirm={handleConfirmShareSelection}
             onCancel={dismissShareSelectionPanel}
           />
+          {/* 状态面板挂在对话容器里（v3 位置：右上角悬浮），不进入输入区。
+              它是 absolute top-0，只有挂在这个 relative + @container/conversation 容器下
+              才能同时拿到正确的位置与容器查询宽度。 */}
+          {statusPanelNode}
 
           {readOnly && controlLastError ? (
             <div

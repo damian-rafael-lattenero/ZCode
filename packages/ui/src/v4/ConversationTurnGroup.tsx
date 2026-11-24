@@ -128,6 +128,8 @@ interface ConversationTurnGroupProps {
   onRetry?: (target: ConversationRowTarget) => void;
   onFeedbackChange?: AssistantFeedbackHandler;
   onEdit?: UserInputEditHandler;
+  /** 会话首轮：顶部留白由 Timeline 的状态胶囊 inset 提供，本轮不再留顶部 padding。 */
+  topClearedByTimeline?: boolean;
 }
 
 interface CronAutomationTurnCard {
@@ -1274,6 +1276,7 @@ function ConversationTurnGroupImpl({
   onRetry,
   onFeedbackChange,
   onEdit,
+  topClearedByTimeline = false,
 }: ConversationTurnGroupProps) {
   const isOfficeMode = useIsOfficeMode();
   const { intl } = useZCodeIntl();
@@ -1515,7 +1518,7 @@ function ConversationTurnGroupImpl({
   //
   // Bug 根因：`pt-14` 是给用户气泡留的呼吸，判据却一直是「有没有轮」而不是「有没有气泡」；
   // 没有气泡时这 56px 叠上一轮的 pb-5，在行上方堆出约 76px 空白（设置轮总落在对话中段，最显眼）。
-  // 状态入口迁至输入框后，Timeline 不再提供顶部避让；首轮用户气泡也必须保留 pt-14。
+  // 状态面板回到对话右上角后，首轮顶部避让重新由 Timeline 的 inset 提供（topClearedByTimeline）。
   const startsWithoutUserBubble =
     startsWithWorkflowNotificationCard || unit.workflowLaunch !== undefined;
 
@@ -1540,7 +1543,7 @@ function ConversationTurnGroupImpl({
         data-highspeed-gradient={showHighspeedAnimatedGradient ? "true" : undefined}
         className={cn(
           "relative mx-auto flex w-full flex-col gap-5 px-4 @md/conversation:px-6 pb-5",
-          startsWithoutUserBubble ? "pt-0" : "pt-14",
+          startsWithoutUserBubble || topClearedByTimeline ? "pt-0" : "pt-14",
           showHighspeedAnimatedGradient && "highspeed-animated-gradient-text",
         )}
       >

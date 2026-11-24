@@ -58,9 +58,9 @@ merge: `pre-v4.0.0-merge`.
 | 20-24 | `packages/ui/src/i18n/locales/{en-US,ja-JP,ko-KR,ru-RU,zh-CN}.ts` | Fork background-work keys kept; `chat.statusPanel.viewAllChanges` adopted. |
 | 25 | `packages/ui/src/lib/userActionTraceCatalog.ts` | Verbosity actions (fork) + token-reminder / always-background switches. |
 | 26 | `packages/ui/src/v4/ConversationComposer.tsx` | Interrupt picker imports kept; trigger import dropped with the component. |
-| 27 | `packages/ui/src/v4/ConversationStatusPanel.tsx` | Fork panel kept wholesale over the capsule rewrite (see Decisions). `ComposerStatusRow` re-added; capsule-only props accepted. |
-| 28 | `packages/ui/src/v4/SessionPane.tsx` | Fork's four blocks (section state, status model/counts/handlers, queue panel, panel mounting) kept; the duplicate panel instance removed and the upstream `statusCapsules` instance extended with the fork props. |
-| 29 | `packages/ui/src/v4/composer/ConversationBackgroundWorkTrigger.tsx` | Deleted (modify/delete, upstream deleted it); the status row is the single entry point. |
+| 27 | `packages/ui/src/v4/ConversationStatusPanel.tsx` | Fork panel kept wholesale over the capsule rewrite (see Decisions); the fabricated `ComposerStatusRow` helper was dropped with the placement fix. |
+| 28 | `packages/ui/src/v4/SessionPane.tsx` | Fork's four blocks (section state, status model/counts/handlers, queue panel, panel mounting) kept; the panel mounts in the conversation container again (v3 position, see Decisions 1). |
+| 29 | `packages/ui/src/v4/composer/ConversationBackgroundWorkTrigger.tsx` | Deleted (modify/delete, upstream deleted it); the status panel is the single entry point. |
 
 ## Decisions
 
@@ -77,9 +77,20 @@ merge: `pre-v4.0.0-merge`.
    content column still makes room for the inline panel.
    Capsule-only data (ended subagents, completed-activity count, dismissal
    watermarks) flows through the props but is not rendered yet.
+   **Placement fix (2026-11-23):** the panel keeps its v3 mount — a direct child
+   of the `@container/conversation relative` container in `SessionPane`, floating
+   at the top-right corner (`ConversationStatusPanel` is `absolute top-0 pt-4`).
+   Upstream's composer slot (`statusContent` / `ComposerStatusRow`, a flow row
+   built for its inline capsules) is gone: mounting the fork's absolutely
+   positioned panel there floated the capsule over the first line of the editor.
+   The timeline regained the first-turn clearance it lost in v4.0.0
+   (`CONVERSATION_STATUS_PANEL_TOP_CLEARANCE_CLASS_NAME` +
+   `topClearedByTimeline`), so the capsule can no longer cover the head of a
+   turn that starts without a user bubble.
 2. **Composer badge retired.** With upstream's deletion, the badge (counts,
    tooltips, `TID_V4_COMPOSER_BACKGROUND_WORK_TRIGGER`) no longer exists; the
-   status row is the entry point. Its dead handler/memo went with `d0b67d88`.
+   status panel (top-right capsule) is the entry point. Its dead handler/memo
+   went with `d0b67d88`.
    The two test ids the fork still needs (`TID_CHAT_SUMMARY_PANEL`, the
    retired trigger id for the pending e2e specs) were restored in
    `packages/shared/src/test-ids.ts`.

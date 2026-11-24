@@ -18,7 +18,7 @@ import { createRoot } from "react-dom/client";
 import { ZCodeIntlProvider } from "@/i18n/IntlProvider.js";
 import { ServiceProvider } from "@/hooks/useServices.js";
 import { GitBranchActionsHost } from "@/GitBranchSwitcher.js";
-import { ComposerStatusRow, ConversationStatusPanel } from "@/v4/ConversationStatusPanel.js";
+import { ConversationStatusPanel } from "@/v4/ConversationStatusPanel.js";
 import { GitStatusRepositoryContext } from "@/hooks/useGitRepository.js";
 import { TooltipProvider } from "@/components/ui/tooltip.js";
 import "@/styles.css";
@@ -48,7 +48,7 @@ function Fixture(){
  <button data-testid="cwd" onClick={()=>setCwd("/example/worktree")}>Cwd</button>
  <GitBranchActionsHost scopeKey={session} workspacePath={cwd} gitSummary={summary} dirtyFileCount={dirty?1:0} onRefreshGit={refresh}>
  <input data-testid="retained-editor" defaultValue="draft"/><GitStatusRepositoryContext.Provider value={{state:{datasets:{unstaged:{sections:dirty?[{changes:[{path:"file.txt",added:1,removed:0}]}]:[]},staged:{sections:[]}}}}}>
- {!hidden ? <div className="fixed bottom-4 left-4 right-4"><ComposerStatusRow><ConversationStatusPanel workspacePath="/example" gitSummary={summary} gitDirtyFileCount={dirty?1:0} onRefreshGit={refresh} /></ComposerStatusRow></div>:null}
+ {!hidden ? <div className="fixed bottom-4 left-4 right-4"><div><ConversationStatusPanel workspacePath="/example" gitSummary={summary} gitDirtyFileCount={dirty?1:0} onRefreshGit={refresh} /></div></div>:null}
  </GitStatusRepositoryContext.Provider></GitBranchActionsHost>
  </TooltipProvider></ServiceProvider></ZCodeIntlProvider>
 }

@@ -2573,14 +2573,4 @@ function ConversationStatusPanelImpl({
   );
 }
 
-/**
- * Composer 的状态行容器。Upstream v4.0.0 renders status capsules inside it; the fork
- * keeps the section-based panel, so the row is just the layout slot between the
- * composer banners and the input surface (one open detail at a time is handled by the
- * panel itself).
- */
-export function ComposerStatusRow({ children }: { children: ReactNode }) {
-  return <div className="min-w-0">{children}</div>;
-}
-
 export const ConversationStatusPanel = memo(ConversationStatusPanelImpl);

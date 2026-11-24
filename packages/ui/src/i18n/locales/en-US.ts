@@ -6555,6 +6555,7 @@ const enUS: Record<string, string> = {
   "chat.history.workedFor": "Worked for {duration}",
   "chat.history.worked": "Worked",
   "chat.verbosity.title": "Conversation detail level",
+  "chat.verbosity.buttonLabel": "Verbosity",
   "chat.verbosity.summary": "Summary",
   "chat.verbosity.summaryDescription":
     "Only your messages and final answers; intermediate work stays collapsed.",

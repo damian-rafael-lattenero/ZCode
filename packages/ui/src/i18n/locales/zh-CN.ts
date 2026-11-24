@@ -6115,6 +6115,7 @@ const zhCN: Record<string, string> = {
   "chat.history.workedFor": "已工作 {duration}",
   "chat.history.worked": "已处理",
   "chat.verbosity.title": "对话详略档位",
+  "chat.verbosity.buttonLabel": "详略",
   "chat.verbosity.summary": "摘要",
   "chat.verbosity.summaryDescription": "只保留输入与最终回答；中间过程收起。",
   "chat.verbosity.normal": "标准",

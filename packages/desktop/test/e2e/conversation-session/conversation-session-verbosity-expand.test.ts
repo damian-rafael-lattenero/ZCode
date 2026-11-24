@@ -296,23 +296,29 @@ async function selectVerbosityThroughPicker(mode: MessageStreamVerbosity): Promi
   throw new Error(`verbosity option ${mode} never appeared in the open menu`);
 }
 
+async function readExpandEverythingEffective(): Promise<boolean> {
+  // The checkbox shows the effective value (spec §2): the persisted switch OR the
+  // verbose level, so a raw-boolean read would lie whenever verbose is selected.
+  const settings = await readSettings();
+  return (
+    Boolean(settings?.messageStreamExpandedByDefault) ||
+    settings?.messageStreamVerbosity === "verbose"
+  );
+}
+
 async function setExpandEverythingThroughPicker(enabled: boolean): Promise<void> {
   // The persisted user-scope settings are the source of truth; Radix dropdown
   // checkbox items do not expose aria-checked, so only interact on a mismatch.
-  const settings = await readSettings();
-  if (Boolean(settings?.messageStreamExpandedByDefault) === enabled) {
+  if ((await readExpandEverythingEffective()) === enabled) {
     return;
   }
   await openVerbosityMenu();
   const toggle = await $(`[data-testid="${TID_V4_VERBOSITY_EXPAND_TOGGLE}"]`);
   await toggle.waitForClickable({ timeout: 5000 });
   await toggle.click();
-  await browser.waitUntil(async () => {
-    const next = await readSettings();
-    return Boolean(next?.messageStreamExpandedByDefault) === enabled;
-  }, {
+  await browser.waitUntil(async () => (await readExpandEverythingEffective()) === enabled, {
     timeout: 10000,
-    timeoutMsg: `expand-everything setting did not persist to ${enabled}`,
+    timeoutMsg: `expand-everything control did not reach ${enabled}`,
   });
 }
 

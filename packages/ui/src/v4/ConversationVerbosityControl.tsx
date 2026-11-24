@@ -36,6 +36,10 @@ export function ConversationVerbosityControl({ compact = false }: { compact?: bo
   const { settings, update } = useSettings();
   const verbosity = settings?.messageStreamVerbosity ?? "normal";
   const expandedByDefault = settings?.messageStreamExpandedByDefault ?? false;
+  // 菜单里的勾选态必须是**生效值**：verbose 档位本身就展开全部（spec §2 的或值）。
+  // 过去显示原始开关，于是菜单会出现「Verbose ✓」+一个看似可点、点了却没有任何变化的
+  // 「Expand everything」——owner 反馈的「expand all 不好使」正是这个失效形状。
+  const expandAllEffective = expandedByDefault || verbosity === "verbose";
 
   const handleVerbosityChange = useCallback(
     async (mode: MessageStreamVerbosity) => {
@@ -52,14 +56,29 @@ export function ConversationVerbosityControl({ compact = false }: { compact?: bo
 
   const handleExpandedByDefaultChange = useCallback(
     async (enabled: boolean) => {
-      if (enabled === expandedByDefault) return;
+      if (enabled === expandAllEffective) return;
+      // 开关是「生效值」的入口，所以它必须能真正改变生效值：verbose 档位会强制展开、
+      // summary 档位会强制收起（且不挂载中间行），单改布尔位在两端都没有可观察结果。
+      // 取消勾选时把 verbose 归一为 normal，勾选时把 summary 归一为 normal——两个控件
+      // 的显示与事实保持一致，不会出现「开关关了但内容还展开着」的假状态。
       await runUserActionAsync({
         input: {
           featureId: "conversation.view",
           action: "toggle_expand_by_default",
           trigger: "menu",
         },
-        operation: () => update({ messageStreamExpandedByDefault: enabled }),
+        operation: () =>
+          update(
+            enabled
+              ? {
+                  messageStreamExpandedByDefault: true,
+                  ...(verbosity === "summary" ? { messageStreamVerbosity: "normal" as const } : {}),
+                }
+              : {
+                  messageStreamExpandedByDefault: false,
+                  ...(verbosity === "verbose" ? { messageStreamVerbosity: "normal" as const } : {}),
+                },
+          ),
         completed: {
           resultSource: "shared_settings",
           stateAfter: enabled ? "enabled" : "disabled",
@@ -67,7 +86,7 @@ export function ConversationVerbosityControl({ compact = false }: { compact?: bo
         failureStage: "expand_by_default_change",
       });
     },
-    [expandedByDefault, update],
+    [expandAllEffective, verbosity, update],
   );
 
   return (
@@ -85,8 +104,10 @@ export function ConversationVerbosityControl({ compact = false }: { compact?: bo
         >
           <ListFilterIcon className="size-4 shrink-0" aria-hidden />
           {!compact ? (
+            // 按钮标签是功能名而不是当前档位：档位在菜单里以单选态呈现，
+            // 标签跟随档位会让同一个按钮在「Verbose / Normal / Summary」之间改名。
             <span className="whitespace-nowrap">
-              {intl.formatMessage({ id: `chat.verbosity.${verbosity}` })}
+              {intl.formatMessage({ id: "chat.verbosity.buttonLabel" })}
             </span>
           ) : null}
         </Button>
@@ -115,7 +136,7 @@ export function ConversationVerbosityControl({ compact = false }: { compact?: bo
         </DropdownMenuRadioGroup>
         <DropdownMenuSeparator />
         <DropdownMenuCheckboxItem
-          checked={expandedByDefault}
+          checked={expandAllEffective}
           onCheckedChange={(checked) => {
             void handleExpandedByDefaultChange(checked === true);
           }}

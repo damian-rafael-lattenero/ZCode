@@ -48,6 +48,14 @@
   (异常历史/运行态锁死)语义保持不变。
 - 开关打开时 thinking 块的「完成自动收起」(`autoCollapseKey`)被禁用——用户明确
   要求展开,自动收起会与偏好对抗;开关关闭时保持原有 streaming→complete 收起行为。
+- 输入框入口(`ConversationVerbosityControl`)的按钮标签是**功能名**
+  (`chat.verbosity.buttonLabel`,如「详略」),不跟随当前档位改名;当前档位由菜单内的
+  单选态表达。
+- 菜单里的「默认展开全部」勾选态显示**生效值** `expandAll = switch || verbosity === "verbose"`,
+  不是原始布尔位。该控件因此必须能真正改变生效值:取消勾选而当前为 verbose 时,
+  同一补丁把 `messageStreamVerbosity` 归一为 `normal`;勾选而当前为 summary 时,
+  同样归一为 `normal`(summary 不挂载中间行,否则勾选没有任何可观察结果)。
+  禁止出现「勾选已关但内容仍展开」或「勾选已开但点了没反应」的假状态。
 
 ### 解析规则(单点,禁止多处复写)
 
@@ -137,3 +145,6 @@ SettingsService (user-scope, 持久化)
 6. 异常中断轮在任何档位保持展开(诊断上下文可见)。
 7. 运行中切档位:live turn 的运行态(loading、扫光、autoOpen)不受影响。
 8. 分享页与只读会话行为不随档位变化。
+9. 入口一致性:按钮始终显示「详略」;verbose 下菜单勾选态为开,取消勾选后档位落到
+   normal 且内容回溯收起;summary 下勾选后档位落到 normal 且内容展开。
+   —— 任何时刻勾选态与页面上内容的展开事实一致。

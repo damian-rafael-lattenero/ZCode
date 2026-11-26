@@ -1,11 +1,11 @@
 # Upstream sync expedition — v3.16.2 → v3.17.1 (the merge plan)
 
-Expedition report recovered verbatim from the OpenCode plan session «git diff zcode» and re-verified against the repo on 2026-11-02 before being archived here.
+Expedition report recovered verbatim from the OpenCode plan session "git diff zcode" and re-verified against the repo on 2026-11-02 before being archived here. The Spanish original is preserved in the raw archive cited in §0; §1 is its English rendering, marked `[translated]`.
 
 ## 0. Provenance & verification
 
 **Session**
-- OpenCode session `ses_e63713227ffeXDxAmRuMKhwJrk` — «git diff zcode», agent `plan`, model `gemini-4-argon` (opencode-go, variant high), run 2026-11-02 10:59:26 → 11:28:00 (-03), directory `/Users/lattenero/Projects/ZCode`.
+- OpenCode session `ses_e63713227ffeXDxAmRuMKhwJrk` — "git diff zcode", agent `plan`, model `gemini-4-argon` (opencode-go, variant high), run 2026-11-02 10:59:26 → 11:28:00 (-03), directory `/Users/lattenero/Projects/ZCode`.
 - Token ledger: 1,500,576 input / 15,244 output / 20,039 reasoning / 9,984,280 cache-read. Outcome: succeeded.
 
 **Raw archive (the full 431K-token context)**
@@ -18,103 +18,103 @@ Expedition report recovered verbatim from the OpenCode plan session «git diff z
 - 57/57 session messages in the DB = 57 in the JSON export, zero ID diff → the export is complete; no blobs, no separate part store, nothing missing.
 - The final report below is byte-identical to the session's last assistant message (only a trailing newline differs from the user's paste).
 - Fork file list (`git diff --name-only 3c5b2276..damian`): **0 added / 0 removed** since the expedition → every conflict analysis below still applies.
-- File count correction: the real count is **109 files (34 `[A]` + 75 `[M]`)**; the report's «107» undercounts by 2. The per-group analysis is unaffected.
-- `upstream/main` unchanged at `a60ba6a7` (tag `v3.17.1`); merge-base unchanged at `3c5b2276` (v3.16.2). Only delta since the session: `f2f3df12` (FORK.md ledger, +1 line — Grupo 4 territory).
-- Expedition scope sanity: upstream's `-611.504` lines come from Z.ai retiring all App unit tests on 26/10 (policy `docs/testing/unit-test-quality.md`); the `apps/zcode-cli` suite was NOT retired.
+- File count correction: the real count is **109 files (34 `[A]` + 75 `[M]`)**; the report's "107" undercounts by 2. The per-group analysis is unaffected.
+- `upstream/main` unchanged at `a60ba6a7` (tag `v3.17.1`); merge-base unchanged at `3c5b2276` (v3.16.2). Only delta since the session: `f2f3df12` (FORK.md ledger, +1 line — Group 4 territory).
+- Expedition scope sanity: upstream's `-611.504` lines come from Z.ai retiring all App unit tests on 2026-10-26 (policy `docs/testing/unit-test-quality.md`); the `apps/zcode-cli` suite was NOT retired.
 
-## 1. The expedition report (verbatim from the session)
+## 1. The expedition report (verbatim from the session; `[translated]`)
 
-Hice la expedición completa (100% read-only) comparando nuestra rama `damian` contra `upstream/main` (`a60ba6a7`, tag **`v3.17.1`** del 30/10) desde el `merge-base` común (`3c5b2276`, `v3.16.2` del 20/10).
+I ran the full expedition (100% read-only) comparing our `damian` branch against `upstream/main` (`a60ba6a7`, tag **`v3.17.1`** of 2026-10-30) from the common `merge-base` (`3c5b2276`, `v3.16.2` of 2026-10-20).
 
 ---
 
-## 1. Panorama General de la Expedición
+## 1. Expedition overview
 
-- **`damian` (fork)**: 48 commits encima de `3c5b2276`, tocando **107 archivos** (34 creados `[A]` y 73 modificados `[M]`).
-- **`upstream/main` (`v3.17.1`)**: 1 commit de sincronización (`a60ba6a7`) con **5.231 archivos cambiados** (`+216.552` / `-611.504` líneas).
-- **¿Por qué `upstream/main` borró ~611k líneas?**
-  El 26/10 Z.ai aplicó la política `docs/testing/unit-test-quality.md` (*"App 单测退役规格"*): **retiraron todos los unit tests de negocio de la App (`packages/*/test/*.test.ts` y `contract.test.ts`, ~1.800 archivos)** y quitaron `@testing-library/react` y `@testing-library/dom` de `packages/ui/package.json` y `pnpm-lock.yaml`.
-  - En la raíz (`vitest.config.ts`) dejaron únicamente el proyecto `engineering` (lista cerrada de 141 archivos en `scripts/engineering-test-files.json`) y `packages/zcode-cua`.
-  - **Importante**: la suite de **`apps/zcode-cli` NO fue retirada**; sigue intacta con su propio `apps/zcode-cli/vitest.config.ts`.
+- **`damian` (fork)**: 48 commits on top of `3c5b2276`, touching **107 files** (34 created `[A]` and 73 modified `[M]`).
+- **`upstream/main` (`v3.17.1`)**: 1 sync commit (`a60ba6a7`) with **5,231 changed files** (`+216,552` / `-611,504` lines).
+- **Why did `upstream/main` delete ~611k lines?**
+  On 2026-10-26 Z.ai applied the policy `docs/testing/unit-test-quality.md` (*"App 单测退役规格"*, "App unit-test retirement spec"): **they retired every business unit test in the App (`packages/*/test/*.test.ts` and `contract.test.ts`, ~1,800 files)** and removed `@testing-library/react` and `@testing-library/dom` from `packages/ui/package.json` and `pnpm-lock.yaml`.
+  - At the root (`vitest.config.ts`) they left only the `engineering` project (a closed list of 141 files in `scripts/engineering-test-files.json`) and `packages/zcode-cua`.
+  - **Important**: the **`apps/zcode-cli` suite was NOT retired**; it remains intact with its own `apps/zcode-cli/vitest.config.ts`.
 
-Al cruzar los **107 archivos del fork** contra `upstream/main`, quedan divididos exactamente en **4 grupos**:
+Crossing the fork's **107 files** against `upstream/main`, they split exactly into **4 groups**:
 
-| Grupo | Cantidad | Estado en un `git merge` |
+| Group | Count | State in a `git merge` |
 | :--- | :---: | :--- |
-| **Grupo 1 — `CONFLICT_MM`** (ambos modificaron las mismas líneas) | **9 archivos** | Conflicto de contenido (`<<<<<<<`) |
-| **Grupo 2 — `SPECIAL [M / D]`** (el fork editó un test que upstream borró) + 10 tests nuevos del fork en `packages/*` | **7 archivos** (+10) | Conflicto `modify/delete` + pérdida de runner en `vitest.config.ts` |
-| **Grupo 3 — `CLEAN_3WAY [M / M]`** (ambos tocaron el archivo en zonas distintas) | **28 archivos** | Fusiona sin conflicto textual, pero **hay 2 trampas semánticas** |
-| **Grupo 4 — `ONLY_OURS`** (solo tocados/creados por el fork) | **63 archivos** | Fusiona directo, pero **hay 3 ajustes de gobernanza/scripts** |
+| **Group 1 — `CONFLICT_MM`** (both modified the same lines) | **9 files** | Content conflict (`<<<<<<<`) |
+| **Group 2 — `SPECIAL [M / D]`** (the fork edited a test upstream deleted) + 10 new fork tests in `packages/*` | **7 files** (+10) | `modify/delete` conflict + runner loss in `vitest.config.ts` |
+| **Group 3 — `CLEAN_3WAY [M / M]`** (both touched the file in different zones) | **28 files** | Merges without a textual conflict, but **there are 2 semantic traps** |
+| **Group 4 — `ONLY_OURS`** (only touched/created by the fork) | **63 files** | Merges straight through, but **there are 3 governance/script adjustments** |
 
 ---
 
-## 2. Grupo 1: Los 9 Conflictos Directos (`CONFLICT_MM`) — Archivo por Archivo
+## 2. Group 1: The 9 Direct Conflicts (`CONFLICT_MM`) — File by File
 
 ### 1) `apps/zcode-cli/packages/adapters/tests/runner-retry.test.ts`
-- **Qué tiene el fork**: 3 tests al final de `describe("calculateRetryDelay")` validando que `usageLimitResetWaitMs` (`next_flush_time`, Ola 5) saltea el tope de 5 minutos y tiene prioridad sobre `Retry-After`.
-- **Qué trae ZCode (`v3.17.1`)**: Importa `vi` de `vitest` y agrega 2 tests en el mismo bloque validando que cuando `retry.jitter === true`, el `Retry-After` recibe un jitter hacia arriba de hasta +20% (tope +5s) para evitar estampidas 1302.
-- **Trade-off (¿Fork, ZCode o Ambos?)**: **Ambos conviven sin tocarse**. En `runner-retry.ts` (que fusiona limpio), `usageLimitResetWaitMs` retorna antes de evaluar `Retry-After`; además, en producción el fork corre con `jitter: false` (`ZCODE_MODEL_RETRY_JITTER=0`), mientras que el test de upstream fuerza `jitter: true` localmente.
-- **Resolución**: Conservar `vi` en el import y dejar los 3 tests del fork + los 2 tests de upstream.
+- **What the fork has**: 3 tests at the end of `describe("calculateRetryDelay")` validating that `usageLimitResetWaitMs` (`next_flush_time`, Wave 5) skips the 5-minute cap and takes priority over `Retry-After`.
+- **What ZCode brings (`v3.17.1`)**: Imports `vi` from `vitest` and adds 2 tests in the same block validating that when `retry.jitter === true`, `Retry-After` gets an upward jitter of up to +20% (cap +5s) to avoid 1302 stampedes.
+- **Trade-off (Fork, ZCode or Both?)**: **Both coexist without touching each other**. In `runner-retry.ts` (which merges cleanly), `usageLimitResetWaitMs` returns before evaluating `Retry-After`; moreover, in production the fork runs with `jitter: false` (`ZCODE_MODEL_RETRY_JITTER=0`), while upstream's test forces `jitter: true` locally.
+- **Resolution**: Keep `vi` in the import and leave the fork's 3 tests + upstream's 2 tests.
 
 ---
 
 ### 2) `apps/zcode-cli/packages/bootstrap/src/zcode-protocol-v4/product-projection.ts`
-- **Qué tiene el fork (Ola 6b)**: En `case "model_retry_scheduled"`, pasa `reasonCode: modelRetryReasonCode(payload.reason)` y añade `reason: payload.reason` crudo (para que el pill v4 distinga `provider_overloaded`, `server_error` y `usage_limit_reset`).
-- **Qué trae ZCode (`v3.17.1`)**: Cambia `reasonCode` a un ternario:
+- **What the fork has (Wave 6b)**: In `case "model_retry_scheduled"`, it passes `reasonCode: modelRetryReasonCode(payload.reason)` and adds a raw `reason: payload.reason` (so the v4 pill can distinguish `provider_overloaded`, `server_error` and `usage_limit_reset`).
+- **What ZCode brings (`v3.17.1`)**: Changes `reasonCode` to a ternary:
   ```ts
   reasonCode:
     payload.errorCode === ModelErrorCode.ModelRequestVerificationConfigNetwork
       ? ModelErrorCode.ModelRequestVerificationConfigNetwork
       : modelRetryReasonCode(payload.reason),
   ```
-  (nuevo flujo de upstream para reintentar fallos de red al leer la configuración de seguridad/verificación antes de enviar el request al modelo).
-- **Trade-off**: **Ambos son ortogonales y necesarios**. Si elegimos solo el fork, rompemos la detección de `ModelRequestVerificationConfigNetwork` en v4; si elegimos solo upstream, el pill del área de chat pierde `reason` crudo y vuelve a colapsar causas.
-- **Resolución**: Usar el ternario de `reasonCode` de upstream **y** mantener `reason: payload.reason` del fork debajo.
+  (upstream's new flow for retrying network failures while reading the security/verification configuration before sending the request to the model).
+- **Trade-off**: **Both are orthogonal and necessary**. If we pick only the fork, we break `ModelRequestVerificationConfigNetwork` detection in v4; if we pick only upstream, the chat-area pill loses the raw `reason` and collapses causes again.
+- **Resolution**: Use upstream's `reasonCode` ternary **and** keep the fork's `reason: payload.reason` underneath.
 
 ---
 
 ### 3) `architecture-policy.yaml`
-- **Qué tiene el fork**: 4 excepciones en `exceptions:`:
-  - `fork-daemon-local-channel-new-files` (al inicio de `exceptions:`)
-  - `conversation-verbosity-views-unmanaged-new` (al final)
-  - `fork-model-retry-spawn-env-unmanaged-new` (al final)
-  - `fork-usage-limit-reset-unmanaged-new` (al final)
-- **Qué trae ZCode (`v3.17.1`)**: 7 excepciones nuevas al inicio de `exceptions:` y 12 excepciones nuevas al final (además de varios módulos `managed: true` nuevos arriba que fusionan limpio).
-- **Hallazgo extra de la expedición**: `packages/ui/src/v4/forkCommandModel.ts` (creado en Ola 2) no estaba listado en las excepciones del fork; si se corre `architecture:check --changed` contra `3c5b2276`, falla por `unmanaged-new-file`.
-- **Trade-off**: **Conservar todas las entradas de ambos lados**.
-- **Resolución**: Unir las listas de `exceptions:` de upstream y del fork, y agregar `packages/ui/src/v4/forkCommandModel.ts` a las excepciones del fork.
+- **What the fork has**: 4 exceptions in `exceptions:`:
+  - `fork-daemon-local-channel-new-files` (at the start of `exceptions:`)
+  - `conversation-verbosity-views-unmanaged-new` (at the end)
+  - `fork-model-retry-spawn-env-unmanaged-new` (at the end)
+  - `fork-usage-limit-reset-unmanaged-new` (at the end)
+- **What ZCode brings (`v3.17.1`)**: 7 new exceptions at the start of `exceptions:` and 12 new exceptions at the end (plus several new `managed: true` modules above that merge cleanly).
+- **Extra expedition finding**: `packages/ui/src/v4/forkCommandModel.ts` (created in Wave 2) was not listed in the fork's exceptions; running `architecture:check --changed` against `3c5b2276` fails with `unmanaged-new-file`.
+- **Trade-off**: **Keep every entry from both sides**.
+- **Resolution**: Union upstream's and the fork's `exceptions:` lists, and add `packages/ui/src/v4/forkCommandModel.ts` to the fork's exceptions.
 
 ---
 
 ### 4) `packages/ui/src/SlashCommandPlugin.tsx`
-- **Qué tiene el fork (Ola 2)**: Invierte la precedencia entre comandos de la App (`appCommands`) y comandos del catálogo CLI (`commands`): calcula `appValues = new Set(appSuggestions.map(i => i.value))` y filtra `cliSuggestions` con `!appValues.has(item.value)`. Así el `/diff` client-side del fork eclipsa al `/diff` del CLI (que gastaba un turno del modelo).
-- **Qué trae ZCode (`v3.17.1`)**: Agrega soporte para un flag `recovery?: boolean` en `AppSlashCommand` (usado por el nuevo comando `/reload`), y solo deja que los comandos con `recovery: true` (`recoveryNames`) eclipsen al CLI (`!recoveryNames.has(item.value)`).
-- **Trade-off**: La regla del fork (`!appValues.has(item.value)`) **es un superconjunto exacto** de la de upstream (`recoveryNames ⊆ appValues`). Como `/side` y `/btw` ya se filtran previamente en `SessionPane.tsx` cuando existen en `cliSlashCommandNames`, hacer que todos los `appCommands` visibles eclipsen homónimos del CLI hace funcionar **tanto `/diff` (del fork) como `/reload` (de upstream)**.
-- **Resolución**: Mantener la precedencia del fork (`!appValues.has(item.value)`).
+- **What the fork has (Wave 2)**: Inverts the precedence between App commands (`appCommands`) and CLI catalog commands (`commands`): it computes `appValues = new Set(appSuggestions.map(i => i.value))` and filters `cliSuggestions` with `!appValues.has(item.value)`. That way the fork's client-side `/diff` eclipses the CLI's `/diff` (which burned a model turn).
+- **What ZCode brings (`v3.17.1`)**: Adds support for a `recovery?: boolean` flag in `AppSlashCommand` (used by the new `/reload` command), and only lets commands with `recovery: true` (`recoveryNames`) eclipse the CLI (`!recoveryNames.has(item.value)`).
+- **Trade-off**: The fork's rule (`!appValues.has(item.value)`) **is an exact superset** of upstream's (`recoveryNames ⊆ appValues`). Since `/side` and `/btw` are already pre-filtered in `SessionPane.tsx` when they exist in `cliSlashCommandNames`, making every visible `appCommand` eclipse CLI homonyms makes **both `/diff` (fork) and `/reload` (upstream)** work.
+- **Resolution**: Keep the fork's precedence (`!appValues.has(item.value)`).
 
 ---
 
 ### 5) `packages/ui/src/chat-input-toolbar/display.tsx`
-- **Qué tiene el fork (Ola 4b/6)**: En `ChatApiRetryStatus`, usa `{ id: apiRetryStatusMessageId(apiRetry.reason) }` (labels honestos por causa) y renderiza al lado el countdown `mm:ss` (`useRetryCountdown(apiRetry?.nextRetryAtMs)`).
-- **Qué trae ZCode (`v3.17.1`)**: Importa `zcodeProviderRuntimeHeadersErrorCode` y, cuando `apiRetry.error === zcodeProviderRuntimeHeadersErrorCode.configNetwork`, muestra el mensaje `"chat.configReadRetryStatus"` (*reintentando lectura de configuración*).
-- **Trade-off**: **Hacer funcionar ambos**. Si un reintento es por `configNetwork` (fallo antes del request al modelo), debe verse `"chat.configReadRetryStatus"`; para todos los demás casos debe seguir aplicando la tabla `API_RETRY_REASON_MESSAGE_IDS` del fork + el countdown.
-- **Resolución**:
-  1. Conservar el import `zcodeProviderRuntimeHeadersErrorCode` de upstream.
-  2. Agregar `[zcodeProviderRuntimeHeadersErrorCode.configNetwork]: "chat.configReadRetryStatus"` a `API_RETRY_REASON_MESSAGE_IDS` y en `ChatApiRetryStatus` pasar `apiRetry.error === zcodeProviderRuntimeHeadersErrorCode.configNetwork ? zcodeProviderRuntimeHeadersErrorCode.configNetwork : apiRetry.reason` a `apiRetryStatusMessageId(...)`, manteniendo intacto el `countdownLabel`.
+- **What the fork has (Wave 4b/6)**: In `ChatApiRetryStatus`, it uses `{ id: apiRetryStatusMessageId(apiRetry.reason) }` (honest labels per cause) and renders the `mm:ss` countdown next to it (`useRetryCountdown(apiRetry?.nextRetryAtMs)`).
+- **What ZCode brings (`v3.17.1`)**: Imports `zcodeProviderRuntimeHeadersErrorCode` and, when `apiRetry.error === zcodeProviderRuntimeHeadersErrorCode.configNetwork`, shows the message `"chat.configReadRetryStatus"` (*retrying configuration read*).
+- **Trade-off**: **Make both work**. If a retry is due to `configNetwork` (a failure before the model request), `"chat.configReadRetryStatus"` must be shown; for every other case the fork's `API_RETRY_REASON_MESSAGE_IDS` table + the countdown must keep applying.
+- **Resolution**:
+  1. Keep upstream's `zcodeProviderRuntimeHeadersErrorCode` import.
+  2. Add `[zcodeProviderRuntimeHeadersErrorCode.configNetwork]: "chat.configReadRetryStatus"` to `API_RETRY_REASON_MESSAGE_IDS` and, in `ChatApiRetryStatus`, pass `apiRetry.error === zcodeProviderRuntimeHeadersErrorCode.configNetwork ? zcodeProviderRuntimeHeadersErrorCode.configNetwork : apiRetry.reason` to `apiRetryStatusMessageId(...)`, leaving `countdownLabel` untouched.
 
 ---
 
-### 6) `packages/ui/src/v4/ConversationTimeline.tsx` *(acoplado con #9)*
-- **Qué tiene el fork (Ola Verbosity)**: Extrae `messageStreamVerbosity` y `messageStreamExpandedByDefault` de `rowContext` y los pasa a `buildConversationTurnRenderUnits(rows, { ... })`.
-- **Qué trae ZCode (`v3.17.1`)**: Reemplaza `buildConversationTurnRenderUnits(rows, ...)` + `withTopicPreparationMessages` por el nuevo pipeline particionado `rowsPartition = getConversationRowsPartition(rows)` → `selectRenderUnits = createConversationTurnRenderUnitsSelector()` → `withTopicPreparationUnits(selectRenderUnits(rowsPartition, { ... }))`, que devuelve `{ history, tail }` y evita recalcular toda la historia en cada token de streaming.
-- **Trade-off**: **Ambos son indispensables**. No podemos quedarnos con `buildConversationTurnRenderUnits` en `ConversationTimeline.tsx` porque el resto del componente en `v3.17.1` consume la partición `{ history, tail }` y porque la mejora de performance en conversaciones largas es enorme; y no podemos perder `verbosity` / `expandAllByDefault`.
-- **Resolución**: Usar `withTopicPreparationUnits(selectRenderUnits(rowsPartition, { nowMs: liveNowMs, sessionPhase, pluginUiPinResolver, ...(messageStreamVerbosity ? { verbosity: messageStreamVerbosity } : {}), ...(messageStreamExpandedByDefault ? { expandAllByDefault: true } : {}) }), rows, topicPreparations)` e incluir todas las dependencias en el `useMemo`. *(Ver #9 para la invalidación de caché dentro del selector).*
+### 6) `packages/ui/src/v4/ConversationTimeline.tsx` *(coupled with #9)*
+- **What the fork has (Verbosity wave)**: Extracts `messageStreamVerbosity` and `messageStreamExpandedByDefault` from `rowContext` and passes them to `buildConversationTurnRenderUnits(rows, { ... })`.
+- **What ZCode brings (`v3.17.1`)**: Replaces `buildConversationTurnRenderUnits(rows, ...)` + `withTopicPreparationMessages` with the new partitioned pipeline `rowsPartition = getConversationRowsPartition(rows)` → `selectRenderUnits = createConversationTurnRenderUnitsSelector()` → `withTopicPreparationUnits(selectRenderUnits(rowsPartition, { ... }))`, which returns `{ history, tail }` and avoids recomputing the whole history on every streaming token.
+- **Trade-off**: **Both are indispensable**. We cannot stay with `buildConversationTurnRenderUnits` in `ConversationTimeline.tsx` because the rest of the component in `v3.17.1` consumes the `{ history, tail }` partition and because the performance win on long conversations is huge; and we cannot lose `verbosity` / `expandAllByDefault`.
+- **Resolution**: Use `withTopicPreparationUnits(selectRenderUnits(rowsPartition, { nowMs: liveNowMs, sessionPhase, pluginUiPinResolver, ...(messageStreamVerbosity ? { verbosity: messageStreamVerbosity } : {}), ...(messageStreamExpandedByDefault ? { expandAllByDefault: true } : {}) }), rows, topicPreparations)` and include every dependency in the `useMemo`. *(See #9 for cache invalidation inside the selector).*
 
 ---
 
 ### 7) `packages/ui/src/v4/ConversationTurnGroup.tsx`
-- **Qué tiene el fork (Ola Verbosity)**:
-  - Separa `assistantHistoryLockedOpen` (hecho diagnóstico: turno corriendo, fallo/interrupción, o turno de 1 segmento sin texto final → **bloqueado abierto**) de `assistantHistoryDefaultOpen` (preferencia de usuario `verbose` / `expandAllByDefault` → **abre por defecto pero permite cerrarlo manualmente**):
+- **What the fork has (Verbosity wave)**:
+  - It separates `assistantHistoryLockedOpen` (a diagnostic fact: turn running, failure/interruption, or a 1-segment turn without final text → **locked open**) from `assistantHistoryDefaultOpen` (user preference `verbose` / `expandAllByDefault` → **opens by default but can be closed manually**):
     ```ts
     const historyLockedOpen =
       segment.assistantHistoryLockedOpen ?? segment.assistantHistoryDefaultOpen;
@@ -122,15 +122,15 @@ Al cruzar los **107 archivos del fork** contra `upstream/main`, quedan divididos
     // ...
     onOpenChange={historyLockedOpen ? undefined : setHistoryOpen}
     ```
-- **Qué trae ZCode (`v3.17.1`)**:
-  - Pasa `turnRunning={unit.isRunning}` a `ConversationWorkSegmentFlow` y escribe:
+- **What ZCode brings (`v3.17.1`)**:
+  - It passes `turnRunning={unit.isRunning}` to `ConversationWorkSegmentFlow` and writes:
     ```ts
     const open = turnRunning || segment.assistantHistoryDefaultOpen || historyOpen;
     // ...
     onOpenChange={turnRunning || segment.assistantHistoryDefaultOpen ? undefined : setHistoryOpen}
     ```
-- **Trade-off**: Si usáramos la línea de upstream tal cual (`turnRunning || segment.assistantHistoryDefaultOpen ? undefined : setHistoryOpen`), cuando el usuario activa `Verbose` o `Expandir todo` (`assistantHistoryDefaultOpen = true`, `assistantHistoryLockedOpen = false`), **`onOpenChange` quedaría en `undefined` y ningún turno histórico podría colapsarse manualmente**, rompiendo la spec del fork (`docs/specs/conversation-verbosity-views.md` §2).
-- **Resolución**: Combinar ambos conceptos:
+- **Trade-off**: If we used upstream's line as-is (`turnRunning || segment.assistantHistoryDefaultOpen ? undefined : setHistoryOpen`), when the user turns on `Verbose` or `Expand all` (`assistantHistoryDefaultOpen = true`, `assistantHistoryLockedOpen = false`), **`onOpenChange` would stay `undefined` and no historical turn could be collapsed manually**, breaking the fork's spec (`docs/specs/conversation-verbosity-views.md` §2).
+- **Resolution**: Combine both concepts:
   ```ts
   const historyLockedOpen =
     turnRunning || (segment.assistantHistoryLockedOpen ?? segment.assistantHistoryDefaultOpen);
@@ -138,122 +138,122 @@ Al cruzar los **107 archivos del fork** contra `upstream/main`, quedan divididos
   // ...
   onOpenChange={historyLockedOpen ? undefined : setHistoryOpen}
   ```
-  Así `turnRunning` bloquea abierto (como pide upstream) y `assistantHistoryLockedOpen` distingue bloqueo diagnóstico de apertura por preferencia (como pide el fork).
+  That way `turnRunning` locks open (as upstream asks) and `assistantHistoryLockedOpen` distinguishes diagnostic lock from preference-driven opening (as the fork asks).
 
 ---
 
 ### 8) `packages/ui/src/v4/SessionPane.tsx`
-- **Qué tiene el fork (Ola 2)**:
-  - En `appSlashCommands`, define `diffAction` (`/diff` client-side cuando `sessionId && !compactForRemoteControl`) y arma `baseActions = diffAction ? [planAction, diffAction] : [planAction]`.
-  - En `planAction`, tenía `label: intl.formatMessage({ id: "chat.slash.app.plan.label" })`.
-- **Qué trae ZCode (`v3.17.1`)**:
-  - Borra la key i18n `"chat.slash.app.plan.label"` de `en-US.ts` y `zh-CN.ts` y quita `label` de `planAction`.
-  - Agrega `reloadActions` (`/reload` con `recovery: true` → `taskRestart.restart`).
-- **Trade-off**: **Ambos comandos (`/reload` y `/diff`) deben estar disponibles**, y debemos quitar `label` de `planAction` porque la key i18n ya no existe en los diccionarios de `v3.17.1`.
-- **Resolución**:
-  - Quitar `label` de `planAction`.
-  - Definir `const baseActions = [...reloadActions, planAction, ...(diffAction ? [diffAction] : [])];` y devolver `baseActions` (o `[...baseActions, ...sideCommands]`).
-  - En el array de dependencias del `useMemo`, conservar tanto `taskRestart.restart` (upstream) como `openDiffAskPanel` y `compactForRemoteControl` (fork).
+- **What the fork has (Wave 2)**:
+  - In `appSlashCommands`, it defines `diffAction` (client-side `/diff` when `sessionId && !compactForRemoteControl`) and builds `baseActions = diffAction ? [planAction, diffAction] : [planAction]`.
+  - In `planAction`, it had `label: intl.formatMessage({ id: "chat.slash.app.plan.label" })`.
+- **What ZCode brings (`v3.17.1`)**:
+  - Deletes the i18n key `"chat.slash.app.plan.label"` from `en-US.ts` and `zh-CN.ts` and removes `label` from `planAction`.
+  - Adds `reloadActions` (`/reload` with `recovery: true` → `taskRestart.restart`).
+- **Trade-off**: **Both commands (`/reload` and `/diff`) must be available**, and we must remove `label` from `planAction` because the i18n key no longer exists in the `v3.17.1` dictionaries.
+- **Resolution**:
+  - Remove `label` from `planAction`.
+  - Define `const baseActions = [...reloadActions, planAction, ...(diffAction ? [diffAction] : [])];` and return `baseActions` (or `[...baseActions, ...sideCommands]`).
+  - In the `useMemo` dependency array, keep both `taskRestart.restart` (upstream) and `openDiffAskPanel` and `compactForRemoteControl` (fork).
 
 ---
 
-### 9) `packages/ui/src/v4/conversationTurnRenderUnits.ts` *(¡Cuidado especial acá!)*
-- **Qué tiene el fork (Ola Verbosity)**:
-  - En `materializeDraftUnit` y `normalizeRenderUnitPosition`, calcula `assistantHistoryDefaultOpen` y `assistantHistoryLockedOpen` mediante `resolveAssistantHistoryOpenState(...)` leyendo `options.verbosity` y `options.expandAllByDefault`.
-- **Qué trae ZCode (`v3.17.1`)**:
-  1. En `normalizeRenderUnitPosition`, evita hacer `unit.workSegments?.map(...)` antes del `if (...) return unit;` para no alocar arrays en cada frame cuando nada cambió.
-  2. Agrega `createConversationTurnRenderUnitsSelector()`, que cachea las unidades de `partition.history` y de cada `DraftTurnRenderUnit`.
-- **Trampa semántica detectada en la expedición**:
-  El nuevo `createConversationTurnRenderUnitsSelector()` de upstream decide si reutiliza la caché (`isHistoryReusable`, `materializeReusing` y `history.tailDropped`) mirando solo `rows`, `sessionPhase`, `nowMs` y `pluginUiPinResolver`. **No mira `options.verbosity` ni `options.expandAllByDefault`**. Si no agregamos esos dos campos a las condiciones de reuso del selector, cambiar la verbosidad o el switch "Expandir todo" en vivo **no actualizaría los turnos históricos ya cacheados**.
-- **Resolución (Ambos + caché consciente de verbosidad)**:
-  1. En `normalizeRenderUnitPosition`: calcular `unitOpenState` y `lastSegmentOpenState` con `resolveAssistantHistoryOpenState(...)` **antes** del `if (...) return unit;` sin clonar `workSegments`, y solo hacer `.map(...)` después del `if` cuando efectivamente cambió `isLastTurn`, `defaultOpen` o `lockedOpen`.
-  2. En `createConversationTurnRenderUnitsSelector()`: guardar `verbosity` y `expandAllByDefault` en `Entry`, `HistoryCache` y `history.tailDropped`, e incluirlos en `unchanged` y en `isHistoryReusable`.
+### 9) `packages/ui/src/v4/conversationTurnRenderUnits.ts` *(extra care here!)*
+- **What the fork has (Verbosity wave)**:
+  - In `materializeDraftUnit` and `normalizeRenderUnitPosition`, it computes `assistantHistoryDefaultOpen` and `assistantHistoryLockedOpen` through `resolveAssistantHistoryOpenState(...)` reading `options.verbosity` and `options.expandAllByDefault`.
+- **What ZCode brings (`v3.17.1`)**:
+  1. In `normalizeRenderUnitPosition`, it avoids doing `unit.workSegments?.map(...)` before the `if (...) return unit;` so as not to allocate arrays on every frame when nothing changed.
+  2. It adds `createConversationTurnRenderUnitsSelector()`, which caches the units of `partition.history` and of each `DraftTurnRenderUnit`.
+- **Semantic trap detected in the expedition**:
+  Upstream's new `createConversationTurnRenderUnitsSelector()` decides whether to reuse the cache (`isHistoryReusable`, `materializeReusing` and `history.tailDropped`) by looking only at `rows`, `sessionPhase`, `nowMs` and `pluginUiPinResolver`. **It does not look at `options.verbosity` or `options.expandAllByDefault`**. If we do not add those two fields to the selector's reuse conditions, changing verbosity or the "Expand all" switch live **would not update the already-cached historical turns**.
+- **Resolution (Both + verbosity-aware cache)**:
+  1. In `normalizeRenderUnitPosition`: compute `unitOpenState` and `lastSegmentOpenState` with `resolveAssistantHistoryOpenState(...)` **before** the `if (...) return unit;` without cloning `workSegments`, and only do `.map(...)` after the `if` when `isLastTurn`, `defaultOpen` or `lockedOpen` actually changed.
+  2. In `createConversationTurnRenderUnitsSelector()`: store `verbosity` and `expandAllByDefault` in `Entry`, `HistoryCache` and `history.tailDropped`, and include them in `unchanged` and in `isHistoryReusable`.
 
 ---
 
-## 3. Grupo 2: Los 7 Conflictos `modify/delete` (`SPECIAL [M / D]`) y la Suite de Tests del Fork
+## 3. Group 2: The 7 `modify/delete` Conflicts (`SPECIAL [M / D]`) and the Fork's Test Suite
 
-Como Z.ai borró todos los unit tests de `packages/{ui,services,shared,desktop}/test/` en `v3.17.1`, tenemos:
-- **7 archivos en conflicto `modify/delete` (`[M / D]`)** (tests de upstream que el fork había ampliado):
-  1. `packages/desktop/test/desktopRuntimeEnv.test.ts` (Ola 8: `production` → `alwaysOn`)
-  2. `packages/services/test/highspeedCardService.test.ts` (Ola 3: retry 502 `[1s, 3s]` + `draw-miss` en presupuesto)
-  3. `packages/services/test/zcodeStdioTransport.test.ts` (fix 30/10: listener que tira excepción no mata el stdio transport)
-  4. `packages/shared/test/appSettings.test.ts` (Ola Verbosity: schema de `messageStreamVerbosity` / `messageStreamExpandedByDefault`)
-  5. `packages/ui/test/v4ConversationTurnRenderUnits.test.ts` (Ola Verbosity: 7 tests de `summary`/`normal`/`verbose` + `lockedOpen`)
-  6. `packages/ui/test/useUiPluginRecommendations.test.ts` (Ola 1: card de Diff Ask prepended)
-  7. `packages/ui/test/v4ConversationStatusPanelGitReview.test.ts` (Ola 1: botón Changes → Diff Ask)
-- **10 archivos de test creados por el fork (`[A / -]`) en `packages/*`**:
-  - En `services`: `daemonChannel.test.ts` (**30 tests del canal B3a**), `forkModelRetrySpawnEnv.test.ts`, `subagentLaunchAck.test.ts`.
-    *(Ojo: `daemonChannel.test.ts` importa `./botsService.fixtures.js`, que upstream borró porque no fue tocado por el fork; si conservamos `daemonChannel.test.ts`, hay que conservar también `packages/services/test/botsService.fixtures.ts`).*
-  - En `shared`: `zcodeApiRetryStatus.test.ts`, `zcodeSessionEventTolerance.test.ts`.
-  - En `ui`: `chatApiRetryCountdown.test.ts`, `conversationExpandDefaultStore.test.ts`, `forkCommandModel.test.ts`, `reasoningExpandDefault.test.ts`, `toolLayoutDefaultOpen.test.ts`.
-- *(Recordatorio: los 9 archivos de tests del fork dentro de `apps/zcode-cli/` **siguen funcionando sin cambios** porque el CLI no retiró sus tests).*
+Since Z.ai deleted every unit test in `packages/{ui,services,shared,desktop}/test/` in `v3.17.1`, we have:
+- **7 files in a `modify/delete` conflict (`[M / D]`)** (upstream tests the fork had extended):
+  1. `packages/desktop/test/desktopRuntimeEnv.test.ts` (Wave 8: `production` → `alwaysOn`)
+  2. `packages/services/test/highspeedCardService.test.ts` (Wave 3: 502 retry `[1s, 3s]` + `draw-miss` inside budget)
+  3. `packages/services/test/zcodeStdioTransport.test.ts` (2026-10-30 fix: a throwing listener does not kill the stdio transport)
+  4. `packages/shared/test/appSettings.test.ts` (Verbosity wave: `messageStreamVerbosity` / `messageStreamExpandedByDefault` schema)
+  5. `packages/ui/test/v4ConversationTurnRenderUnits.test.ts` (Verbosity wave: 7 tests for `summary`/`normal`/`verbose` + `lockedOpen`)
+  6. `packages/ui/test/useUiPluginRecommendations.test.ts` (Wave 1: Diff Ask card prepended)
+  7. `packages/ui/test/v4ConversationStatusPanelGitReview.test.ts` (Wave 1: Changes button → Diff Ask)
+- **10 test files created by the fork (`[A / -]`) in `packages/*`**:
+  - In `services`: `daemonChannel.test.ts` (**30 tests for the B3a channel**), `forkModelRetrySpawnEnv.test.ts`, `subagentLaunchAck.test.ts`.
+    *(Careful: `daemonChannel.test.ts` imports `./botsService.fixtures.js`, which upstream deleted because the fork had not touched it; if we keep `daemonChannel.test.ts`, we must keep `packages/services/test/botsService.fixtures.ts` too).*
+  - In `shared`: `zcodeApiRetryStatus.test.ts`, `zcodeSessionEventTolerance.test.ts`.
+  - In `ui`: `chatApiRetryCountdown.test.ts`, `conversationExpandDefaultStore.test.ts`, `forkCommandModel.test.ts`, `reasoningExpandDefault.test.ts`, `toolLayoutDefaultOpen.test.ts`.
+- *(Reminder: the fork's 9 test files inside `apps/zcode-cli/` **keep working unchanged** because the CLI did not retire its tests).*
 
-### Las opciones y su Trade-off para los tests de `packages/*`:
+### The options and their trade-off for the `packages/*` tests:
 
-#### Opción A (Recomendada): Conservar los 17 tests del fork bajo un `vitest.fork.config.ts` dedicado
-- **Cómo funciona**:
-  - Aceptamos el borrado de los ~1.800 tests de upstream (no mantenemos tests ajenos que Z.ai abandonó).
-  - Conservamos los **17 archivos de test que prueban features propios del fork** (los 10 `[A]` + los 7 `[M/D]` + `packages/services/test/botsService.fixtures.ts`).
-  - Dejamos `vitest.config.ts` y `scripts/engineering-test-files.json` **100% idénticos a upstream** (para que los gates `pnpm test:architecture` y `pnpm test:engineering-tools` de upstream pasen sin fricción), y creamos un archivo nuevo del fork `vitest.fork.config.ts` que incluye únicamente los 17 tests del fork.
-  - Actualizamos `scripts/sync-upstream.nu` para que corra `vitest run -c vitest.fork.config.ts`.
-- **Sub-decisión sobre `@testing-library/react` (5 de los 17 tests)**:
-  Upstream eliminó `@testing-library/react` y `@testing-library/dom` de `packages/ui/package.json` y `pnpm-lock.yaml`. Cinco tests de UI del fork (`chatApiRetryCountdown`, `reasoningExpandDefault`, `toolLayoutDefaultOpen`, `useUiPluginRecommendations`, `v4ConversationStatusPanelGitReview`) lo importan:
-  - **Variante A1 (Limpia a futuro — recomendada)**: Reemplazar en esos 5 archivos el helper de `@testing-library/react` por un mini-helper local con `createRoot` de `react-dom/client` + `act` de `react` (usando `jsdom`, que **sí sigue** en el `package.json` raíz de upstream). **Ventaja enorme**: `packages/ui/package.json` y `pnpm-lock.yaml` (30.000+ líneas) quedan **100% idénticos a upstream** y nunca darán conflicto en futuros syncs.
-  - **Variante A2**: Re-agregar `@testing-library/react` y `@testing-library/dom` a `packages/ui/package.json` y correr `pnpm install`. **Desventaja**: `pnpm-lock.yaml` queda modificado en el fork y dará conflicto en cada sync futuro.
+#### Option A (Recommended): Keep the fork's 17 tests under a dedicated `vitest.fork.config.ts`
+- **How it works**:
+  - We accept the deletion of upstream's ~1,800 tests (we do not maintain other people's tests that Z.ai abandoned).
+  - We keep the **17 test files that exercise the fork's own features** (the 10 `[A]` + the 7 `[M/D]` + `packages/services/test/botsService.fixtures.ts`).
+  - We leave `vitest.config.ts` and `scripts/engineering-test-files.json` **100% identical to upstream** (so upstream's `pnpm test:architecture` and `pnpm test:engineering-tools` gates pass without friction), and we create a new fork file `vitest.fork.config.ts` that includes only the fork's 17 tests.
+  - We update `scripts/sync-upstream.nu` to run `vitest run -c vitest.fork.config.ts`.
+- **Sub-decision about `@testing-library/react` (5 of the 17 tests)**:
+  Upstream removed `@testing-library/react` and `@testing-library/dom` from `packages/ui/package.json` and `pnpm-lock.yaml`. Five of the fork's UI tests (`chatApiRetryCountdown`, `reasoningExpandDefault`, `toolLayoutDefaultOpen`, `useUiPluginRecommendations`, `v4ConversationStatusPanelGitReview`) import it:
+  - **Variant A1 (clean going forward — recommended)**: Replace the `@testing-library/react` helper in those 5 files with a small local helper using `createRoot` from `react-dom/client` + `act` from `react` (using `jsdom`, which **does** stay in upstream's root `package.json`). **Huge advantage**: `packages/ui/package.json` and `pnpm-lock.yaml` (30,000+ lines) stay **100% identical to upstream** and will never conflict in future syncs.
+  - **Variant A2**: Re-add `@testing-library/react` and `@testing-library/dom` to `packages/ui/package.json` and run `pnpm install`. **Disadvantage**: `pnpm-lock.yaml` ends up modified in the fork and will conflict on every future sync.
 
-#### Opción B: Seguir la doctrina de upstream al 100% en `packages/*` o conservar solo los 12 tests sin DOM
-- Conservar únicamente los 12 tests del fork que no usan `@testing-library/react` (incluyendo los 30 tests críticos de `daemonChannel.test.ts`, `zcodeSessionEventTolerance.test.ts`, `v4ConversationTurnRenderUnits.test.ts`, `forkCommandModel.test.ts`, `highspeedCardService.test.ts`, etc.) y retirar los 5 que montaban DOM con `@testing-library/react`.
-
----
-
-## 4. Grupo 3: Los 28 Archivos `CLEAN_3WAY [M / M]` (Fusiones Automáticas Auditadas)
-
-Revisé el diff de ambos lados en los **28 archivos** donde Git hace el merge 3-way sin conflictos textuales.
-- **26 de los 28 archivos son 100% compatibles semánticamente** (por ejemplo: `.husky/pre-push`, `failure-classifier.ts`, `model-execution.ts`, `runner-generate.ts`, `runner-retry.ts`, `runner-stream.ts`, `runner.test.ts`, `contracts/src/model/index.ts`, `turn-model-step.ts`, `runtime-stream-recovery.test.ts`, `node.ts`, `zcodeAgentService.ts`, `zcodeTaskServiceAdapter.ts`, `shared/src/*`, `SettingsPage.tsx`, `en-US.ts`, `zh-CN.ts`, `ConversationRowView.tsx`, `V4ComposerToolbar.tsx`, `conversationTurnRenderUnitTypes.ts`, `conversationTurnWorkSegments.ts`).
-- **2 detalles semánticos detectados al cruzar `CLEAN_3WAY` con `CONFLICT_MM`**:
-  1. En `packages/ui/src/v4/ConversationTurnGroup.tsx`:
-     - En `TurnChatLoadingSlot`: upstream cambió la condición de visibilidad a `apiRetry?.reasonCode === zcodeProviderRuntimeHeadersErrorCode.configNetwork || retryStatus.attempt >= MIN_VISIBLE_API_RETRY_ATTEMPT`. Con `MIN_VISIBLE_API_RETRY_ATTEMPT = 1` del fork (Ola 7), ambas ramas quedan satisfechas desde el intento 1/10.
-     - En `ConversationBackgroundResultWork`: upstream envolvió el bloque de resultado background en un `<Collapsible>` construyendo un `historySegment: ConversationTurnWorkSegment`. Conviene pasar también `...(unit.assistantHistoryLockedOpen !== undefined ? { assistantHistoryLockedOpen: unit.assistantHistoryLockedOpen } : {})` en ese `historySegment` para que el chevron de `AssistantHistoryStatus` se comporte igual que en los turnos normales.
-  2. En `packages/ui/src/v4/SessionPane.tsx`:
-     - Upstream introdujo `modelSelectionDisplayView` para las props de render (mientras mantiene `modelSelectionView` para las operaciones de envío). En nuestro bloque de `resolveCommandModelSelection` (Ola 2, dentro de `dispatchSendTextAfterConfig`), seguimos usando `view: modelSelectionView` (que sigue existiendo en scope y ya está en el array de dependencias del `useCallback`), por lo que compila y funciona sin cambios.
+#### Option B: Follow upstream's doctrine 100% in `packages/*`, or keep only the 12 tests without DOM
+- Keep only the fork's 12 tests that do not use `@testing-library/react` (including the 30 critical tests in `daemonChannel.test.ts`, `zcodeSessionEventTolerance.test.ts`, `v4ConversationTurnRenderUnits.test.ts`, `forkCommandModel.test.ts`, `highspeedCardService.test.ts`, etc.) and retire the 5 that mounted DOM with `@testing-library/react`.
 
 ---
 
-## 5. Grupo 4: Los 63 Archivos `ONLY_OURS` — 3 Ajustes de Higiene y Gobernanza
+## 4. Group 3: The 28 `CLEAN_3WAY [M / M]` Files (Audited Automatic Merges)
 
-Aunque estos 63 archivos no tienen conflicto con upstream, la expedición detectó **3 puntos** que debemos ajustar al cerrar el merge para que todos los gates (`pnpm lint`, `pnpm typecheck`, `pnpm architecture:check --changed`) pasen en verde:
+I reviewed both sides' diffs in the **28 files** where Git does the 3-way merge without textual conflicts.
+- **26 of the 28 files are 100% semantically compatible** (for example: `.husky/pre-push`, `failure-classifier.ts`, `model-execution.ts`, `runner-generate.ts`, `runner-retry.ts`, `runner-stream.ts`, `runner.test.ts`, `contracts/src/model/index.ts`, `turn-model-step.ts`, `runtime-stream-recovery.test.ts`, `node.ts`, `zcodeAgentService.ts`, `zcodeTaskServiceAdapter.ts`, `shared/src/*`, `SettingsPage.tsx`, `en-US.ts`, `zh-CN.ts`, `ConversationRowView.tsx`, `V4ComposerToolbar.tsx`, `conversationTurnRenderUnitTypes.ts`, `conversationTurnWorkSegments.ts`).
+- **2 semantic details detected when crossing `CLEAN_3WAY` with `CONFLICT_MM`**:
+  1. In `packages/ui/src/v4/ConversationTurnGroup.tsx`:
+     - In `TurnChatLoadingSlot`: upstream changed the visibility condition to `apiRetry?.reasonCode === zcodeProviderRuntimeHeadersErrorCode.configNetwork || retryStatus.attempt >= MIN_VISIBLE_API_RETRY_ATTEMPT`. With the fork's `MIN_VISIBLE_API_RETRY_ATTEMPT = 1` (Wave 7), both branches are satisfied from attempt 1/10.
+     - In `ConversationBackgroundResultWork`: upstream wrapped the background-result block in a `<Collapsible>` building a `historySegment: ConversationTurnWorkSegment`. It is worth also passing `...(unit.assistantHistoryLockedOpen !== undefined ? { assistantHistoryLockedOpen: unit.assistantHistoryLockedOpen } : {})` in that `historySegment` so the `AssistantHistoryStatus` chevron behaves like it does in normal turns.
+  2. In `packages/ui/src/v4/SessionPane.tsx`:
+     - Upstream introduced `modelSelectionDisplayView` for render props (while keeping `modelSelectionView` for send operations). In our `resolveCommandModelSelection` block (Wave 2, inside `dispatchSendTextAfterConfig`), we still use `view: modelSelectionView` (which still exists in scope and is already in the `useCallback` dependency array), so it compiles and works unchanged.
 
-1. **`packages/services/src/bots/daemonChannel.ts` supera hoy el límite de 800 líneas de `oxlint`**:
-   - Tras los commits de `respond` (`6993d7e8`) y `steer` (`7ae1a972`), `daemonChannel.ts` quedó en 1.019 líneas efectivas (máximo 800 en `.oxlintrc.json`) y tiene un `type ZCodePermissionResponse` importado sin usar, haciendo que `pnpm lint` falle hoy con 1 error y 1 warning.
-   - **Solución**: quitar el import `ZCodePermissionResponse` sin usar y agregar `/* oxlint-disable eslint(max-lines) -- ... */` en el encabezado de `daemonChannel.ts` (o extraer los handlers de `respond`/`steer` junto a `daemonChannelModelSelection.ts`), exactamente igual que `botsService.ts`, `zcodeAgentService.ts` y `node.ts`.
+---
+
+## 5. Group 4: The 63 `ONLY_OURS` Files — 3 Hygiene and Governance Adjustments
+
+Although these 63 files do not conflict with upstream, the expedition detected **3 points** we must adjust when closing the merge so that all the gates (`pnpm lint`, `pnpm typecheck`, `pnpm architecture:check --changed`) pass green:
+
+1. **`packages/services/src/bots/daemonChannel.ts` currently exceeds `oxlint`'s 800-line limit**:
+   - After the `respond` (`6993d7e8`) and `steer` (`7ae1a972`) commits, `daemonChannel.ts` sits at 1,019 effective lines (max 800 in `.oxlintrc.json`) and has an unused imported `type ZCodePermissionResponse`, making `pnpm lint` fail today with 1 error and 1 warning.
+   - **Solution**: remove the unused `ZCodePermissionResponse` import and add `/* oxlint-disable eslint(max-lines) -- ... */` at the top of `daemonChannel.ts` (or extract the `respond`/`steer` handlers next to `daemonChannelModelSelection.ts`), exactly like `botsService.ts`, `zcodeAgentService.ts` and `node.ts`.
 2. **`packages/ui/test/chatApiRetryCountdown.test.ts`**:
-   - Tiene un warning de `oxlint` por `import type { ApiRetryState } from "@zcode/shared"` sin usar; conviene limpiarlo.
+   - It has an `oxlint` warning for an unused `import type { ApiRetryState } from "@zcode/shared"`; worth cleaning up.
 3. **`scripts/sync-upstream.nu`**:
-   - En la línea 42 ejecuta `packages/ui/test/useRecommendedUiPlugins.test.ts` (borrado por upstream) sin `-c vitest.fork.config.ts`. Lo actualizaremos para que corra la suite del fork con la nueva configuración.
+   - On line 42 it runs `packages/ui/test/useRecommendedUiPlugins.test.ts` (deleted by upstream) without `-c vitest.fork.config.ts`. We will update it to run the fork suite with the new configuration.
 
 ---
 
-## 6. Plan de Ejecución Paso a Paso (para cuando pasemos a modo Build)
+## 6. Step-by-Step Execution Plan (for when we switch to Build mode)
 
-1. **Fetch & Merge sin commit (`git merge --no-commit upstream/main`)** sobre `damian`.
-2. **Resolver los 9 conflictos `CONFLICT_MM`** aplicando las fusiones exactas del **Punto 2** (incluyendo la invalidación de caché por `verbosity`/`expandAllByDefault` en `createConversationTurnRenderUnitsSelector`).
-3. **Resolver los 7 conflictos `SPECIAL [M / D]` + `botsService.fixtures.ts`** según la opción que elijas en el **Punto 3** y crear `vitest.fork.config.ts`.
-4. **Aplicar los 3 ajustes de higiene del Punto 5** (`daemonChannel.ts` lint, `forkCommandModel.ts` en `architecture-policy.yaml`, y `scripts/sync-upstream.nu`).
-5. **Correr la batería completa de verificación**:
-   - `pnpm typecheck` (raíz)
-   - `tsc --noEmit` en `apps/zcode-cli/packages/{contracts,adapters,core,bootstrap,tui,i18n}`
-   - `pnpm lint` (`oxlint`, 0 errores)
-   - `pnpm architecture:check --changed` y `pnpm test:architecture`
-   - Suites de Vitest del CLI (`apps/zcode-cli`: `runner-retry`, `runner`, `failure-classifier`, `failure-usage-limit-reset`, `runner-usage-limit-segments`, `live-cot-tap`, `skills`, `runtime-stream-recovery`, `tui-network-retry-copy`)
-   - Suites de Vitest del fork (`vitest.fork.config.ts`: `daemonChannel`, `zcodeStdioTransport`, `highspeedCardService`, `v4ConversationTurnRenderUnits`, etc.)
-6. **Commit del merge + actualización del ledger en `FORK.md`** (listo para `build-install.nu`).
+1. **Fetch & merge without commit (`git merge --no-commit upstream/main`)** on `damian`.
+2. **Resolve the 9 `CONFLICT_MM` conflicts** by applying the exact merges from **Point 2** (including the `verbosity`/`expandAllByDefault` cache invalidation in `createConversationTurnRenderUnitsSelector`).
+3. **Resolve the 7 `SPECIAL [M / D]` conflicts + `botsService.fixtures.ts`** according to the option you pick in **Point 3** and create `vitest.fork.config.ts`.
+4. **Apply the 3 hygiene adjustments from Point 5** (`daemonChannel.ts` lint, `forkCommandModel.ts` in `architecture-policy.yaml`, and `scripts/sync-upstream.nu`).
+5. **Run the full verification battery**:
+   - `pnpm typecheck` (root)
+   - `tsc --noEmit` in `apps/zcode-cli/packages/{contracts,adapters,core,bootstrap,tui,i18n}`
+   - `pnpm lint` (`oxlint`, 0 errors)
+   - `pnpm architecture:check --changed` and `pnpm test:architecture`
+   - CLI Vitest suites (`apps/zcode-cli`: `runner-retry`, `runner`, `failure-classifier`, `failure-usage-limit-reset`, `runner-usage-limit-segments`, `live-cot-tap`, `skills`, `runtime-stream-recovery`, `tui-network-retry-copy`)
+   - Fork Vitest suites (`vitest.fork.config.ts`: `daemonChannel`, `zcodeStdioTransport`, `highspeedCardService`, `v4ConversationTurnRenderUnits`, etc.)
+6. **Merge commit + ledger update in `FORK.md`** (ready for `build-install.nu`).
 
 ---
 
-### Pregunta para definir antes de ejecutar
+### Question to settle before executing
 
-Para el **Grupo 2 (los tests del fork en `packages/*` tras el retiro de App unit tests en upstream)**, ¿confirmamos ir por la **Opción A1** (conservar los 17 tests propios del fork + `botsService.fixtures.ts` bajo `vitest.fork.config.ts`, y pasar los 5 tests de UI a `react-dom/client` para mantener `packages/ui/package.json` y `pnpm-lock.yaml` **100% idénticos a upstream**)?
+For **Group 2 (the fork's tests in `packages/*` after upstream's App unit-test retirement)**, do we confirm going with **Option A1** (keep the fork's own 17 tests + `botsService.fixtures.ts` under `vitest.fork.config.ts`, and move the 5 UI tests to `react-dom/client` to keep `packages/ui/package.json` and `pnpm-lock.yaml` **100% identical to upstream**)?
 
 ---
 
@@ -325,9 +325,9 @@ Every tool invocation, in session order (full outputs live in the raw archive):
 
 ---
 
-## Decision record — Grupo 2 test doctrine
+## Decision record — Group 2 test doctrine
 
-**2026-11-02: Opción A1 confirmed by the owner.**
+**2026-11-02: Option A1 confirmed by the owner.**
 
 When the merge executes:
 - Keep all **17 fork test files** + `packages/services/test/botsService.fixtures.ts` (required by `daemonChannel.test.ts`).

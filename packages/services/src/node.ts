@@ -3608,7 +3608,7 @@ export async function disposeServiceResourcesAndWait(services: ServiceCollection
     .get(services)
     ?.disposeAndWait()
     .catch(() => {});
-  // [fork] B3a: bye best-effort a los clientes y cierre real del unix socket.
+  // [fork] B3a: best-effort bye to the clients and a real close of the unix socket.
   await daemonLocalChannels
     .get(services)
     ?.dispose()

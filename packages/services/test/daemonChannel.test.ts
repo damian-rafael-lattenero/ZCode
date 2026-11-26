@@ -770,7 +770,7 @@ describe("daemon local channel (B3a)", () => {
     const queryResult = (id: string) =>
       client.waitFor((message) => message.type === "query_result" && message.id === id);
 
-    // runtime.contextUsage = la MISMA fuente que restaura el meter del desktop
+    // runtime.contextUsage = the SAME source the desktop meter restores from
     // (contextUsageFromRuntime ?? contextUsageFromProjection del adapter).
     (taskService.getTaskSnapshot as ReturnType<typeof vi.fn>).mockResolvedValue({
       meta: { taskId: "task-7", title: "T", workspacePath: "/tmp/workspace", model: "meta-model" },
@@ -791,7 +791,7 @@ describe("daemon local channel (B3a)", () => {
       type: "query_result",
       result: { model: "GLM-5.3-Flash", usedTokens: 45300, windowTokens: 200000, windowSource: "runtime" },
     });
-    // El medidor se lee liviano: 1 mensaje basta (no es el /last del snapshot).
+    // The meter is read lightly: 1 message is enough (not the snapshot's /last).
     expect(taskService.getTaskSnapshot).toHaveBeenCalledWith(
       expect.objectContaining({ taskId: "task-7", workspacePath: "/tmp/workspace", messageLimit: 1 }),
     );
@@ -1216,7 +1216,7 @@ describe("daemon local channel (B3a)", () => {
     expect(loser.getState()).toBe("conflict");
     expect(await readToken()).toBe(winnerToken);
     await loser.dispose();
-    // El dispose del perdedor no borra los archivos del ganador.
+    // The loser's dispose does not delete the winner's files.
     expect(await readFile(join(dataDir, "daemon-local.token"), "utf8")).toContain(winnerToken);
     const client = await connectAndHandshake();
     client.send({ type: "ping", id: "still-alive" });
@@ -1452,7 +1452,7 @@ describe("daemon local channel (B3a)", () => {
     client.destroy();
   });
 
-  // [fork] A5 — los regalos del coding plan (3/11).
+  // [fork] A5 — the coding plan's gifts (3/11).
 
   it("codingPlanGifts reads both planes through the conversation's provider and the marketing banner", async () => {
     const marketingTouchService = {

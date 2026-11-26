@@ -351,7 +351,7 @@ async function attemptTitleWithModel(
 
 // UserPromptSubmit hooks inject laws/memory as <system-reminder> blocks INSIDE the first user
 // message; without this strip the title is born from that infrastructure prose (e.g. bot-mirror
-// tasks titled "Contexto de memoria (agent-brain...") instead of the user's actual query.
+// tasks titled "Memory context (agent-brain...") instead of the user's actual query.
 // If stripping empties the input, keep the original — never an empty title source.
 function stripHookInjectedContext(input: string): string {
   const stripped = input.replace(/<system-reminder>[\s\S]*?<\/system-reminder>/gi, "").trim();
@@ -364,7 +364,8 @@ function stripHookInjectedContext(input: string): string {
 // the rest (the user's actual query, possibly multi-chunk). Same marker list as the
 // backfill tool (scripts/backfill-session-titles.mjs) — keep the two in sync.
 const CONTEXT_CHUNK_MARKERS: readonly string[] = [
-  "Contexto de memoria (agent-brain", // lang-ok: wire marker emitted by the Kotlin bot ("memory context"), matched verbatim
+  "Memory context (agent-brain", // wire marker emitted by the bot (2026-11-26 sweep)
+  "Contexto de memoria (agent-brain", // legacy marker, prompts recorded before the sweep
   "🧠 Recent brain memory",
   "⚖️ Permanent laws",
   "SessionStart hook additional context",

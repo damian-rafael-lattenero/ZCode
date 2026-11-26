@@ -51,7 +51,7 @@ def build-bundle [repo: string]: nothing -> string {
     # silence during this stretch — announce on every long phase; the announce
     # never breaks the run).
     print "[fork] pnpm install --frozen-lockfile (node_modules against the lock)..."
-    announce "🚀 deploy Fork ZCode — pnpm install --frozen-lockfile (tarda minutos)…"  # lang-ok: owner-voice announce
+    announce "🚀 Fork ZCode deploy — pnpm install --frozen-lockfile (takes minutes)…"
     let install: record = (do { ^$MISE exec -- node scripts/mise-run.mjs pnpm install --frozen-lockfile } | complete)
     print $install.stdout
     if $install.exit_code != 0 {
@@ -59,7 +59,7 @@ def build-bundle [repo: string]: nothing -> string {
         fail "[fork]" $"pnpm install failed \(exit ($install.exit_code)\)"
     }
     print "[fork] bundle:desktop (ZCODE_ENV=production, no signing)..."
-    announce "🚀 deploy Fork ZCode — bundle:desktop (el tramo largo, ~10-15 min)…"  # lang-ok: owner-voice announce
+    announce "🚀 Fork ZCode deploy — bundle:desktop (the long stretch, ~10-15 min)…"
     let bundle: record = (with-env {
         ZCODE_ENV: "production"
         CSC_IDENTITY_AUTO_DISCOVERY: "false"
@@ -83,7 +83,7 @@ def build-bundle [repo: string]: nothing -> string {
     if ($zips | is-empty) {
         fail "[fork]" "the build produced no ZCode-*-mac-arm64.zip"
     }
-    announce $"✅ deploy Fork ZCode — build listo \(($zips | first).name | path basename\)"  # lang-ok: owner-voice announce
+    announce $"✅ Fork ZCode deploy — built \(($zips | first).name | path basename\)"
     (($zips | first).name)
 }
 
@@ -95,7 +95,7 @@ def build-bundle [repo: string]: nothing -> string {
 # decides (main arms the waiter instead of dying).
 def quit-zcode []: nothing -> bool {
     if not (zcode-running) { return true }
-    announce "🔒 cerrando ZCode para el swap (~15 s)…"  # lang-ok: owner-voice announce
+    announce "🔒 closing ZCode for the swap (~15 s)…"
     for attempt in 1..3 {
         let r: record = (^osascript -e "quit app \"ZCode\"" | complete)
         # -128 = the quit handler CANCELED (a turn is running): that is an
@@ -200,7 +200,7 @@ def install-zip [repo: string, zip: string, keep_prev: bool]: nothing -> nothing
         print -e "[fork] WARN: Diff Ask bootstrap failed — install it manually (Plugins → Personal)"
     }
     ^open -a ZCode
-    announce-loud $"🔥 <b>DEPLOY FORK ZCODE COMPLETO</b> — versión ($version) instalada y app reabierta; verificá el canal 📡"  # lang-ok: owner-voice announce
+    announce-loud $"🔥 <b>FORK ZCODE DEPLOY COMPLETE</b> — version ($version) installed and the app reopened; check the 📡 channel"
     print "[fork] done — verify: New tab → App plugins grid shows Diff Ask; bot turn works; /diff works."
 }
 

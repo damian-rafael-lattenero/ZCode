@@ -19,7 +19,7 @@ export def fail [prefix: string, msg: string]: nothing -> nothing {
     # The owner's law (2026-11-11 incident): parens inside an interpolated
     # string are SUBEXPRESSIONS — `(...)` with prose ran external `el` and the
     # failure announce itself crashed. Plain words after the em-dash, no parens.
-    announce-loud $"❌ <b>DEPLOY FORK FALLÓ</b> — ($msg) — mirá la salida del script"  # lang-ok: owner-voice announce
+    announce-loud $"❌ <b>FORK DEPLOY FAILED</b> — ($msg) — check the script output"
     exit 1
 }
 

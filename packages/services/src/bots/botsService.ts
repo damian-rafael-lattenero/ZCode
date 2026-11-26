@@ -2763,7 +2763,7 @@ export function createBotsService(
     };
   }
 
-  /** Valida el effort pedido contra los niveles reales del modelo elegido. */
+  /** Validates the requested effort against the chosen model's real levels. */
   function assertEffortAllowed(
     view: ModelSelectionView,
     selection: { providerId: string; modelId: string },
@@ -8854,7 +8854,7 @@ export function createBotsService(
           if (!selectOption) {
             throw new Error("thought level is not configurable for the active task");
           }
-          // La lista del session (configOptions) es la autoridad para el effort del task.
+          // The session list (configOptions) is the authority for the task's effort.
           const allowed = (selectOption.options ?? []).map((item) => item.value);
           if (allowed.length > 0 && !allowed.includes(params.effort!)) {
             throw new Error(

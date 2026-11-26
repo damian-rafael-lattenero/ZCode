@@ -119,7 +119,7 @@ export const screen = {
     return assertSingle(candidates, `element with role "${role}"`, String(options?.name ?? ""));
   },
   getByTestId(testId: string): Element {
-    // jsdom no implementa CSS.escape; filtrar por valor evita dependencias del selector.
+    // jsdom does not implement CSS.escape; filtering by value avoids selector dependencies.
     const candidates = Array.from(document.body.querySelectorAll("[data-testid]")).filter(
       (element) => element.getAttribute("data-testid") === testId,
     );

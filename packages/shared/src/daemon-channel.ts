@@ -1,41 +1,42 @@
-/* [fork] B3a — canal «daemon local» (ADR-022).
- * Contrato de línea del unix socket que expone handleInboundMessage, el stream
- * bot-channel-continuous y las service queries al daemon Kotlin del bot.
- * La spec narrativa completa (auth, semántica de reconexión, at-least-once)
- * vive en docs/fork/DAEMON-CHANNEL.md; estos tipos son la fuente normativa de
- * los shapes. El protocolo es aditivo: campos nuevos son opcionales y los
- * lectores viejos los ignoran; romper compat exige bump de DAEMON_CHANNEL_PROTOCOL_VERSION.
+/* [fork] B3a — "daemon local" channel (ADR-022).
+ * Line contract for the unix socket that exposes handleInboundMessage, the
+ * bot-channel-continuous stream and the service queries to the bot's Kotlin
+ * daemon. The full narrative spec (auth, reconnection semantics, at-least-once)
+ * lives in docs/fork/DAEMON-CHANNEL.md; these types are the normative source of
+ * the shapes. The protocol is additive: new fields are optional and old
+ * readers ignore them; breaking compatibility requires a bump of
+ * DAEMON_CHANNEL_PROTOCOL_VERSION.
  */
 import type { ZCodeStreamEvent } from "./zcode-task-types-core.js";
 import type { ZCodePermissionResponse } from "./zcode-protocol-legacy-types.js";
 
 export const DAEMON_CHANNEL_PROTOCOL_VERSION = 1;
 
-/** Rutas relativas a la raíz de datos (~/.zcode por defecto). */
+/** Paths relative to the data root (~/.zcode by default). */
 export const DAEMON_CHANNEL_SOCKET_FILENAME = "daemon-local.sock";
 export const DAEMON_CHANNEL_TOKEN_FILENAME = "daemon-local.token";
-/** El token y el socket se crean 0600: solo el usuario dueño puede hablar. */
+/** The token and the socket are created 0600: only the owning user can talk. */
 export const DAEMON_CHANNEL_FILE_MODE = 0o600;
-/** Límite de una línea JSONL (los attachments viajan base64 dentro del frame). */
+/** Limit of one JSONL line (attachments travel base64 inside the frame). */
 export const DAEMON_CHANNEL_MAX_LINE_BYTES = 24 * 1024 * 1024;
-/** El hello debe llegar en la primera línea, dentro de esta ventana. */
+/** The hello must arrive on the first line, inside this window. */
 export const DAEMON_CHANNEL_HANDSHAKE_TIMEOUT_MS = 10_000;
-/** Ventana de dedupe de inbound por messageId (paridad con el offset de Telegram). */
+/** Inbound dedupe window by messageId (parity with Telegram's offset). */
 export const DAEMON_CHANNEL_INBOUND_DEDUPE_TTL_MS = 2 * 60_000;
 
 /**
- * Intervalo del latido del stream continuo (stream_keepalive). 15s da un
- * margen 4× bajo el watchdog de 60s del consumidor (el bot re-suscribe a los
- * 60s de silencio crudo; con el latido keyará en «3+ intervalos sin frames»).
+ * Continuous-stream heartbeat interval (stream_keepalive). 15s leaves a
+ * 4× margin under the consumer's 60s watchdog (the bot re-subscribes after
+ * 60s of raw silence; with the heartbeat it keys on "3+ intervals without frames").
  */
 export const DAEMON_CHANNEL_STREAM_KEEPALIVE_INTERVAL_MS = 15_000;
 
-/** Provider sintético del canal: una bot entry más en bot-config.v3.json. */
+/** Synthetic provider for the channel: one more bot entry in bot-config.v3.json. */
 export const DAEMON_CHANNEL_PROVIDER = "daemon";
 export const DAEMON_CHANNEL_DEFAULT_BOT_ID = "daemon-local";
 export const DAEMON_CHANNEL_PROVIDER_USER_ID = "daemon";
 
-// ---- cliente → servidor ------------------------------------------------------
+// ---- client → server ---------------------------------------------------------
 
 export interface DaemonChannelHelloRequest {
   type: "hello";
@@ -50,40 +51,40 @@ export interface DaemonChannelInboundAttachment {
   filename: string;
   mimeType: string;
   sizeBytes?: number;
-  /** Contenido embebido (el servicio lo materializa en bot-attachments/). */
+  /** Embedded content (the service materializes it in bot-attachments/). */
   dataBase64?: string;
-  /** Ruta absoluta legible por el host; preferida sobre dataBase64 si existe. */
+  /** Absolute path readable by the host; preferred over dataBase64 when present. */
   localPath?: string;
 }
 
 export interface DaemonChannelInboundRequest {
   type: "inbound";
   id: string;
-  /** Texto libre tal como iría al composer; los /comandos los parsea botsService. */
+  /** Free text as it would go to the composer; botsService parses the /commands. */
   text: string;
-  /** Anula la detección de comandos (texto que empieza con «/» pero no es comando). */
+  /** Overrides command detection (text that starts with "/" but is not a command). */
   commandText?: string;
-  /** Id estable del update origen (p. ej. update_id de Telegram) para dedupe. */
+  /** Stable id of the source update (e.g. Telegram's update_id) for dedupe. */
   messageId?: string;
   attachments?: DaemonChannelInboundAttachment[];
   receivedAt?: number;
   /**
-   * Sesión DESTINO del texto (aditivo, 30/10): presente → el canal envía el
-   * prompt DIRECTO a esa task (sendPrompt) en vez del botsService — es la
-   * ÓRDEN del dueño a un subagente attachado; la respuesta vuelve por el
-   * stream de la sesión (la carta attachada la muestra). Ausente → el
-   * routing de siempre (la conversación bindeada).
+   * DESTINATION session for the text (additive, 2026-10-30): present → the channel sends the
+   * prompt DIRECT to that task (sendPrompt) instead of going through the botsService — it is the
+   * owner's ORDER to an attached subagent; the response comes back over the
+   * session's stream (the attached card shows it). Absent → the
+   * usual routing (the bound conversation).
    */
   taskId?: string;
   /**
-   * EL BIND ATÓMICO (aditivo, 2/11): presente → el contexto del bot se
-   * apunta PRIMERO a esa task (la MISMA ley del comando /task — la
-   * frontera de proyecto/fixed-cwd y el veredicto taskRunning incluidos)
-   * y el texto vuela después por el routing de siempre. El refusal viaja
-   * como única reply del inbound_result («taskRunning» / «Task not
-   * found») — el mismo veredicto que el sendInboundAwait del bot ya sabe
-   * leer; el texto NO se entrega si el bind falla. Incompatible con
-   * taskId (la orden gana); los lectores viejos lo ignoran.
+   * THE ATOMIC BIND (additive, 2026-11-02): present → the bot's context is
+   * pointed FIRST at that task (the SAME /task command law — the
+   * project/fixed-cwd boundary and the taskRunning verdict included)
+   * and the text flies afterwards over the usual routing. The refusal travels
+   * as the single inbound_result reply ("taskRunning" / "Task not
+   * found") — the same verdict the bot's sendInboundAwait already knows how to
+   * read; the text is NOT delivered if the bind fails. Incompatible with
+   * taskId (the order wins); old readers ignore it.
    */
   bindTaskId?: string;
 }
@@ -142,12 +143,12 @@ export type DaemonChannelQuery =
       kind: "quota";
       invalidateBalanceCache?: boolean;
       /**
-       * La conversación activa del bot (aditivo, 30/10): de su model
-       * selection sale el providerId → el hint de accountAccess
-       * ({mode: start-plan | individual-coding-plan}) que hace que el
-       * provider resuelva el acceso DINÁMICO real en el borde — sin él el
-       * camino Start Plan nunca entra y la respuesta es el mentiroso
-       * not_configured (medido en vivo 30/10).
+       * The bot's active conversation (additive, 2026-10-30): its model
+       * selection yields the providerId → the accountAccess hint
+       * ({mode: start-plan | individual-coding-plan}) that makes the
+       * provider resolve the real DYNAMIC access at the edge — without it the
+       * Start Plan path never enters and the answer is the lying
+       * not_configured (measured live 2026-10-30).
        */
       taskId?: string;
       /**
@@ -170,15 +171,15 @@ export type DaemonChannelQuery =
     }
   | {
       kind: "setModelSelection";
-      /** «conversation» = la conversación enfocada del bot; «default» = el default global de la app. */
+      /** "conversation" = the bot's focused conversation; "default" = the app's global default. */
       scope: "conversation" | "default";
       workspacePath?: string;
       workspaceIdentity?: string;
-      /** Plan = providerId de cuenta (p. ej. account:zai-individual-coding-plan). */
+      /** Plan = account providerId (e.g. account:zai-individual-coding-plan). */
       plan?: string;
-      /** modelId dentro del plan. */
+      /** modelId within the plan. */
       model?: string;
-      /** Reasoning level («effort»). */
+      /** Reasoning level ("effort"). */
       effort?: string;
     }
   | {
@@ -199,15 +200,15 @@ export type DaemonChannelQuery =
     }
   | {
       /**
-       * setMode (aditivo, 2/11 — el /mode del bot: plan 🗺 / yolo 🔓).
-       * Cambia el MODO de colaboración de la conversación por el MISMO camino
-       * del switch de la UI (v4 switchCollaborationMode, con convergencia de
-       * revisión). Un modo fuera de `DAEMON_CHANNEL_MODES` o una task
-       * desconocida se rechazan honestos (error, nunca un downgrade silencioso).
+       * setMode (additive, 2026-11-02 — the bot's /mode: plan 🗺 / yolo 🔓).
+       * Changes the conversation's collaboration MODE through the SAME path
+       * as the UI switch (v4 switchCollaborationMode, with revision
+       * convergence). A mode outside `DAEMON_CHANNEL_MODES` or an unknown
+       * task is rejected honestly (error, never a silent downgrade).
        */
       kind: "setMode";
       taskId: string;
-      /** Solo los modos que el usuario puede cambiar (mismo set que la UI). */
+      /** Only the modes the user can change (same set as the UI). */
       mode: (typeof DAEMON_CHANNEL_MODES)[number];
       workspacePath?: string;
       workspaceIdentity?: string;
@@ -262,24 +263,24 @@ export type DaemonChannelQuery =
     }
   | {
       /**
-       * codingPlanGifts (aditivo, 3/11 — el 🎁 del /quota del bot): LECTURA
-       * de las dos superficies de regalo que ya existen en los services —
-       * los resets de cuota ya otorgados (status) y las ofertas reclamables
-       * (preview). taskId es opcional pero recomendado: de su model selection
-       * sale el accountAccess que resuelve la cuenta real del coding plan;
-       * sin una cuenta de plan, el host prueba el plan de la app y el
-       * registry. NUNCA llama /opportunity (mutación con cupo server-side).
+       * codingPlanGifts (additive, 2026-11-03 — the bot's /quota 🎁): READ
+       * of the two gift surfaces that already exist in the services —
+       * the already-granted quota resets (status) and the claimable offers
+       * (preview). taskId is optional but recommended: its model selection
+       * yields the accountAccess that resolves the coding plan's real account;
+       * without a plan account, the host tries the app's plan and the
+       * registry. It NEVER calls /opportunity (a server-side quota mutation).
        */
       kind: "codingPlanGifts";
       taskId?: string;
     }
   | {
       /**
-       * useCodingPlanReset (aditivo, 3/11 — el 🎁 con confirmación del bot):
-       * gasta UN reset ya otorgado (POST /coding-plan/reset/use). Es
-       * IRREVERSIBLE y con idempotency key: el cliente manda la key y un
-       * retry del mismo key no consume dos veces. resetType fuera de
-       * FIVE_HOUR|WEEK y keys vacías o >64 se rechazan en el borde.
+       * useCodingPlanReset (additive, 2026-11-03 — the bot's 🎁 with confirmation):
+       * spends ONE already-granted reset (POST /coding-plan/reset/use). It is
+       * IRREVERSIBLE and carries an idempotency key: the client sends the key and a
+       * retry of the same key does not consume twice. A resetType outside
+       * FIVE_HOUR|WEEK and empty or >64 keys are rejected at the edge.
        */
       kind: "useCodingPlanReset";
       taskId?: string;
@@ -288,65 +289,65 @@ export type DaemonChannelQuery =
     }
   | {
       /**
-       * claimCodingPlan (aditivo, 3/11 — «Reclamar» desde el teléfono): el
-       * MISMO `claimManualPlan` del banner de marketing de la app
-       * (POST /zcode-plan/billing/claim). El servicio responde
-       * {success, code, message, plan?, reason?} — nunca inventa un éxito: un
-       * code 1001-1005 es el server diciendo «ya no»/«terminó». `reason`
-       * (aditivo 4/11) es el narrow literal `verification-unavailable`: el
-       * server pidió captcha (3007) y este build no puede resolverlo; el bot
-       * lo trata como veredicto final, NO como un reintento. planId vacío se
-       * rechaza en el borde.
+       * claimCodingPlan (additive, 2026-11-03 — "Claim" from the phone): the
+       * SAME `claimManualPlan` of the app's marketing banner
+       * (POST /zcode-plan/billing/claim). The service answers
+       * {success, code, message, plan?, reason?} — it never invents a success: a
+       * code 1001-1005 is the server saying "no more"/"it ended". `reason`
+       * (additive 2026-11-04) is the narrow literal `verification-unavailable`: the
+       * server asked for a captcha (3007) and this build cannot solve it; the bot
+       * treats it as a final verdict, NOT as a retry. An empty planId is
+       * rejected at the edge.
        */
       kind: "claimCodingPlan";
       planId: string;
     };
 
 /**
- * Los modos que un usuario puede cambiar desde la UI (subconjunto de
- * `ZCodeTaskMode`; `auto` y los alias legacy no son conmutables). El bot los
- * expone como plan 🗺 / yolo 🔓; el resto queda para paridad con el switch
- * del desktop.
+ * The modes a user can change from the UI (a subset of
+ * `ZCodeTaskMode`; `auto` and the legacy aliases are not switchable). The bot
+ * exposes them as plan 🗺 / yolo 🔓; the rest remain for parity with the desktop
+ * switch.
  */
 export const DAEMON_CHANNEL_MODES = ["build", "edit", "plan", "yolo", "guarded"] as const;
 
 export type DaemonChannelMode = (typeof DAEMON_CHANNEL_MODES)[number];
 
 /**
- * Resultado de `contextWindow` (el medidor de contexto REAL de la
- * conversación — la misma fuente que restaura el meter del desktop:
- * runtime.contextUsage del snapshot). Honesto por contrato: null = el host
- * no lo sabe; NUNCA se estima del lado del host ni del cliente.
+ * `contextWindow` result (the conversation's REAL context meter — the same
+ * source that restores the desktop meter: runtime.contextUsage of the
+ * snapshot). Honest by contract: null = the host does not know; it is NEVER
+ * estimated on the host or the client side.
  */
 export interface DaemonChannelContextWindowResult {
-  /** modelId vigente de la conversación (settings.model del task, o meta). */
+  /** Current modelId of the conversation (settings.model of the task, or meta). */
   model: string | null;
-  /** Tokens del contexto actual (última proyección de usage del runtime). */
+  /** Tokens of the current context (last usage projection from the runtime). */
   usedTokens: number | null;
-  /** Ventana de contexto del modelo; null = desconocida. */
+  /** The model's context window; null = unknown. */
   windowTokens: number | null;
   /**
-   * De dónde salió la ventana (aditivo, 30/10): "model" = el contextWindow
-   * del registry (la ventana REAL del modelo — el size del runtime resultó
-   * ser un tope por segmento, no la ventana); "runtime" = el size del
-   * runtime cuando el registry no cubre el modelo; "owner_default" = la
-   * calibración del dueño (sus modelos son 1M máximo) cuando nada lo
-   * expone — el bot la marca con (~). Ausente = servers viejos.
+   * Where the window came from (additive, 2026-10-30): "model" = the registry's
+   * contextWindow (the model's REAL window — the runtime size turned out to be
+   * a per-segment cap, not the window); "runtime" = the runtime's size when
+   * the registry does not cover the model; "owner_default" = the owner's
+   * calibration (his models are 1M maximum) when nothing exposes it — the bot
+   * marks it with (~). Absent = old servers.
    */
   windowSource?: "model" | "runtime" | "owner_default";
 }
 
 /**
- * Resultado de `codingPlanGifts` (aditivo, 3/11): las dos superficies de
- * regalo del coding plan, tal como la app las pinta —
- *  - `reset`: el pill 🎁 (resets YA otorgados con su expiración, más el
- *    historial de uso). null = el host no pudo leer el plano (ver
+ * `codingPlanGifts` result (additive, 2026-11-03): the coding plan's two gift
+ * surfaces, as the app paints them —
+ *  - `reset`: the 🎁 pill (resets ALREADY granted with their expiration, plus the
+ *    usage history). null = the host could not read the plane (see
  *    `unavailable.reset`);
- *  - `claimable`: el banner «oferta reclamable» (preview con sus
- *    entitlements). null = no se pudo leer.
- * Una superficie caída NO mata a la otra. Sin secretos: solo los valores que
- * la app muestra. `expireAt`/`serverTime` en ms; `effectiveAt` en segundos
- * Unix (así lo manda el server).
+ *  - `claimable`: the "claimable offer" banner (preview with its
+ *    entitlements). null = it could not be read.
+ * One surface going down does NOT kill the other. No secrets: only the values the
+ * app shows. `expireAt`/`serverTime` in ms; `effectiveAt` in Unix
+ * seconds (that is how the server sends it).
  */
 export interface DaemonChannelCodingPlanGiftsResult {
   reset: {
@@ -375,16 +376,16 @@ export interface DaemonChannelCodingPlanGiftsResult {
       }>;
     }>;
   } | null;
-  /** Razón estable por plano caído — nunca el mensaje crudo del server. */
+  /** Stable reason per plan that is down — never the server's raw message. */
   unavailable?: {
     reset?: "not_authenticated" | "not_configured" | "request_failed";
     claimable?: "not_authenticated" | "request_failed";
   };
   /**
-   * Las ofertas del banner de marketing con acción «claim_zcode_plan» (lo
-   * que el dueño VE en la app: «ZCODE GLOBAL BUILD · 300,000,000 tokens ·
-   * Claim»). El plan_id ES el del claim; el label es la copia del botón del
-   * server (texto tal cual). Ausente = el canal no la pudo leer.
+   * The marketing banner's offers with the "claim_zcode_plan" action (what
+   * the owner SEES in the app: "ZCODE GLOBAL BUILD · 300,000,000 tokens ·
+   * Claim"). The plan_id IS the claim's; the label is the server's button copy
+   * (text as-is). Absent = the channel could not read it.
    */
   offers?: Array<{
     planId: string;
@@ -405,47 +406,47 @@ export interface DaemonChannelPingRequest {
 }
 
 /**
- * La RESPUESTA del dueño a una pregunta pendiente (aditivo 30/10/2026): el
- * loop se cierra — la permission_request / elicitation_request que llegó por
- * el stream se contesta DESDE EL TELÉFONO con esta frame, enrutada al MISMO
- * taskId del evento (respondPermission / respondElicitation del task service
- * — los mismos métodos que el desktop UI llama; el requestId del evento ES el
- * interactionId del broker v4). kind «plan» es la aprobación de
- * ExitPlanMode: viaja como elicitation con action accept/decline.
+ * The owner's ANSWER to a pending question (additive 2026-10-30): the
+ * loop closes — the permission_request / elicitation_request that arrived over
+ * the stream is answered FROM THE PHONE with this frame, routed to the SAME
+ * taskId as the event (respondPermission / respondElicitation of the task service
+ * — the same methods the desktop UI calls; the event's requestId IS the
+ * v4 broker's interactionId). kind "plan" is the ExitPlanMode
+ * approval: it travels as an elicitation with action accept/decline.
  */
 export interface DaemonChannelRespondRequest {
   type: "respond";
   id: string;
-  /** La task dueña de la interacción (el taskId del evento de la pregunta). */
+  /** The task owning the interaction (the taskId of the question event). */
   taskId: string;
-  /** El requestId del evento — interactionId en el CLI interaction-broker. */
+  /** The event's requestId — interactionId in the CLI interaction-broker. */
   requestId: string;
   kind: "permission" | "elicitation" | "plan";
-  /** permission: el optionId de la opción elegida (la opción del evento). */
+  /** permission: the optionId of the chosen option (the event's option). */
   optionId?: string;
   /**
-   * permission: la `response` de la opción del evento, devuelta tal cual
-   * (decision + extras). Ausente → el host deriva {decision} del optionId
-   * (deny → deny, cualquier otra cosa → allow — la MISMA regla de
+   * permission: the event option's `response`, returned as-is
+   * (decision + extras). Absent → the host derives {decision} from the optionId
+   * (deny → deny, anything else → allow — the SAME rule as
    * permissionResolvedPayloadToStreamEvents).
    */
   response?: ZCodePermissionResponse;
-  /** elicitation/plan: accept | decline | cancel (plan sin action → accept). */
+  /** elicitation/plan: accept | decline | cancel (plan without action → accept). */
   action?: "accept" | "decline" | "cancel";
-  /** elicitation: el content {answers, answer_0, answer} (buildBotElicitationContent's shape). */
+  /** elicitation: the content {answers, answer_0, answer} (buildBotElicitationContent's shape). */
   content?: Record<string, unknown>;
-  /** Id estable del tap origen — la MISMA ley de dedupe del inbound. */
+  /** Stable id of the source tap — the SAME dedupe law as inbound. */
   messageId?: string;
 }
 
 /**
- * STEER (aditivo, 30/10): redirigir UN turno EN CURSO desde el teléfono.
- * El texto viaja al task service con delivery «guide» (v4 sendText
- * requestedDelivery=guide → el admission del CLI lo inyecta DENTRO del
- * turno corriendo — turn.steerQueued → turn.steerDrained en el próximo
- * límite de herramienta). Idle → el CLI arranca un turno normal con el
- * mismo texto (la guía no se pierde; el cliente lo dice honesto). El ACK
- * es el MISMO inbound_result del inbound (replies vacías).
+ * STEER (additive, 2026-10-30): redirect ONE turn IN PROGRESS from the phone.
+ * The text travels to the task service with delivery "guide" (v4 sendText
+ * requestedDelivery=guide → the CLI admission injects it INSIDE the
+ * running turn — turn.steerQueued → turn.steerDrained at the next
+ * tool boundary). Idle → the CLI starts a normal turn with the
+ * same text (the guide is not lost; the client says so honestly). The ACK
+ * is the SAME inbound_result as inbound (empty replies).
  */
 export interface DaemonChannelSteerRequest {
   type: "steer";
@@ -464,7 +465,7 @@ export type DaemonChannelClientMessage =
   | DaemonChannelRespondRequest
   | DaemonChannelSteerRequest;
 
-// ---- servidor → cliente ------------------------------------------------------
+// ---- server → client ---------------------------------------------------------
 
 export interface DaemonChannelServerInfo {
   pid: number;
@@ -476,12 +477,12 @@ export interface DaemonChannelHelloOk {
   type: "hello_ok";
   protocolVersion: number;
   server: DaemonChannelServerInfo;
-  /** La bot entry del canal (id estable para armar el actor de inbound). */
+  /** The channel's bot entry (stable id for building the inbound actor). */
   bot: { id: string; enabled: boolean };
   capabilities: string[];
 }
 
-/** Proyección mínima de BotOutboundMessage: lo que el daemon renderiza. */
+/** Minimal BotOutboundMessage projection: what the daemon renders. */
 export interface DaemonChannelReply {
   text: string;
   locale?: string;
@@ -492,16 +493,16 @@ export interface DaemonChannelReply {
 export interface DaemonChannelInboundResult {
   type: "inbound_result";
   id: string;
-  /** Duplicado por messageId: ok=true con replies vacías. */
+  /** Duplicated by messageId: ok=true with empty replies. */
   duplicate?: boolean;
   replies: DaemonChannelReply[];
 }
 
 /**
- * El ACK honesto de un respond (aditivo 30/10/2026): la respuesta LLEGÓ al
- * task service (ok=true) o falló (ok=false + error — el tap edita el mensaje
- * de la pregunta con la verdad; un respond duplicado de una interacción ya
- * resuelta falla en el CLI y el error viaja, nunca un ok mentiroso).
+ * The honest ACK of a respond (additive 2026-10-30): the response ARRIVED at the
+ * task service (ok=true) or failed (ok=false + error — the tap edits the question
+ * message with the truth; a duplicated respond for an already resolved
+ * interaction fails in the CLI and the error travels, never a lying ok).
  */
 export interface DaemonChannelRespondResult {
   type: "respond_result";
@@ -530,19 +531,19 @@ export interface DaemonChannelQueryResult {
   result: unknown;
 }
 
-// ---- plan / modelo / effort (selección de modelo) -----------------------------
-// El protocolo es aditivo: las query kinds nuevas viajan por el mismo frame
-// `query`; clientes viejos jamás las envían y servidores viejos responden
+// ---- plan / model / effort (model selection) ---------------------------------
+// The protocol is additive: new query kinds travel through the same `query`
+// frame; old clients never send them and old servers answer
 // `unknown_query`.
 
-/** Selección vigente proyectada: plan (provider) + modelo + effort. */
+/** Current projected selection: plan (provider) + model + effort. */
 export interface DaemonChannelModelSelectionInfo {
   providerId: string;
   modelId: string;
   reasoningLevel?: string;
 }
 
-/** Un plan disponible con sus modelos (fila tap-to-change del /plan del bot). */
+/** An available plan with its models (tap-to-change row of the bot's /plan). */
 export interface DaemonChannelModelSelectionPlan {
   providerId: string;
   label: string;
@@ -550,22 +551,22 @@ export interface DaemonChannelModelSelectionPlan {
     id: string;
     label: string;
     /**
-     * Efforts («reasoningLevel») que el modelo acepta, de menor a mayor
-     * (el MISMO catálogo que valida setModelSelection: optionSpecs). Aditivo y
-     * opcional: servers viejos no lo mandan y el cliente cae a su vocabulario.
+     * Efforts ("reasoningLevel") the model accepts, from lowest to highest
+     * (the SAME catalog that validates setModelSelection: optionSpecs). Additive and
+     * optional: old servers do not send it and the client falls back to its vocabulary.
      */
     reasoningLevels?: string[];
   }>;
 }
 
-/** Resultado de `modelSelection` y `setModelSelection`. */
+/** Result of `modelSelection` and `setModelSelection`. */
 export interface DaemonChannelModelSelectionResult {
   scope: "conversation" | "default";
-  /** Selección vigente del alcance pedido (conversación o default global). */
+  /** Current selection of the requested scope (conversation or global default). */
   selection: DaemonChannelModelSelectionInfo | null;
-  /** Default global de la app (`defaultModelSelection` del personal config). */
+  /** The app's global default (`defaultModelSelection` of the personal config). */
   default: DaemonChannelModelSelectionInfo | null;
-  /** Planes disponibles con sus modelos, para armar los menús. */
+  /** Available plans with their models, to build the menus. */
   plans: DaemonChannelModelSelectionPlan[];
 }
 
@@ -587,48 +588,48 @@ export type DaemonChannelErrorCode =
 
 export interface DaemonChannelError {
   type: "error";
-  /** Ausente en errores que no responden a un request (p. ej. auth). */
+  /** Absent on errors that do not answer a request (e.g. auth). */
   id?: string;
   code: DaemonChannelErrorCode;
   message?: string;
-  /** Versiones aceptadas por el servidor (solo unsupported_version). */
+  /** Versions accepted by the server (only unsupported_version). */
   supported?: number[];
-  /** true = el servidor cierra la conexión después de este error. */
+  /** true = the server closes the connection after this error. */
   fatal?: boolean;
 }
 
-/** Push del stream continuo. `at` es el tiempo de recepción del host (epoch ms). */
+/** Continuous-stream push. `at` is the host's receive time (epoch ms). */
 export interface DaemonChannelStreamEventFrame {
   type: "stream_event";
   taskId: string;
-  /** Monótono por conexión; detecta gaps tras una reconexión. */
+  /** Monotonic per connection; detects gaps after a reconnection. */
   seq: number;
   at: number;
   event: ZCodeStreamEvent;
 }
 
 /**
- * Latido del stream continuo (aditivo 30/10/2026): una frame por suscripción
- * viva cada DAEMON_CHANNEL_STREAM_KEEPALIVE_INTERVAL_MS mientras no haya
- * eventos que reenviar.
+ * Continuous-stream heartbeat (additive 2026-10-30): one frame per live
+ * subscription every DAEMON_CHANNEL_STREAM_KEEPALIVE_INTERVAL_MS while there are no
+ * events to resend.
  *
- * CONTRATO DEL CONSUMIDOR: la ausencia PURA de frames (ni stream_event ni
- * stream_keepalive) durante más de ~3 intervalos = stream muerto, aunque el
- * modelo esté callado. Un modelo callado NO rompe el latido; solo la muerte
- * real del canal (host caído, socket roto, suscripción perdida) lo hace.
- * El watchdog del consumidor debe keyar en el latido, no en el silencio
- * crudo — el silencio crudo confunde «modelo pensativo» con «bus muerto»
- * (medido 30/10: burst on subscribe, then silence on a LIVE turn).
+ * CONSUMER CONTRACT: the PURE absence of frames (neither stream_event nor
+ * stream_keepalive) for more than ~3 intervals = dead stream, even if the
+ * model is quiet. A quiet model does NOT break the heartbeat; only the channel's
+ * real death (host down, broken socket, lost subscription) does.
+ * The consumer's watchdog must key on the heartbeat, not on raw
+ * silence — raw silence confuses "pensive model" with "dead bus"
+ * (measured 2026-10-30: burst on subscribe, then silence on a LIVE turn).
  */
 export interface DaemonChannelStreamKeepaliveFrame {
   type: "stream_keepalive";
   taskId: string;
-  /** El MISMO contador monótono por conexión que stream_event: los gaps se detectan igual. */
+  /** The SAME per-connection monotonic counter as stream_event: gaps are detected the same way. */
   seq: number;
   at: number;
 }
 
-/** Best-effort antes de un cierre limpio del host. */
+/** Best-effort before a clean host shutdown. */
 export interface DaemonChannelBye {
   type: "bye";
   reason: string;

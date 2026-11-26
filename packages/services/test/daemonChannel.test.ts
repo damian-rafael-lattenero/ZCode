@@ -771,7 +771,7 @@ describe("daemon local channel (B3a)", () => {
       client.waitFor((message) => message.type === "query_result" && message.id === id);
 
     // runtime.contextUsage = the SAME source the desktop meter restores from
-    // (contextUsageFromRuntime ?? contextUsageFromProjection del adapter).
+    // (contextUsageFromRuntime ?? contextUsageFromProjection from the adapter).
     (taskService.getTaskSnapshot as ReturnType<typeof vi.fn>).mockResolvedValue({
       meta: { taskId: "task-7", title: "T", workspacePath: "/tmp/workspace", model: "meta-model" },
       messages: [],

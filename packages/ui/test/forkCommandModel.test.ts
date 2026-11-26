@@ -26,17 +26,17 @@ function view(options?: {
 }
 
 describe("parseCommandModelSpec", () => {
-  it("proveedor/modelo con sufijo de thinking", () => {
+  it("provider/model with a thinking suffix", () => {
     expect(parseCommandModelSpec("account:plan/GLM-5.3-Flash$low")).toEqual({
       providerId: "account:plan",
       modelId: "GLM-5.3-Flash",
       thoughtLevel: "low",
     });
   });
-  it("modelId pelado y sin nivel", () => {
+  it("bare modelId and no level", () => {
     expect(parseCommandModelSpec("GLM-5.3")).toEqual({ modelId: "GLM-5.3" });
   });
-  it("vacío o sin modelo: null", () => {
+  it("empty or without a model: null", () => {
     expect(parseCommandModelSpec("  ")).toBeNull();
     expect(parseCommandModelSpec("/x")).toBeNull();
   });
@@ -45,7 +45,7 @@ describe("parseCommandModelSpec", () => {
 describe("resolveCommandModelSelection", () => {
   const map = new Map([["diff", "account:plan/GLM-5.3-Flash$low"]]);
 
-  it("un comando con model: reemplaza la selección congelada", () => {
+  it("a command with model: replaces the frozen selection", () => {
     expect(resolveCommandModelSelection({ text: "/diff", commandModelMap: map, view: view() })).toEqual({
       providerId: "account:plan",
       modelId: "GLM-5.3-Flash",

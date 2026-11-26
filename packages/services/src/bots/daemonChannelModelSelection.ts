@@ -1,10 +1,10 @@
-/* [fork] B3a — plan/modelo/effort del canal «daemon local» (/plan del bot).
- * Lectura y escritura de la selección de modelo en sus dos alcances:
- *  - «conversation»: botsService.get/setBotModelSelection — el MISMO camino de
- *    escritura que /model y /effort (draftOptions o setModel/setConfigOption).
- *  - «default»: NodeModelSelectionConfigRepository.saveConfiguredDefault — el
- *    default global de la app (defaultModelSelection del personal config).
- * Shapes en @zcode/shared (daemon-channel.ts); spec: docs/fork/DAEMON-CHANNEL.md.
+/* [fork] B3a — plan/model/effort for the "daemon local" channel (the bot's /plan).
+ * Reading and writing the model selection across its two scopes:
+ *  - "conversation": botsService.get/setBotModelSelection — the SAME write
+ *    path as /model and /effort (draftOptions or setModel/setConfigOption).
+ *  - "default": NodeModelSelectionConfigRepository.saveConfiguredDefault — the
+ *    app's global default (defaultModelSelection of the personal config).
+ * Shapes in @zcode/shared (daemon-channel.ts); spec: docs/fork/DAEMON-CHANNEL.md.
  */
 import type {
   DaemonChannelModelSelectionInfo,
@@ -21,7 +21,7 @@ import type {
 
 export interface DaemonChannelModelSelectionDeps {
   botsService: Pick<IBotsService, "getBotModelSelection" | "setBotModelSelection">;
-  /** El bot id del canal (el actor de las ops de selección). */
+  /** The channel's bot id (the actor of the selection ops). */
   botId: string;
   modelSelectionService?: Pick<IModelSelectionService, "getView">;
   modelSelectionDefault?: {
@@ -30,7 +30,7 @@ export interface DaemonChannelModelSelectionDeps {
       selection: ModelSelection | undefined,
     ): Promise<ModelSelection | undefined>;
   };
-  /** Workspace del contexto activo del bot (fallback cuando el frame no lo trae). */
+  /** Workspace of the bot's active context (fallback when the frame does not carry it). */
   resolveContextWorkspace(): Promise<
     { workspacePath: string; workspaceIdentity?: string } | undefined
   >;
@@ -60,9 +60,9 @@ function projectModelPlans(view: ModelSelectionView): DaemonChannelModelSelectio
     .map((provider) => ({
       providerId: provider.providerId,
       label: provider.providerName?.trim() || provider.providerId,
-      // El effort vocabulary real de cada modelo viaja en la respuesta: es el
-      // MISMO catálogo que valida setModelSelection (setDefault/assertEffortAllowed).
-      // Sin esto el cliente no puede marcar 🎯 en el effort vigente (p. ej. «max»).
+      // Each model's real effort vocabulary travels in the response: it is the
+      // SAME catalog that validates setModelSelection (setDefault/assertEffortAllowed).
+      // Without this the client cannot mark 🎯 on the current effort (e.g. "max").
       models: provider.models.map((model) => {
         const levels = model.config.optionSpecs.reasoningLevel.values;
         return {
@@ -77,7 +77,7 @@ function projectModelPlans(view: ModelSelectionView): DaemonChannelModelSelectio
 export function createDaemonChannelModelSelectionHandler(
   deps: DaemonChannelModelSelectionDeps,
 ): DaemonChannelModelSelectionHandler {
-  /** Workspace para modelSelection/setModelSelection: explícito o el contexto activo. */
+  /** Workspace for modelSelection/setModelSelection: explicit or the active context. */
   async function resolveWorkspace(query: {
     workspacePath?: string;
     workspaceIdentity?: string;
@@ -103,7 +103,7 @@ export function createDaemonChannelModelSelectionHandler(
     };
   }
 
-  /** Resultado común de modelSelection/setModelSelection: selección + default global + planes. */
+  /** Common result of modelSelection/setModelSelection: selection + global default + plans. */
   async function buildResult(
     scope: "conversation" | "default",
     conversation: Awaited<ReturnType<IBotsService["getBotModelSelection"]>>,
@@ -144,7 +144,7 @@ export function createDaemonChannelModelSelectionHandler(
     },
   };
 
-  /** CONTROL scope=«default»: el default global de la app (defaultModelSelection). */
+  /** CONTROL scope="default": the app's global default (defaultModelSelection). */
   async function setDefault(
     query: Extract<DaemonChannelQuery, { kind: "setModelSelection" }>,
   ): Promise<DaemonChannelModelSelectionResult> {
@@ -162,8 +162,8 @@ export function createDaemonChannelModelSelectionHandler(
     if (!base?.providerId || !base?.modelId) {
       throw new Error("plan and model are required: no default selection exists yet");
     }
-    // Validar el identity contra el registry y completar el effort (el mismo
-    // completion que el flujo interactivo: la máxima tier del modelo elegido).
+    // Validate the identity against the registry and complete the effort (the same
+    // completion as the interactive flow: the chosen model's max tier).
     const view = deps.modelSelectionService ? await deps.modelSelectionService.getView() : null;
     const model = view?.providers
       .find((provider) => provider.providerId === base.providerId)

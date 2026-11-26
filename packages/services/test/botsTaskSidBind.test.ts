@@ -1,10 +1,10 @@
-/* [fork] U2 — la ley del owner (5/11): elegir una conversación en el bot
- * (/task <sid> o el bindTaskId del canal daemon) y hablar aterriza en ESA
- * conversación, aunque viva en otro workspace — especialmente los drafts
- * (~/.zcode/workspace/draft-*, projectId null) que el catálogo del bot jamás
- * lista. El sid es globalmente único: se resuelve del árbol de proyectos por
- * taskId exacto, y el bind re-apunta el contexto COMPLETO al mundo de la task.
- * Queda intacto el veredicto taskRunning y el taskMissing de un sid falso.
+/* [fork] U2 — the owner's law (2026-11-05): choosing a conversation in the bot
+ * (/task <sid> or the daemon channel's bindTaskId) and speaking lands in THAT
+ * conversation, even if it lives in another workspace — especially the drafts
+ * (~/.zcode/workspace/draft-*, projectId null) that the bot's catalog never
+ * lists. The sid is globally unique: it resolves from the project tree by
+ * exact taskId, and the bind re-points the COMPLETE context at the task's world.
+ * The taskRunning verdict and the taskMissing of a fake sid stay intact.
  */
 import { describe, expect, it, vi } from "vitest";
 import type { BotInboundMessage } from "@zcode/shared";
@@ -74,7 +74,7 @@ const treeTasks = [
   }),
 ];
 
-/** El draft (projectId null) NO es proyecto del catálogo: solo vive en tree.tasks. */
+/** The draft (projectId null) is NOT a catalog project: it only lives in tree.tasks. */
 function createStubServices() {
   return {
     projectService: {
@@ -149,12 +149,12 @@ describe("bot /task <sid> bind (the owner's 5/11 law)", () => {
         workspacePath: DRAFT_WORKSPACE,
         projectId: null,
       });
-      // el draft no es workspace de catálogo: identidad por clave, sin id ni directorios heredados
+      // the draft is not a catalog workspace: identity by key, no id and no inherited directories
       expect(context.workspaceId).toBeUndefined();
       expect(context.workspaceIdentity).toBeUndefined();
       expect(context.additionalDirectories).toEqual([]);
-      // y HABLAR aterriza en ESA conversación (el núcleo de la ley)
-      await botsService.handleInboundMessage(inbound("hola draft"));
+      // and SPEAKING lands in THAT conversation (the core of the law)
+      await botsService.handleInboundMessage(inbound("hello draft"));
       await vi.waitFor(() =>
         expect(taskService.sendPrompt).toHaveBeenCalledWith(
           expect.objectContaining({ taskId: "sess_draft_1", content: "hola draft" }),

@@ -1,10 +1,10 @@
-/* [fork] El par plan/modelo de un set parcial del canal daemon.
- * Medido 3/11 19:57: el bot manda `pl:opencode-go-chat` y el merge con el
- * modelo vigente (GLM-5.3-Flash, de z.ai) producía «model
- * opencode-go-chat/GLM-5.3-Flash is not selectable from this context».
- * `resolveModelPair` resuelve el sibling contra el catálogo: un plan solo
- * conserva el modelo actual únicamente si ese plan lo expone, y si no toma
- * el primer modelo del plan destino; un modelo solo viaja con su dueño.
+/* [fork] The plan/model pair of a partial set from the daemon channel.
+ * Measured 2026-11-03 19:57: the bot sends `pl:opencode-go-chat` and the merge with
+ * the current model (GLM-5.3-Flash, from z.ai) produced "model
+ * opencode-go-chat/GLM-5.3-Flash is not selectable from this context".
+ * `resolveModelPair` resolves the sibling against the catalog: a plan alone
+ * keeps the current model only if that plan exposes it, otherwise it takes
+ * the target plan's first model; a model only travels with its owner.
  */
 import { describe, expect, it } from "vitest";
 import { resolveModelPair } from "../src/bots/botsService.js";
@@ -54,7 +54,7 @@ describe("resolveModelPair", () => {
       providerId: "account:zai-start-plan",
       modelId: "GLM-5.3-Flash",
     });
-    // y con el modelo vigente ya dentro del plan destino, lo conserva
+    // and with the current model already inside the target plan, it keeps it
     expect(resolveModelPair(view, { plan: "opencode-go-chat" }, opencode)).toEqual(opencode);
   });
 

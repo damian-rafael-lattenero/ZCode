@@ -58,8 +58,8 @@ export function resolveCommandModelSelection(options: {
     const model = provider.models.find((candidate) => candidate.modelId === spec.modelId);
     if (!model) continue;
     const supported = model.config?.optionSpecs?.reasoningLevel?.values;
-    // candidatos de nivel en orden: el declarado, el actual de la sesión, el
-    // primero soportado por el modelo — gana el primero que valide.
+    // level candidates in order: the declared one, the session's current one, the
+    // first one the model supports — the first that validates wins.
     for (const level of [spec.thoughtLevel, options.currentReasoningLevel, supported?.[0]]) {
       if (!level) continue;
       const selection: ModelSelection = {

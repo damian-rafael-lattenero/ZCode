@@ -12,7 +12,7 @@ import type {
 } from "@zcode/shared/zcode-protocol-v4";
 import { buildConversationTurnRenderUnits } from "@/v4/conversationTurnRenderUnits.js";
 import { resolveAssistantCopyText } from "@/v4/ConversationTurnRow.js";
-// (upstream v3.17.1) el resolver de expiración se movió a la partición de rows.
+// (upstream v3.17.1) the expiry resolver moved to the rows partition.
 import { resolveNextHighspeedExpiryMsInPartition } from "@/highspeed/highspeedConversationRows.js";
 import { getConversationRowsPartition } from "@/v4/conversationProjectionStore.js";
 

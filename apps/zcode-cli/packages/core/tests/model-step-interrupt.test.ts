@@ -74,13 +74,13 @@ describe("admitPrompt interruptCurrentModelStep", () => {
   it("enqueues the guide FIRST, then cuts the step", async () => {
     const { runtime, steerTurn, interruptActiveModelStep, enqueueDeferredInput } = busyRuntime(true);
 
-    const result = await admitPrompt.call(runtime, "seguí por acá", undefined, {
+    const result = await admitPrompt.call(runtime, "keep going from here", undefined, {
       interruptCurrentModelStep: true,
     });
 
     expect(result.kind).toBe("queued");
     expect(steerTurn).toHaveBeenCalledWith(
-      expect.objectContaining({ delivery: "guide", input: "seguí por acá" }),
+      expect.objectContaining({ delivery: "guide", input: "keep going from here" }),
     );
     expect(interruptActiveModelStep).toHaveBeenCalledTimes(1);
     expect(steerTurn.mock.invocationCallOrder[0]!).toBeLessThan(
@@ -92,7 +92,7 @@ describe("admitPrompt interruptCurrentModelStep", () => {
   it("non-steerable turn: cuts nothing and falls back to the ordinary queue", async () => {
     const { runtime, steerTurn, interruptActiveModelStep, enqueueDeferredInput } = busyRuntime(false);
 
-    const result = await admitPrompt.call(runtime, "seguí por acá", undefined, {
+    const result = await admitPrompt.call(runtime, "keep going from here", undefined, {
       interruptCurrentModelStep: true,
     });
 

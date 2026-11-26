@@ -1,20 +1,20 @@
 /*
- * (FORK) Mini reemplazo de @testing-library/react — upstream v3.17.1 retiró la
- * dependencia (y de @testing-library/dom) de packages/ui; estos 5 tests de UI del
- * fork solo necesitan render / screen / fireEvent.click / waitFor / renderHook.
- * Implementado con createRoot + act sobre jsdom para mantener packages/ui/package.json
- * y pnpm-lock.yaml 100% idénticos a upstream (decisión A1 de la expedición v3.17.1).
+ * (FORK) Mini replacement for @testing-library/react — upstream v3.17.1 retired the
+ * dependency (and @testing-library/dom) from packages/ui; these 5 fork UI tests
+ * only need render / screen / fireEvent.click / waitFor / renderHook.
+ * Implemented with createRoot + act on jsdom to keep packages/ui/package.json
+ * and pnpm-lock.yaml 100% identical to upstream (option A1 of the v3.17.1 expedition).
  *
- * Fidelidad razonable, no exhaustiva: getNodeText usa solo nodos de texto directos
- * (como RTL), getByRole resuelve roles implícitos + aria-role y nombre accesible por
- * textContent — suficiente para las consultas de esta suite.
+ * Reasonable fidelity, not exhaustive: getNodeText uses only direct text nodes
+ * (like RTL), getByRole resolves implicit roles + aria-role and an accessible name from
+ * textContent — enough for this suite's queries.
  */
 import type { ReactElement, ReactNode } from "react";
 import { act } from "react";
 import { createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 
-// React exige este flag global para permitir act() fuera de react-dom/test-utils.
+// React requires this global flag to allow act() outside react-dom/test-utils.
 (globalThis as Record<string, unknown>).IS_REACT_ACT_ENVIRONMENT = true;
 
 export { act };
@@ -26,7 +26,7 @@ function normalize(text: string): string {
   return text.replace(/\s+/g, " ").trim();
 }
 
-/** RTL igual: solo los nodos de TEXTO directos del elemento (los descendientes no cuentan). */
+/** Same as RTL: only the element's DIRECT text nodes (descendants do not count). */
 function getNodeText(element: Element): string {
   let text = "";
   for (const node of element.childNodes) {
@@ -75,7 +75,7 @@ function elementRole(element: Element): string | null {
   return IMPLICIT_ROLES[tag] ?? null;
 }
 
-/** RTL igual: aria-label primero; los subárboles aria-hidden no están en el a11y tree. */
+/** Same as RTL: aria-label first; aria-hidden subtrees are not in the a11y tree. */
 function accessibleName(element: Element): string {
   return normalize(element.getAttribute("aria-label") ?? element.textContent ?? "");
 }

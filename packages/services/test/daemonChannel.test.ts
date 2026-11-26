@@ -1,7 +1,7 @@
-/* [fork] B3a — tests herméticos del canal «daemon local» (ADR-022).
- * Socket unix REAL en un tmpdir (dataRootDir inyectado): nada de ~/.zcode,
- * nada de red, nada del env del fork. El cliente de prueba es node:net.
- * La spec del protocolo: docs/fork/DAEMON-CHANNEL.md; shapes: @zcode/shared
+/* [fork] B3a — hermetic tests for the "daemon local" channel (ADR-022).
+ * REAL unix socket in a tmpdir (injected dataRootDir): no ~/.zcode,
+ * no network, no fork env. The test client is node:net.
+ * Protocol spec: docs/fork/DAEMON-CHANNEL.md; shapes: @zcode/shared
  * (daemon-channel.ts).
  */
 import { connect } from "node:net";
@@ -225,8 +225,8 @@ describe("daemon local channel (B3a)", () => {
     });
     const helloOk = await client.waitFor((message) => message.type === "hello_ok");
     expect(helloOk).toMatchObject({ type: "hello_ok", protocolVersion: 1 });
-    // Capacidades nuevas del /plan y del /context_window (aditivas, protocolo v1),
-    // el bind atómico (2/11) y los subagentes dirigibles (A4, 2/11).
+    // New /plan and /context_window capabilities (additive, protocol v1),
+    // the atomic bind (2026-11-02) and steerable subagents (A4, 2026-11-02).
     expect((helloOk as { capabilities: string[] }).capabilities).toEqual(
       expect.arrayContaining([
         "queries:modelSelection",
@@ -333,8 +333,8 @@ describe("daemon local channel (B3a)", () => {
         expect.objectContaining({ content: "build the thing" }),
       ),
     );
-    // El retry tras perder la respuesta NO reenvía el prompt (at-least-once con
-    // dedupe del lado costoso).
+    // The retry after losing the response does NOT resend the prompt (at-least-once with
+    // dedupe on the expensive side).
     inboundSpy.mockClear();
     (taskService.sendPrompt as ReturnType<typeof vi.fn>).mockClear();
     client.send({ type: "inbound", id: "r2", text: "build the thing", messageId: "tg-100" });
@@ -343,7 +343,7 @@ describe("daemon local channel (B3a)", () => {
     );
     expect(duplicate).toMatchObject({ type: "inbound_result", duplicate: true, replies: [] });
     expect(inboundSpy).not.toHaveBeenCalled();
-    // La bot quedó en el config (provisionada) y el estado avanzó a task mode.
+    // The bot stayed in the config (provisioned) and the state advanced to task mode.
     const config = await botsService.getConfig();
     expect(config.bots.some((bot) => bot.provider === "daemon")).toBe(true);
     expect(repo).toBeDefined();
@@ -407,7 +407,7 @@ describe("daemon local channel (B3a)", () => {
     expect(firstBeat).toMatchObject({ type: "stream_keepalive", taskId: "task-9" });
     expect(firstBeat).toHaveProperty("at");
     expect((firstBeat as { seq: number }).seq).toBeGreaterThanOrEqual(1);
-    // El seq del latido comparte el MISMO contador monótono de stream_event.
+    // The heartbeat's seq shares the SAME monotonic counter as stream_event.
     const stream = taskService.streamFor("task-9");
     expect(stream).toBeDefined();
     stream!.fire({ type: "task_complete", taskId: "task-9", traceId: "t" } as ZCodeStreamEvent);
@@ -434,8 +434,8 @@ describe("daemon local channel (B3a)", () => {
     await client.waitFor((message) => message.type === "stream_keepalive");
     const stream = taskService.streamFor("task-9");
     expect(stream).toBeDefined();
-    // Re-subscribir la misma task reemplaza la suscripción: un solo listener vivo
-    // (el dispose del reemplazo limpió el timer viejo — cero latidos dobles).
+    // Re-subscribing the same task replaces the subscription: a single live listener
+    // (the replacement's dispose cleaned the old timer — zero double heartbeats).
     client.send({
       type: "subscribe",
       id: "s2",
@@ -444,7 +444,7 @@ describe("daemon local channel (B3a)", () => {
     });
     await client.waitFor((message) => message.type === "subscribed" && message.id === "s2");
     expect(stream!.listeners.size).toBe(1);
-    // Unsubscribe mata la suscripción Y su latido: nada de frames en 5 intervalos.
+    // Unsubscribe kills the subscription AND its heartbeat: no frames for 5 intervals.
     client.send({ type: "unsubscribe", id: "u1", taskId: "task-9" });
     await client.waitFor((message) => message.type === "unsubscribed" && message.id === "u1");
     expect(stream!.listeners.size).toBe(0);
@@ -607,7 +607,7 @@ describe("daemon local channel (B3a)", () => {
     );
     expect(error).toMatchObject({ type: "error", code: "bad_request" });
     expect((error as { message?: string }).message).toContain("build, edit, plan, yolo, guarded");
-    // El fallback histórico del adapter (modo desconocido → build) NUNCA corre.
+    // The adapter's historical fallback (unknown mode → build) NEVER runs.
     expect(taskService.setMode).not.toHaveBeenCalled();
     client.destroy();
   });
@@ -674,15 +674,15 @@ describe("daemon local channel (B3a)", () => {
           {
             providerId: "account:zai-individual-coding-plan",
             label: "Z.ai Coding Plan",
-            // El vocabulary de effort del catálogo viaja con cada modelo (aditivo).
+            // The catalog's effort vocabulary travels with each model (additive).
             models: [{ id: "GLM-5.3", label: "GLM-5.3", reasoningLevels: ["low", "high"] }],
           },
         ],
       },
     });
 
-    // CONTROL conversation: setea plan/modelo y devuelve el snapshot nuevo.
-    // (el read-back post-escritura devuelve la selección YA cambiada)
+    // CONTROL conversation: sets plan/model and returns the new snapshot.
+    // (the post-write read-back returns the selection ALREADY changed)
     getSpy.mockResolvedValue({
       scope: "draft",
       selection: {
@@ -725,7 +725,7 @@ describe("daemon local channel (B3a)", () => {
     getSpy.mockRestore();
     setSpy.mockRestore();
 
-    // CONTROL default: completa el effort con la tier máxima del modelo.
+    // CONTROL default: completes the effort with the model's max tier.
     sendQuery("m3", {
       kind: "setModelSelection",
       scope: "default",
@@ -746,7 +746,7 @@ describe("daemon local channel (B3a)", () => {
       },
     });
 
-    // Effort inválido → error honesto con los valores válidos.
+    // Invalid effort → honest error carrying the valid values.
     sendQuery("m4", {
       kind: "setModelSelection",
       scope: "default",
@@ -785,8 +785,8 @@ describe("daemon local channel (B3a)", () => {
 
     sendQuery("cw1", { kind: "contextWindow", taskId: "task-7", workspacePath: "/tmp/workspace" });
     const result = await queryResult("cw1");
-    // El model de la sesión activa gana sobre meta.model; el meter viaja crudo
-    // (sin registry, el size del runtime es el respaldo — y viaja su fuente).
+    // The active session's model wins over meta.model; the meter travels raw
+    // (without a registry, the runtime size is the fallback — and its source travels too).
     expect(result).toMatchObject({
       type: "query_result",
       result: { model: "GLM-5.3-Flash", usedTokens: 45300, windowTokens: 200000, windowSource: "runtime" },
@@ -823,7 +823,7 @@ describe("daemon local channel (B3a)", () => {
       result: { model: "session-model", usedTokens: null, windowTokens: null },
     });
 
-    // Sin selección de sesión viva → el model cae a meta.model.
+    // No live session selection → the model falls back to meta.model.
     (taskService.getTaskModelSelection as ReturnType<typeof vi.fn>).mockRejectedValue(
       new Error("task target is not live"),
     );
@@ -885,7 +885,7 @@ describe("daemon local channel (B3a)", () => {
     client.send({
       type: "inbound",
       id: "ord1",
-      text: "cambiale el título a la carta",
+      text: "change the card title",
       messageId: "tg-900",
       taskId: "sess_subagent_agent_419b5d75",
     } as never);
@@ -896,7 +896,7 @@ describe("daemon local channel (B3a)", () => {
     expect(taskService.sendPrompt).toHaveBeenCalledWith(
       expect.objectContaining({
         taskId: "sess_subagent_agent_419b5d75",
-        content: "cambiale el título a la carta",
+        content: "change the card title",
       }),
     );
     expect(taskService.handleInboundMessage ?? null).toBeNull(); // the fake has no such fn — the real check is sendPrompt above
@@ -921,7 +921,7 @@ describe("daemon local channel (B3a)", () => {
     client.send({
       type: "inbound",
       id: "bind-ok",
-      text: "seguí por acá",
+      text: "keep going from here",
       messageId: "tg-903",
       bindTaskId: "task-bind",
     } as never);
@@ -929,9 +929,9 @@ describe("daemon local channel (B3a)", () => {
       (message) => message.type === "inbound_result" && message.id === "bind-ok",
     );
     expect(result.type).toBe("inbound_result");
-    // el texto voló por el routing de siempre DESPUÉS del bind
-    expect(inboundSpy).toHaveBeenCalledWith(expect.objectContaining({ text: "seguí por acá" }));
-    // el contexto quedó apuntado a la task (la ley task.set completa)
+    // the text flew over the usual routing AFTER the bind
+    expect(inboundSpy).toHaveBeenCalledWith(expect.objectContaining({ text: "keep going from here" }));
+    // the context ended up pointed at the task (the full task.set law)
     await vi.waitFor(() =>
       expect(botsService.getBotStates()).resolves.toEqual(
         expect.arrayContaining([expect.objectContaining({ activeTaskId: "task-bind" })]),
@@ -957,8 +957,8 @@ describe("daemon local channel (B3a)", () => {
     expect(result).toMatchObject({ type: "inbound_result", id: "bind-miss", duplicate: false });
     if (result.type !== "inbound_result") return;
     expect(result.replies).toHaveLength(1);
-    // el locale del fixture es zh-CN; el daemon real defaultea en-US — la
-    // ley es el REFUSAL ÚNICO (el veredicto del /task), no su idioma
+    // the fixture's locale is zh-CN; the real daemon defaults to en-US — the
+    // law is the SINGLE REFUSAL (the /task verdict), not its language
     expect(JSON.stringify(result.replies[0])).toMatch(/task not found|未找到任务/i);
     expect(inboundSpy).not.toHaveBeenCalled();
     client.destroy();
@@ -971,7 +971,7 @@ describe("daemon local channel (B3a)", () => {
     client.send({
       type: "inbound",
       id: "ord-bind",
-      text: "la orden manda",
+      text: "the order wins",
       messageId: "tg-904",
       taskId: "sess_subagent_agent_419b5d75",
       bindTaskId: "task-bind",
@@ -994,7 +994,7 @@ describe("daemon local channel (B3a)", () => {
       type: "steer",
       id: "st1",
       taskId: "task-77",
-      text: "cambiá el enfoque a la API",
+      text: "shift the focus to the API",
     } as never);
     const result = await client.waitFor(
       (message) => message.type === "inbound_result" && message.id === "st1",
@@ -1003,7 +1003,7 @@ describe("daemon local channel (B3a)", () => {
     expect(taskService.sendPrompt).toHaveBeenCalledWith(
       expect.objectContaining({
         taskId: "task-77",
-        content: "cambiá el enfoque a la API",
+        content: "shift the focus to the API",
         requestedDelivery: "guide",
       }),
     );
@@ -1152,7 +1152,7 @@ describe("daemon local channel (B3a)", () => {
       options: { reasoningLevel: "max" },
     });
 
-    // El meter no sabe la ventana, pero el registry sí: properties.contextWindow.
+    // The meter does not know the window, but the registry does: properties.contextWindow.
     sendQuery("cw4", { kind: "contextWindow", taskId: "task-7", workspacePath: "/tmp/workspace" });
     const result = await queryResult("cw4");
     expect(result).toMatchObject({
@@ -1171,7 +1171,7 @@ describe("daemon local channel (B3a)", () => {
     client.send({ type: "moonwalk", id: "x1" } as never);
     const unknown = await client.waitFor((message) => message.type === "error" && message.code === "unknown_request");
     expect(unknown).toMatchObject({ type: "error", code: "unknown_request" });
-    // La conexión sigue viva: un ping responde.
+    // The connection is still alive: a ping answers.
     client.send({ type: "ping", id: "p1" });
     const pong = await client.waitFor((message) => message.type === "pong" && message.id === "p1");
     expect(pong).toMatchObject({ type: "pong" });
@@ -1318,7 +1318,7 @@ describe("daemon local channel (B3a)", () => {
   it("a respond elicitation frame routes to respondElicitation with action + content", async () => {
     await startChannel();
     const client = await connectAndHandshake();
-    const content = { answers: { "¿Seguimos?": "Sí" }, answer: "Sí" };
+    const content = { answers: { "Shall we continue?": "Yes" }, answer: "Yes" };
     client.send({
       type: "respond",
       id: "rs3",

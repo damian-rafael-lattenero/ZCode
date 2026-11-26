@@ -157,7 +157,7 @@ describe("bot /task <sid> bind (the owner's 5/11 law)", () => {
       await botsService.handleInboundMessage(inbound("hello draft"));
       await vi.waitFor(() =>
         expect(taskService.sendPrompt).toHaveBeenCalledWith(
-          expect.objectContaining({ taskId: "sess_draft_1", content: "hola draft" }),
+          expect.objectContaining({ taskId: "sess_draft_1", content: "hello draft" }),
         ),
       );
     } finally {
@@ -227,7 +227,7 @@ describe("bot /task <sid> bind (the owner's 5/11 law)", () => {
   it("(d) a bogus sid still answers taskMissing and never re-points the context", async () => {
     const { repo, botsService } = await startService();
     try {
-      const replies = await botsService.handleInboundMessage(inbound("/task sess_inexistente"));
+      const replies = await botsService.handleInboundMessage(inbound("/task sess_missing"));
       expect(JSON.stringify(replies)).toMatch(/未找到任务|Task not found/);
       const context = await contextOf(repo);
       expect(context.activeTaskId).toBeNull();

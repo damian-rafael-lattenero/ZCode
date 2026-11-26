@@ -1,10 +1,10 @@
 import { resolve } from "node:path";
 import { defineConfig } from "vitest/config";
 
-// (FORK) upstream v3.17.1 retiró todos los App unit tests (docs/testing/unit-test-quality.md);
-// esta config corre únicamente los tests que prueban features propios del fork, dejando
-// vitest.config.ts y scripts/engineering-test-files.json 100% idénticos a upstream.
-// Se corre con: vitest run -c vitest.fork.config.ts
+// (FORK) upstream v3.17.1 retired every App unit test (docs/testing/unit-test-quality.md);
+// this config runs only the tests that exercise the fork's own features, leaving
+// vitest.config.ts and scripts/engineering-test-files.json 100% identical to upstream.
+// Run with: vitest run -c vitest.fork.config.ts
 const forkTestFiles = [
   "packages/desktop/test/desktopRuntimeEnv.test.ts",
   "packages/services/test/daemonChannel.test.ts",

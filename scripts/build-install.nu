@@ -42,15 +42,16 @@ def build-bundle [repo: string]: nothing -> string {
     cd $repo
     print "[fork] node/pnpm via mise..."
     ^$MISE install
-    # node_modules FRESCO SIEMPRE (2/11: el sync v3.17.1 cambió pnpm-lock.yaml
-    # y el bundle compiló contra node_modules del 23/10 — el CLI resolvió el
-    # zod v4 hoisteado en vez del v3 del lockfile y el tsc explotó en 40
-    # archivos). frozen-lockfile: si package.json y lock no coinciden, grita —
-    # el gate correcto para un build.
-    # LOS TRAMOS MUDOS AL TELÉFONO (4/11: el owner leyó silencio 15 min en
-    # este tramo — announce en cada fase larga; el announce nunca rompe).
-    print "[fork] pnpm install --frozen-lockfile (node_modules contra el lock)..."
-    announce "🚀 deploy Fork ZCode — pnpm install --frozen-lockfile (tarda minutos)…"
+    # node_modules FRESH ALWAYS (2026-11-02: the v3.17.1 sync changed
+    # pnpm-lock.yaml and the bundle compiled against node_modules from 2026-10-23
+    # — the CLI resolved the hoisted zod v4 instead of the lockfile's v3 and tsc
+    # exploded across 40 files). frozen-lockfile: if package.json and the lock
+    # disagree, it screams — the right gate for a build.
+    # THE MUTE STRETCHES ON THE PHONE (2026-11-04: the owner read 15 min of
+    # silence during this stretch — announce on every long phase; the announce
+    # never breaks the run).
+    print "[fork] pnpm install --frozen-lockfile (node_modules against the lock)..."
+    announce "🚀 deploy Fork ZCode — pnpm install --frozen-lockfile (tarda minutos)…"  # lang-ok: owner-voice announce
     let install: record = (do { ^$MISE exec -- node scripts/mise-run.mjs pnpm install --frozen-lockfile } | complete)
     print $install.stdout
     if $install.exit_code != 0 {
@@ -58,7 +59,7 @@ def build-bundle [repo: string]: nothing -> string {
         fail "[fork]" $"pnpm install failed \(exit ($install.exit_code)\)"
     }
     print "[fork] bundle:desktop (ZCODE_ENV=production, no signing)..."
-    announce "🚀 deploy Fork ZCode — bundle:desktop (el tramo largo, ~10-15 min)…"
+    announce "🚀 deploy Fork ZCode — bundle:desktop (el tramo largo, ~10-15 min)…"  # lang-ok: owner-voice announce
     let bundle: record = (with-env {
         ZCODE_ENV: "production"
         CSC_IDENTITY_AUTO_DISCOVERY: "false"
@@ -82,19 +83,19 @@ def build-bundle [repo: string]: nothing -> string {
     if ($zips | is-empty) {
         fail "[fork]" "the build produced no ZCode-*-mac-arm64.zip"
     }
-    announce $"✅ deploy Fork ZCode — build listo \(($zips | first).name | path basename\)"
+    announce $"✅ deploy Fork ZCode — build listo \(($zips | first).name | path basename\)"  # lang-ok: owner-voice announce
     (($zips | first).name)
 }
 
-# THE AUTOMATIC CLOSE (4/11, the owner: «run from a separate Ghostty, it should
-# be able to close zcode without ⌘Q»): exact — ⌘Q was a choice, not a limit.
+# THE AUTOMATIC CLOSE (4/11, the owner: "run from a separate Ghostty, it should
+# be able to close zcode without ⌘Q"): exact — ⌘Q was a choice, not a limit.
 # Honest ladder: osascript quit → ≤15 s → re-quit ×2 (anti-resurrection, the
 # old cutover law). Returns false when the app survives: its quit handler
 # cancels with -128 while a turn runs, and that cancel is CORRECT — the caller
 # decides (main arms the waiter instead of dying).
 def quit-zcode []: nothing -> bool {
     if not (zcode-running) { return true }
-    announce "🔒 cerrando ZCode para el swap (~15 s)…"
+    announce "🔒 cerrando ZCode para el swap (~15 s)…"  # lang-ok: owner-voice announce
     for attempt in 1..3 {
         let r: record = (^osascript -e "quit app \"ZCode\"" | complete)
         # -128 = the quit handler CANCELED (a turn is running): that is an
@@ -158,7 +159,7 @@ def install-zip [repo: string, zip: string, keep_prev: bool]: nothing -> nothing
         | lines | where {|l| $l =~ '"Apple Development:' } | first | default ""
         | parse -r '\d\) [0-9A-F]+ "(?<n>[^"]+)"' | get 0.n? | default "")
     let sign_id: string = (if ($apple_id | is-not-empty) { $apple_id } else { "ZCode Local Signing" })
-    print $"[fork] signing with «($sign_id)»"
+    print $"[fork] signing with ($sign_id)"
     let has_id: bool = (do { ^security find-identity -v -p codesigning } | complete | get stdout | str contains $sign_id)
     if $has_id {
         let signed: record = (do { ^codesign --force --deep --sign $sign_id "/Applications/ZCode.app" } | complete)
@@ -199,7 +200,7 @@ def install-zip [repo: string, zip: string, keep_prev: bool]: nothing -> nothing
         print -e "[fork] WARN: Diff Ask bootstrap failed — install it manually (Plugins → Personal)"
     }
     ^open -a ZCode
-    announce-loud $"🔥 <b>DEPLOY FORK ZCODE COMPLETO</b> — versión ($version) instalada y app reabierta; verificá el canal 📡"
+    announce-loud $"🔥 <b>DEPLOY FORK ZCODE COMPLETO</b> — versión ($version) instalada y app reabierta; verificá el canal 📡"  # lang-ok: owner-voice announce
     print "[fork] done — verify: New tab → App plugins grid shows Diff Ask; bot turn works; /diff works."
 }
 

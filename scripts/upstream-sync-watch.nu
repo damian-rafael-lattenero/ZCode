@@ -74,7 +74,7 @@ def check []: nothing -> int {
     let subjects: list<string> = (new-subjects $st.lastTip $tip)
     let syncs: list<string> = ($subjects | where {|s| ($s | str contains "sync ZCode source")})
     if ($syncs | is-not-empty) and ($st.announcedTip != $tip) {
-        announce $"🚨 ZCode upstream — source sync aterrizó — ($syncs | str join ' | ') — hora de mergear y deployar el fork"
+        announce $"🚨 ZCode upstream — source sync aterrizó — ($syncs | str join ' | ') — hora de mergear y deployar el fork"  # lang-ok: owner-voice announce
         save-state {lastTip: $tip, announcedTip: $tip}
     } else {
         save-state {lastTip: $tip, announcedTip: $st.announcedTip}

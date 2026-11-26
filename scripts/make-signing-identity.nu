@@ -6,7 +6,7 @@
 # password ("ZCode wants to use your confidential information stored in
 # Chromium Safe Storage"). A self-signed certificate trusted for code
 # signing gives every build the SAME designated requirement — one
-# «Siempre permitir» and the prompt never comes back.
+# "Always Allow" and the prompt never comes back.
 #
 # Creates the key+cert with openssl, imports the identity into the login
 # keychain pre-authorizing /usr/bin/codesign, and trusts the cert for
@@ -32,7 +32,7 @@ def checked [label: string, cmd: closure]: nothing -> nothing {
 
 def main []: nothing -> nothing {
     if (identity-exists) {
-        print $"[identity] «($IDENTITY)» already present — nothing to do"
+        print $"[identity] ($IDENTITY) already present — nothing to do"
         print (^security find-identity -v -p codesigning | lines | str join (char nl))
         return
     }
@@ -80,7 +80,7 @@ def main []: nothing -> nothing {
     if not (identity-exists) {
         error make {msg: "the identity is not listed as valid — inspect: security find-identity -v -p codesigning"}
     }
-    print $"[identity] «($IDENTITY)» created and valid:"
+    print $"[identity] ($IDENTITY) created and valid:"
     print (^security find-identity -v -p codesigning | lines | str join (char nl))
     print "[identity] install-zip now signs with it — the next fork install stops the Keychain prompts"
 }

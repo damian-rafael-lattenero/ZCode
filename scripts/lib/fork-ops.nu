@@ -1,7 +1,7 @@
 # Shared helpers for the fork's own scripts.
 #
 # The fork's operational surface is typed Nushell (see FORK.md and
-# docs/plan-brujula.md §Nushell). The shebang pins the interpreter:
+# docs/plan-compass.md §Nushell). The shebang pins the interpreter:
 # ~/.local/bin/nu-nightly (0.116.2-nightly.28 at the time of the
 # migration). `nu-check --debug` is the gate.
 
@@ -19,7 +19,7 @@ export def fail [prefix: string, msg: string]: nothing -> nothing {
     # The owner's law (2026-11-11 incident): parens inside an interpolated
     # string are SUBEXPRESSIONS — `(...)` with prose ran external `el` and the
     # failure announce itself crashed. Plain words after the em-dash, no parens.
-    announce-loud $"❌ <b>DEPLOY FORK FALLÓ</b> — ($msg) — mirá la salida del script"
+    announce-loud $"❌ <b>DEPLOY FORK FALLÓ</b> — ($msg) — mirá la salida del script"  # lang-ok: owner-voice announce
     exit 1
 }
 
@@ -50,8 +50,8 @@ export def announce [text: string]: nothing -> nothing {
     send-telegram $text
 }
 
-# THE LOUD VOICE (the owner's order, 10/11: «al finalizar cada script un
-# aviso bien llamativo»): HTML bold for the END of a deploy and for every
+# THE LOUD VOICE (the owner's order, 10/11: "a loud notice when each script
+# ends"): HTML bold for the END of a deploy and for every
 # failure — the phone cannot skim past them. Same never-breaks contract.
 export def announce-loud [html: string]: nothing -> nothing {
     send-telegram --html $html

@@ -52,19 +52,19 @@ describe("resolveCommandModelSelection", () => {
       options: { reasoningLevel: "low" },
     });
   });
-  it("texto con args sigue siendo el comando; texto normal no toca nada", () => {
+  it("text with args is still the command; normal text touches nothing", () => {
     expect(resolveCommandModelSelection({ text: "/diff args extra", commandModelMap: map, view: view() })).toBeTruthy();
     expect(resolveCommandModelSelection({ text: "hola /diff", commandModelMap: map, view: view() })).toBeNull();
   });
-  it("comando sin model: o sin vista: null", () => {
+  it("command without model: or without a view: null", () => {
     expect(resolveCommandModelSelection({ text: "/diff", commandModelMap: new Map(), view: view() })).toBeNull();
     expect(resolveCommandModelSelection({ text: "/diff", commandModelMap: map, view: null })).toBeNull();
   });
-  it("modelo que no existe en la vista: null (nunca enviamos basura)", () => {
+  it("model that does not exist in the view: null (we never send garbage)", () => {
     const m = new Map([["x", "account:plan/NOPE"]]);
     expect(resolveCommandModelSelection({ text: "/x", commandModelMap: m, view: view() })).toBeNull();
   });
-  it("sin sufijo: hereda el nivel actual si el modelo lo soporta, sino el primero", () => {
+  it("no suffix: inherits the current level if the model supports it, else the first one", () => {
     const m = new Map([["x", "GLM-5.3"]]);
     expect(
       resolveCommandModelSelection({ text: "/x", commandModelMap: m, view: view(), currentReasoningLevel: "high" }),
@@ -73,11 +73,11 @@ describe("resolveCommandModelSelection", () => {
       resolveCommandModelSelection({ text: "/x", commandModelMap: m, view: view(), currentReasoningLevel: "bogus" }),
     ).toEqual({ providerId: "account:plan", modelId: "GLM-5.3", options: { reasoningLevel: "low" } });
   });
-  it("modelId pelado resuelve contra cualquier provider que lo tenga", () => {
+  it("a bare modelId resolves against any provider that has it", () => {
     const m = new Map([["x", "GLM-5.3-Flash"]]);
     const v = view({
       providers: [
-        { providerId: "otro", modelIds: ["X1"] },
+        { providerId: "other", modelIds: ["X1"] },
         { providerId: "account:plan", modelIds: ["GLM-5.3-Flash"] },
       ],
     });

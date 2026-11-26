@@ -364,7 +364,7 @@ function stripHookInjectedContext(input: string): string {
 // the rest (the user's actual query, possibly multi-chunk). Same marker list as the
 // backfill tool (scripts/backfill-session-titles.mjs) — keep the two in sync.
 const CONTEXT_CHUNK_MARKERS: readonly string[] = [
-  "Contexto de memoria (agent-brain",
+  "Contexto de memoria (agent-brain", // lang-ok: wire marker emitted by the Kotlin bot ("memory context"), matched verbatim
   "🧠 Recent brain memory",
   "⚖️ Permanent laws",
   "SessionStart hook additional context",

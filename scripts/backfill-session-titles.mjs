@@ -67,7 +67,7 @@ function stripHookInjectedContext(input) {
 // blobs, hook echoes, environment headers. Drop LEADING paragraph chunks that carry one of
 // the known context markers; keep the rest (the user's actual query, possibly multi-chunk).
 const CONTEXT_CHUNK_MARKERS = [
-  "Contexto de memoria (agent-brain",
+  "Contexto de memoria (agent-brain", // lang-ok: wire marker emitted by the Kotlin bot ("memory context"), matched verbatim
   "🧠 Recent brain memory",
   "⚖️ Permanent laws",
   "SessionStart hook additional context",

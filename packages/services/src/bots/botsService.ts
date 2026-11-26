@@ -227,16 +227,16 @@ function parseBotModelOptionValue(value: string): ModelSelection | undefined {
 }
 
 /**
- * [fork] El PAR coherente de un set parcial (plan/modelo del canal daemon).
- * El frame puede traer sólo uno de los dos campos; el merge con el sibling
- * VIGENTE produce pares que no existen en el catálogo (medido 3/11: plan
- * `opencode-go-chat` con el modelo `GLM-5.3-Flash` de z.ai → «not selectable»).
- * El par se resuelve contra la MISMA vista que valida la selección:
- *  - plan solo: conserva el modelo actual SI el plan destino lo expone; si
- *    no, toma el primer modelo del plan (el orden del catálogo es del host);
- *  - modelo solo: el plan que POSEE el modelo, el actual primero;
- *  - ambos: tal cual, y sólo si el par existe.
- * `undefined` = el par pedido no existe (el caller dice el rechazo honesto).
+ * [fork] The coherent PAIR for a partial set (plan/model from the daemon channel).
+ * The frame may carry only one of the two fields; merging it with the CURRENT
+ * sibling produces pairs that do not exist in the catalog (measured 2026-11-03:
+ * plan `opencode-go-chat` with z.ai's `GLM-5.3-Flash` model → "not selectable").
+ * The pair resolves against the SAME view that validates the selection:
+ *  - plan alone: keeps the current model IF the target plan exposes it;
+ *    otherwise it takes the plan's first model (the catalog order belongs to the host);
+ *  - model alone: the plan that OWNS the model, the current one first;
+ *  - both: as given, and only if the pair exists.
+ * `undefined` = the requested pair does not exist (the caller says the honest rejection).
  */
 export function resolveModelPair(
   view: Pick<ModelSelectionView, "providers">,
@@ -439,7 +439,7 @@ interface BotTaskSelectionEntry {
   task: ZCodeTaskMeta;
   workspacePath: string;
   workspaceIdentity?: string;
-  /** [fork] 5/11: la task sale del árbol de proyectos; trae su mundo para el re-point del bind. */
+  /** [fork] 2026-11-05: the task comes from the project tree; it brings its world for the bind's re-point. */
   projectId?: string | null;
   hostId?: string;
 }
@@ -895,11 +895,11 @@ export function createBotsService(
     weixin: createWeixinBotProvider({
       loadCredential: (key) => deps.credentialService.load(key),
     }),
-    // [fork] B3a: el canal daemon no envía salidas por provider adapter — las
-    // replies de handleInboundMessage vuelven por el socket y el stream crudo
-    // lo consume la propia conexión (daemonChannel.ts). Adapter null ⇒
-    // sendOutbound/startTyping lo salen sin efecto, y privateSyncSupported no
-    // lo lista, así que tampoco arma la suscripción persistente de replies.
+    // [fork] B3a: the daemon channel sends no output through a provider adapter — the
+    // handleInboundMessage replies go back over the socket and the raw stream
+    // is consumed by the connection itself (daemonChannel.ts). A null adapter ⇒
+    // sendOutbound/startTyping become no-ops, and privateSyncSupported does not
+    // list it, so it does not build the persistent reply subscription either.
     daemon: null,
     discord: null,
     wecom: null,
@@ -2703,7 +2703,7 @@ export function createBotsService(
     };
   }
 
-  /** Resuelve el contexto del bot para las ops de selección de modelo del canal daemon. */
+  /** Resolves the bot's context for the daemon channel's model-selection ops. */
   async function readContextForBotModelSelection(params: {
     botId: string;
     workspacePath?: string;
@@ -2721,7 +2721,7 @@ export function createBotsService(
     throw new Error(`no bot context found for botId ${params.botId}`);
   }
 
-  /** Lee la selección vigente (plan/modelo/effort) de un contexto, draft o task. */
+  /** Reads the current selection (plan/model/effort) of a context, draft or task. */
   async function readBotModelSelectionSnapshot(
     context: BotContextState,
   ): Promise<BotModelSelectionSnapshot> {
@@ -2732,8 +2732,8 @@ export function createBotsService(
         zcodeTaskService.getTaskModelSelection({ taskId }).catch(() => null),
         zcodeTaskService.getTaskConfigOptions({ taskId }).catch(() => []),
       ]);
-      // El thought_level del session (configOptions) es el effort vigente; el
-      // options.reasoningLevel de la ModelSelection es solo lo último seteado junto al modelo.
+      // The session's thought_level (configOptions) is the current effort; the
+      // ModelSelection's options.reasoningLevel is only the last value set alongside the model.
       const thoughtLevel = readConfigSelectCurrentValue(configOptions, "thoughtLevel");
       const selection = sessionSelection
         ? {
@@ -8154,12 +8154,12 @@ export function createBotsService(
     user: BotConfig,
     value: string,
   ): Promise<BotTaskSelectionEntry | null> {
-    // [fork] 5/11: un sid completo (sess_…) es globalmente único — se resuelve del
-    // árbol de proyectos por taskId EXACTO, sin el filtro de workspace/proyecto del
-    // contexto: los drafts (projectId null, ~/.zcode/workspace/draft-*) jamás entran
-    // al catálogo del bot y hoy responden "Task not found". readTree ya excluye las
-    // tasks borradas (deletedTasks solo a pedido explícito). No existe → la ley de
-    // siempre (workspace-scoped, numéricos y pending selections) decide.
+    // [fork] 2026-11-05: a full sid (sess_…) is globally unique — it resolves from the
+    // project tree by EXACT taskId, without the context's workspace/project filter:
+    // drafts (projectId null, ~/.zcode/workspace/draft-*) never enter the bot's
+    // catalog and today answer "Task not found". readTree already excludes
+    // deleted tasks (deletedTasks only on explicit request). Not found → the
+    // usual law (workspace-scoped, numerics and pending selections) decides.
     if (value.startsWith("sess_")) {
       const tree = await deps.projectService.readTree({ hostId: context.hostId });
       const task = tree.tasks.find((item) => item.taskId === value);
@@ -8185,12 +8185,12 @@ export function createBotsService(
   }
 
   /**
-   * EL NÚCLEO DEL BIND (2/11): re-apunta el contexto a una task con la ley
-   * COMPLETA del comando /task — la frontera de proyecto/fixed-cwd
-   * (resolveTaskSelectionEntry: la snapshot no saltea los límites), el
-   * veredicto taskRunning (un /task durante un turno vivo desincronizaría
-   * el stream del bot) y la resincronización de grupos. Lo comparten el
-   * caso task.set y el canal daemon (bindTaskId atómico del inbound).
+   * THE CORE OF THE BIND (2026-11-02): re-points the context at a task with the
+   * COMPLETE law of the /task command — the project/fixed-cwd boundary
+   * (resolveTaskSelectionEntry: the snapshot does not skip the limits), the
+   * taskRunning verdict (a /task during a live turn would desynchronize
+   * the bot's stream) and the group resync. It is shared by the
+   * task.set case and the daemon channel (the inbound's atomic bindTaskId).
    */
   async function bindTaskToContext(params: {
     message: BotInboundMessage;
@@ -8215,13 +8215,13 @@ export function createBotsService(
       // 但旧 task 输出仍会继续回到同一 bot 会话，用户会误以为消息串线。
       return { ok: false, refusals: [createOutbound(message.actor, msg(locale, blockReason))] };
     }
-    // [fork] 5/11: el bind re-apunta el contexto COMPLETO al mundo de la task —
-    // no solo activeTaskId (antes workspacePath/projectId quedaban apuntando al
-    // workspace VIEJO: una task de draft o de otro proyecto quedaba huérfana).
-    // Espejo mínimo de bindProject/workspace.set; al cruzar de workspace,
-    // workspaceId/additionalDirectories se resembran: un draft (projectId null)
-    // no tiene proyecto ni directorios propios y la identidad vuelve a la clave
-    // getWorkspaceKey(path, identity), como cualquier contexto sin proyecto.
+    // [fork] 2026-11-05: the bind re-points the COMPLETE context at the task's world —
+    // not just activeTaskId (before, workspacePath/projectId kept pointing at the
+    // OLD workspace: a draft task or one from another project was left orphaned).
+    // Minimal mirror of bindProject/workspace.set; when crossing workspaces,
+    // workspaceId/additionalDirectories are reseeded: a draft (projectId null)
+    // has no project or directories of its own and the identity falls back to the
+    // getWorkspaceKey(path, identity) key, like any context without a project.
     const crossesWorkspace =
       getWorkspaceKey(task.workspacePath, task.workspaceIdentity) !==
       getWorkspaceKey(context.workspacePath, context.workspaceIdentity);
@@ -8843,8 +8843,8 @@ export function createBotsService(
           await zcodeTaskService.setModel({
             taskId,
             traceId,
-            // Un modelo sin escalones declarados se selecciona por identidad:
-            // el completion no inventa un effort que el catálogo no publica.
+            // A model with no declared levels is selected by identity:
+            // the completion does not invent an effort the catalog does not publish.
             modelSelection: completed ?? pair,
           });
         }
@@ -8891,7 +8891,7 @@ export function createBotsService(
         if (!modelSelection) {
           throw new Error("effort requires an existing or newly selected model");
         }
-        // Un effort inventado no debe persistirse como selección «completa» rota.
+        // An invented effort must not be persisted as a broken "complete" selection.
         assertEffortAllowed(selectionView, modelSelection, params.effort!);
         modelSelection = {
           ...modelSelection,
@@ -9020,11 +9020,11 @@ export function createBotsService(
     },
     watchAutomationRun,
     /**
-     * EL BIND ATÓMICO del canal daemon (2/11): apunta el contexto del bot a
-     * la task con la MISMA ley del comando /task (frontera de proyecto +
-     * veredicto taskRunning, el núcleo [bindTaskToContext]); el inbound con
-     * bindTaskId lo usa ANTES de entregar el texto — si el bind falla, el
-     * refusal son las outbound de siempre y el texto NO vuela.
+     * THE ATOMIC BIND of the daemon channel (2026-11-02): points the bot's context at
+     * the task with the SAME law as the /task command (project boundary +
+     * taskRunning verdict, the [bindTaskToContext] core); the inbound with
+     * bindTaskId uses it BEFORE delivering the text — if the bind fails, the
+     * refusals are the usual outbound messages and the text does NOT fly.
      */
     async bindTaskForDaemonChannel(
       message: BotInboundMessage,

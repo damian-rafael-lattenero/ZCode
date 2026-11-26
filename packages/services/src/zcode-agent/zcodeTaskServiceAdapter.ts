@@ -413,7 +413,7 @@ export function createZCodeTaskServiceAdapter(
       modelSelection?: CommandPayloadMap["sendText"]["modelSelection"];
       modelSelectionBasis?: CommandPayloadMap["sendText"]["modelSelectionBasis"];
       modelExecution?: CommandPayloadMap["sendText"]["modelExecution"];
-      /** STEER (aditivo, 30/10): «guide» → el payload sendText pide delivery guide. */
+      /** STEER (additive, 2026-10-30): "guide" → the sendText payload requests guide delivery. */
       requestedDelivery?: "guide";
     } & ZCodeBackgroundTurnAttribution,
   ): Promise<CommandAck | undefined> {
@@ -1197,11 +1197,11 @@ export function createZCodeTaskServiceAdapter(
     getGlobalTaskEmitter(params.taskId).fire(event);
   }
 
-  // [fork] Espejo bot/desktop: emitir el evento (hasta hoy SIN productor)
-  // config_option_update tras cada escritura de configuración. Sin él ni el
-  // bot ni la barra de la desktop se enteran de un cambio que no hicieron
-  // ellas — medido 4/11: el setMode del canal aplicaba y nada avisaba, y el
-  // siguiente send del compositor re-estampaba el estado viejo.
+  // [fork] Bot/desktop mirror: emit the event (until today WITHOUT a producer)
+  // config_option_update after every configuration write. Without it neither the
+  // bot nor the desktop bar learns about a change they did not make
+  // themselves — measured 2026-11-04: the channel's setMode applied and nothing
+  // announced it, and the composer's next send re-stamped the old state.
   function emitConfigOptionUpdate(params: TaskTarget, snapshot: ZCodeSessionStateSnapshot): void {
     emitTaskEvent(params, {
       type: "config_option_update",

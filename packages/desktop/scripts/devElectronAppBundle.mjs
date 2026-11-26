@@ -12,7 +12,7 @@ export const DEV_ELECTRON_APP_BUNDLE_ID = "dev.zcode.app.development";
 export const DEV_ELECTRON_BUNDLE_FORMAT = 4;
 // Same identity family as scripts/build-install.nu. The APPLE-ISSUED
 // identity (free Apple ID -> Personal Team) is preferred: its signature
-// carries a real TeamIdentifier, so ONE keychain «Always Allow» registers
+// carries a real TeamIdentifier, so ONE keychain "Always Allow" registers
 // teamid:<TEAM> in the item's partition list and every later build matches
 // (the per-deploy prompt dies). The local self-signed identity is the
 // fallback; ad-hoc is last resort.

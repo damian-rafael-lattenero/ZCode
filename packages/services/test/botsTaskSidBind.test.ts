@@ -178,11 +178,11 @@ describe("bot /task <sid> bind (the owner's 5/11 law)", () => {
         projectId: "proj-beta",
       });
       expect(context.workspaceId).toBeUndefined();
-      // y hablar sigue entrando a la task del otro proyecto
-      await botsService.handleInboundMessage(inbound("hola beta"));
+      // and speaking still lands in the other project's task
+      await botsService.handleInboundMessage(inbound("hello beta"));
       await vi.waitFor(() =>
         expect(taskService.sendPrompt).toHaveBeenCalledWith(
-          expect.objectContaining({ taskId: "sess_beta_1", content: "hola beta" }),
+          expect.objectContaining({ taskId: "sess_beta_1", content: "hello beta" }),
         ),
       );
     } finally {
@@ -193,7 +193,7 @@ describe("bot /task <sid> bind (the owner's 5/11 law)", () => {
   it("(c) a running task still refuses the switch with taskRunning and the context stays put", async () => {
     const { repo, taskService, botsService } = await startService();
     try {
-      // bind a task del PROPIO workspace y enviar un turno → runningTasks la marca viva
+      // bind a task from THIS workspace and send a turn → runningTasks marks it live
       await botsService.handleInboundMessage(inbound("/task sess_alpha_1"));
       expect(await contextOf(repo)).toMatchObject({
         activeTaskId: "sess_alpha_1",
@@ -205,7 +205,7 @@ describe("bot /task <sid> bind (the owner's 5/11 law)", () => {
           expect.objectContaining({ taskId: "sess_alpha_1" }),
         ),
       );
-      // el /task hacia OTRO sid se niega con el veredicto de siempre, sin re-apuntar nada
+      // /task towards ANOTHER sid is refused with the usual verdict, without re-pointing anything
       const replies = await botsService.handleInboundMessage(inbound("/task sess_draft_1"));
       expect(JSON.stringify(replies)).toMatch(
         /当前任务正在运行|task is still running|still running/iu,

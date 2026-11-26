@@ -319,9 +319,9 @@ export interface IZCodeTaskService {
       /** 单次执行约束与动态鉴权；仅 idle start-now 接受，不进入普通队列。 */
       modelExecution?: CommandPayloadMap["sendText"]["modelExecution"];
       /**
-       * STEER (aditivo, 30/10): «guide» → v4 sendText requestedDelivery=guide —
-       * busy 时 CLI admission 把输入注入当前 turn（turn.steerQueued），
-       * idle 时降级为普通新 turn。缺省 = 普通发送。
+       * STEER (additive, 2026-10-30): "guide" → v4 sendText requestedDelivery=guide —
+       * while busy, the CLI admission injects the input into the current turn (turn.steerQueued);
+       * while idle it degrades to a normal new turn. Unset = a normal send.
        */
       requestedDelivery?: "guide";
     } & ZCodeBackgroundTurnAttribution,

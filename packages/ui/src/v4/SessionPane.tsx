@@ -3192,16 +3192,16 @@ export function SessionPane({
       keywords: ["plan", "计划", "计划模式"],
       run: () => handleDraftSwitchMode("plan"),
     };
-    // FORK CHANGE (damian): /diff abre el panel Diff Ask SIN turno del modelo
-    // (acción pura de UI). Requiere sesión viva: la surface del plugin es
-    // session-scoped; el comando CLI homónimo queda eclipsado (precedencia
-    // invertida en SlashCommandPlugin).
+    // FORK CHANGE (damian): /diff opens the Diff Ask panel with NO model turn
+    // (a pure UI action). It requires a live session: the plugin's surface is
+    // session-scoped; the CLI command of the same name is eclipsed (precedence
+    // inverted in SlashCommandPlugin).
     const diffAction: AppSlashCommand | null =
       sessionId && !compactForRemoteControl
         ? {
             value: "diff",
-            description: "Abrir el panel Diff Ask (instantáneo, sin turno del modelo)",
-            keywords: ["diff", "diffask", "diff ask", "cambios", "git"],
+            description: "Open the Diff Ask panel (instant, no model turn)",
+            keywords: ["diff", "diffask", "diff ask", "changes", "git"],
             run: () => void openDiffAskPanel(),
           }
         : null;

@@ -815,7 +815,7 @@ describe("daemon local channel (B3a)", () => {
       options: { reasoningLevel: "max" },
     });
 
-    // Sin runtime.contextUsage NO se inventa nada: ambos null.
+    // Without runtime.contextUsage nothing is invented: both null.
     sendQuery("cw2", { kind: "contextWindow", taskId: "task-7", workspacePath: "/tmp/workspace" });
     const result = await queryResult("cw2");
     expect(result).toMatchObject({
@@ -947,9 +947,9 @@ describe("daemon local channel (B3a)", () => {
     client.send({
       type: "inbound",
       id: "bind-miss",
-      text: "no debe llegar",
+      text: "must not arrive",
       messageId: "tg-902",
-      bindTaskId: "sess_inexistente",
+      bindTaskId: "sess_missing",
     } as never);
     const result = await client.waitFor(
       (message) => message.type === "inbound_result" && message.id === "bind-miss",

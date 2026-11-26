@@ -59,9 +59,9 @@ export interface BotAutomationRunWatchParams {
   workspaceIdentity?: string;
 }
 
-/** Selección de modelo proyectada para el canal del daemon (plan+modelo+effort). */
+/** Model selection projected for the daemon channel (plan+model+effort). */
 export interface BotModelSelectionSnapshot {
-  /** «task» = conversación con turno activo; «draft» = contexto sin turno. */
+  /** "task" = conversation with an active turn; "draft" = context without a turn. */
   scope: "draft" | "task";
   taskId?: string;
   selection: {
@@ -75,11 +75,11 @@ export interface BotModelSelectionApplyParams {
   botId: string;
   workspacePath?: string;
   workspaceIdentity?: string;
-  /** Plan = providerId de cuenta; ausente = mantener el vigente. */
+  /** Plan = account providerId; absent = keep the current one. */
   plan?: string;
-  /** modelId; ausente = mantener el vigente. */
+  /** modelId; absent = keep the current one. */
   model?: string;
-  /** Reasoning level («effort»); ausente = mantener el vigente. */
+  /** Reasoning level ("effort"); absent = keep the current one. */
   effort?: string;
 }
 
@@ -230,27 +230,27 @@ export interface IBotsService {
   watchAutomationRun(params: BotAutomationRunWatchParams): Promise<void>;
   handleInboundMessage(message: BotInboundMessage): Promise<BotOutboundMessage[]>;
   /**
-   * EL BIND ATÓMICO del canal daemon (2/11): apunta el contexto del bot a la
-   * task con la MISMA ley del comando /task — la frontera de proyecto/
-   * fixed-cwd y el veredicto taskRunning incluidos (el núcleo compartido con
-   * task.set). El inbound con bindTaskId lo usa ANTES de entregar el texto;
-   * si el bind falla, el refusal viaja como única reply del inbound_result y
-   * el texto NO se entrega.
+   * THE ATOMIC BIND of the daemon channel (2026-11-02): points the bot's context at the
+   * task with the SAME law as the /task command — the project/fixed-cwd
+   * boundary and the taskRunning verdict included (the core shared with
+   * task.set). The inbound with bindTaskId uses it BEFORE delivering the text;
+   * if the bind fails, the refusal travels as the single inbound_result reply and
+   * the text is NOT delivered.
    */
   bindTaskForDaemonChannel(
     message: BotInboundMessage,
     taskId: string,
   ): Promise<{ ok: true } | { ok: false; refusals: BotOutboundMessage[] }>;
-  /** Lee la selección de modelo (plan/modelo/effort) del contexto del bot. */
+  /** Reads the model selection (plan/model/effort) of the bot's context. */
   getBotModelSelection(params: {
     botId: string;
     workspacePath?: string;
     workspaceIdentity?: string;
   }): Promise<BotModelSelectionSnapshot>;
   /**
-   * Cambia plan/modelo/effort del contexto del bot SIN el flujo interactivo de
-   * /model: el mismo camino de escritura (draftOptions o setModel del task),
-   * pensado para el canal del daemon (frames setModelSelection).
+   * Changes the bot context's plan/model/effort WITHOUT the interactive /model
+   * flow: the same write path (draftOptions or the task's setModel),
+   * designed for the daemon channel (setModelSelection frames).
    */
   setBotModelSelection(
     params: BotModelSelectionApplyParams,

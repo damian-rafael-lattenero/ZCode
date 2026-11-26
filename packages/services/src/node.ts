@@ -500,7 +500,7 @@ import { TaskIndexRepo } from "./session/taskIndexRepo.js";
 import { AutomationRepo } from "#src/session/automationRepo.js";
 import type { AppSettings } from "@zcode/shared";
 import { createBotsService } from "./bots/botsService.js";
-// [fork] B3a: canal «daemon local» del bot Kotlin (ADR-022).
+// [fork] B3a: "daemon local" channel for the Kotlin bot (ADR-022).
 import { createDaemonLocalChannel } from "./bots/daemonChannel.js";
 import { BotsRepo } from "#src/bots/repo.js";
 import {
@@ -821,8 +821,8 @@ export function getPluginUserOptionsReader(
   return pluginUserOptionsReaders.get(services);
 }
 const managedHostApiNetworkTransports = new WeakMap<ServiceCollection, HostApiNetworkTransport>();
-// [fork] B3a: canal «daemon local» (unix socket del bot Kotlin). El Host es el
-// dueño del socket — muere con el proceso, el daemon reconecta (ADR-022).
+// [fork] B3a: "daemon local" channel (the Kotlin bot's unix socket). The Host
+// owns the socket — it dies with the process, the daemon reconnects (ADR-022).
 const daemonLocalChannels = new WeakMap<
   ServiceCollection,
   { dispose(): Promise<void> }
@@ -2995,8 +2995,8 @@ export function createLocalServices(options: {
   const marketingAssets = createMarketingAssetRegistry({
     allowLoopback: ZCODE_ENV === "test" || process.env.NODE_ENV === "development",
   });
-  // [fork] B3a: botsService se alza antes de la cadena para que el canal
-  // daemon-local cierre sobre la MISMA instancia que se registra acá.
+  // [fork] B3a: botsService is raised before the chain so the daemon-local
+  // channel closes over the SAME instance that is registered here.
   const botsService = createBotsService({
     repo: botsRepo,
     projectService,
@@ -3410,10 +3410,10 @@ export function createLocalServices(options: {
   // 见 sharedSqliteRepos 声明处注释：登记全部 tasks-index sqlite 句柄，dispose 链统一关闭
   sqliteReposToClose.push(taskIndexRepo);
   sharedSqliteRepos.set(services, sqliteReposToClose);
-  // [fork] B3a (ADR-022): canal «daemon local» del bot Kotlin. El Host (este
-  // utility process) es el dueño del socket: vive y muere con él. El main de
-  // Electron no participa. desktop-attached remote hosts no lo exponen — el
-  // canal pertenece al host local donde corre la conversación real.
+  // [fork] B3a (ADR-022): "daemon local" channel for the Kotlin bot. The Host (this
+  // utility process) owns the socket: it lives and dies with it. Electron's main
+  // does not take part. desktop-attached remote hosts do not expose it — the
+  // channel belongs to the local host where the real conversation runs.
   if (!isDesktopAttachedRemote) {
     const daemonChannel = createDaemonLocalChannel({
       botsService,
@@ -3556,8 +3556,8 @@ export function disposeServiceResources(services: ServiceCollection): void {
   taskAutoArchiveDisposers.get(services)?.();
   taskAutoArchiveDisposers.delete(services);
   managedHostApiNetworkTransports.get(services)?.dispose();
-  // [fork] B3a: el socket muere con el host (ADR-022); el dispose síncrono es
-  // best-effort — la variante await espera el cierre real (bye + unlink).
+  // [fork] B3a: the socket dies with the host (ADR-022); the synchronous dispose is
+  // best-effort — the await variant waits for the real close (bye + unlink).
   void daemonLocalChannels.get(services)?.dispose().catch(() => undefined);
   daemonLocalChannels.delete(services);
 }

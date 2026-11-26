@@ -4,27 +4,27 @@ Personal fork of [zai-org/ZCode](https://github.com/zai-org/ZCode) (Apache-2.0).
 The app installed at `/Applications/ZCode.app` on this Mac is **built from this
 repo**, not downloaded from Z.ai. Updates arrive only through the ritual below.
 
-## Mapa de documentación (empezar por acá)
+## Documentation map (start here)
 
-- **[docs/fork/ARCHITECTURE.md](docs/fork/ARCHITECTURE.md)** — el mapa maestro:
-  componentes (app fork / agente CLI / bot de Telegram), diagrama, **por qué
-  el bot es headless**, los 10 patrones de diseño del fork con el commit que
-  los introduce, la tabla bot↔fork (qué commit habilita qué en el bot), y
-  las decisiones de arquitectura registradas con su por-qué.
-- **[docs/fork/TESTING.md](docs/fork/TESTING.md)** — suites con duraciones
-  **medidas**, el pipeline de verificación por cambio, las grietas conocidas
-  (typecheck raíz no cubre `apps/`, oxfmt no cubre `apps/`, baseline fallido
-  de `runner.test.ts`), y cómo se testea el deploy (`verify-deploy.nu`).
-- **Este archivo (FORK.md)** — runbook operativo: ritual de sync/deploy,
-  rollback, ledger de builds y el historial de olas (cronológico, con el
-  diagnóstico de cada una).
+- **[docs/fork/ARCHITECTURE.md](docs/fork/ARCHITECTURE.md)** — the master map:
+  the components (fork app / CLI agent / Telegram bot), the diagram, **why the
+  bot is headless**, the fork's 10 design patterns with the commit that
+  introduces each one, the bot↔fork table (which commit enables what in the
+  bot), and the recorded architecture decisions with their why.
+- **[docs/fork/TESTING.md](docs/fork/TESTING.md)** — suites with **measured**
+  durations, the per-change verification pipeline, the known cracks (root
+  typecheck does not cover `apps/`, oxfmt does not cover `apps/`, the failing
+  `runner.test.ts` baseline), and how the deploy is tested (`verify-deploy.nu`).
+- **This file (FORK.md)** — operational runbook: the sync/deploy ritual,
+  rollback, the build ledger and the wave history (chronological, with each
+  wave's diagnosis).
 
-Sistema en una línea: la app del fork sobrevive a la red inestable de z.ai
-y publica hechos (sidecars, eventos, countdowns); el bot de Telegram vivo
-es el daemon Kotlin (`~/.zcode/bot-daemon`), que habla el canal
-daemon-local del fork y es el único dueño de getUpdates. El bot Python
-(`~/.zcode/hooks/zcode_bot/`) quedó retirado el 30/10 como referencia de
-paridad y rollback. La frontera sigue siendo archivos JSONL, no APIs.
+System in one line: the fork app survives z.ai's unstable network and
+publishes facts (sidecars, events, countdowns); the live Telegram bot is the
+Kotlin daemon (`~/.zcode/bot-daemon`), which speaks the fork's daemon-local
+channel and is the sole owner of getUpdates. The Python bot
+(`~/.zcode/hooks/zcode_bot/`) was retired on 2026-10-30 as the parity and
+rollback reference. The boundary is still JSONL files, not APIs.
 
 ## Why a fork
 
@@ -35,22 +35,22 @@ Oct 2026); instead the change lives in source, as a normal git commit.
 
 ## What the fork changes
 
-Áreas del fork (detalle archivo-por-archivo en las Olas de abajo y en
+Fork areas (file-by-file detail in the Waves below and in
 [ARCHITECTURE.md §4–5](docs/fork/ARCHITECTURE.md)):
 
-| Área | Olas / commits | Resumen |
+| Area | Waves / commits | Summary |
 | --- | --- | --- |
-| Diff Ask (3 superficies + bootstrap) | `e01206ef`, `6d441a8a`, `7c33c912`, `a3bd3f9b` | Card en plugins grid, Changes→Diff Ask, `/diff` client-side, install idempotente |
-| `model:` frontmatter por comando | `7c33c912` | El turno corre en el modelo que el comando pide |
-| Verbosidad del transcript | `942e82f7` | Modos de detalle + switch "expandir TODO" retroactivo |
-| Resiliencia red z.ai | `2b2d17a0`, `f6034b5f`, `c578e14a`, `f85a67f6` | Retry tabla fija, backoff 2^n a 1024s sin jitter, budget por fallas consecutivas |
-| Estados honestos en UI | `c578e14a`, `9bb337bf`, `3ab83c67` | Countdown absoluto mm:ss + labels por causa, en DOS superficies |
-| Límites de uso z.ai | `08d05f36` | `next_flush_time` → esperar al reset (tope 24h) en vez de morir |
-| Workflows siempre disponibles | `2ac70c51` | El gateway ya no puede apagar los planes; Skill tolera `prefijo:nombre` |
-| Telemetría viva para el bot | `1e4f7413`, `4b46d692`, `d4f231bc` | Sidecars live-io: CoT en vivo + tool-args componiéndose |
-| Deploy verificado | `f6659e93`, `40f0c958`, `d1c0b9f5` | Runbook, `verify-deploy.nu` con markers, build-install `--yes/--when-quit/--zip` |
+| Diff Ask (3 surfaces + bootstrap) | `e01206ef`, `6d441a8a`, `7c33c912`, `a3bd3f9b` | Card in the plugins grid, Changes→Diff Ask, client-side `/diff`, idempotent install |
+| `model:` frontmatter per command | `7c33c912` | The turn runs on the model the command asks for |
+| Transcript verbosity | `942e82f7` | Detail modes + retroactive "expand EVERYTHING" switch |
+| z.ai network resilience | `2b2d17a0`, `f6034b5f`, `c578e14a`, `f85a67f6` | Fixed retry table, 2^n backoff up to 1024s with no jitter, budget per consecutive failure |
+| Honest states in the UI | `c578e14a`, `9bb337bf`, `3ab83c67` | Absolute mm:ss countdown + labels per cause, on TWO surfaces |
+| z.ai usage limits | `08d05f36` | `next_flush_time` → wait for the reset (24h cap) instead of dying |
+| Workflows always available | `2ac70c51` | The gateway can no longer switch the plans off; Skill tolerates `prefix:name` |
+| Live telemetry for the bot | `1e4f7413`, `4b46d692`, `d4f231bc` | live-io sidecars: live CoT + tool-args composing |
+| Verified deploy | `f6659e93`, `40f0c958`, `d1c0b9f5` | Runbook, `verify-deploy.nu` with markers, build-install `--yes/--when-quit/--zip` |
 
-Detalle histórico (los primeros cambios):
+Historical detail (the first changes):
 
 | Commit prefix | File | Change |
 | --- | --- | --- |
@@ -98,35 +98,36 @@ Merge conflicts, if any, will be in the `[fork]` files above — resolve by
 re-applying the small change. If upstream reworks the recommendations pipeline,
 `git log -p -- packages/ui/src/plugin-ui/adapters/` shows where it moved.
 
-## Deploy de features (el proceso, 2026-10-25)
+## Feature deploy (the process, 2026-10-25)
 
-Cada feature sigue SIEMPRE el mismo pipeline, en este orden:
+Every feature ALWAYS follows the same pipeline, in this order:
 
-1. **Implementar** + tests (red-green cuando aplique) + `pnpm typecheck`
-   (¡la raíz NO compila `apps/zcode-cli`! cada package ahí compila con su
-   propio tsc — correr también `cd apps/zcode-cli/packages/adapters && npx
-   tsc --noEmit` si se tocó) + `pnpm lint` + `pnpm architecture:check
+1. **Implement** + tests (red-green where applicable) + `pnpm typecheck`
+   (the root does NOT compile `apps/zcode-cli`! each package there compiles
+   with its own tsc — also run `cd apps/zcode-cli/packages/adapters && npx
+   tsc --noEmit` if you touched it) + `pnpm lint` + `pnpm architecture:check
    --changed`.
 2. **Commit** `[fork] ...` + `git push --no-verify origin damian`.
 3. **Bundle**: `ZCODE_ENV=production CSC_IDENTITY_AUTO_DISCOVERY=false
    ELECTRON_MIRROR=https://artifacts.electronjs.org/ mise exec -- node
-   scripts/mise-run.mjs pnpm bundle:desktop` con salida a ARCHIVO y verificar
-   el `EXIT:` real (un `| tail` en background devuelve el exit del tail y
-   **enmascara el fallo** — pasó el 25/10 y casi instala un build viejo).
-4. **Swap** con semántica de rename (`mv` a `.prev` + `ditto` + `codesign
-   --sign -`): la app corriendo sigue viva hasta el ⌘Q.
-5. **⌘Q + reabrir** (lo hace Damian; nunca matar procesos zcode desde el bot).
-6. **Verificar**: `scripts/verify-deploy.nu` — chequea que el bundle del app
-   Y el repo dist tienen los markers de cada ola, que no hay apps ZCode extra
-   en /Applications, y que la app corriendo arrancó después del swap.
+   scripts/mise-run.mjs pnpm bundle:desktop` with the output to a FILE and
+   check the real `EXIT:` (a background `| tail` returns tail's exit code and
+   **masks the failure** — it happened on 2026-10-25 and almost installed an
+   old build).
+4. **Swap** with rename semantics (`mv` to `.prev` + `ditto` + `codesign
+   --sign -`): the running app stays alive until ⌘Q.
+5. **⌘Q + reopen** (Damian does this; never kill zcode processes from the bot).
+6. **Verify**: `scripts/verify-deploy.nu` — checks that the app bundle AND
+   the repo dist carry each wave's markers, that there are no extra ZCode apps
+   in /Applications, and that the running app started after the swap.
 
-**Mina documentada (25/10):** cuando el workspace activo ES este monorepo, el
-agent se resuelve desde `apps/zcode-cli/packages/cli/dist/zcode.cjs` ANTES que
-desde el bundle del app (`resolveDefaultZCodeAgentCommand` en
-`zcodeAgentProcessManager.ts`: env → monorepo dist → bundle). El paso de
-bundle regenera ese dist, así que el pipeline de arriba mantiene ambos frescos
-— pero un swap SIN bundle (o un bundle que falla a mitad) deja el repo dist
-viejo y "el deploy no impactó". Por eso el paso 6 chequea los dos binarios.
+**Documented mine (2026-10-25):** when the active workspace IS this monorepo,
+the agent resolves from `apps/zcode-cli/packages/cli/dist/zcode.cjs` BEFORE
+the app bundle (`resolveDefaultZCodeAgentCommand` in
+`zcodeAgentProcessManager.ts`: env → monorepo dist → bundle). The bundle step
+regenerates that dist, so the pipeline above keeps both fresh — but a swap
+WITHOUT a bundle (or a bundle that fails halfway) leaves the repo dist stale
+and "the deploy did not take". That is why step 6 checks both binaries.
 
 ## Diff Ask plugin (separate repo)
 
@@ -215,200 +216,200 @@ mise exec -- git push --no-verify origin damian
 
 Re-check after each sync — if the gate gets fast/reliable again, drop the flag.
 
-## Ola 2 (23/10 noche, tag `damian-v3.16.2-20261023c`): model: + /diff client-side
+## Wave 2 (night of 2026-10-23, tag `damian-v3.16.2-20261023c`): model: + client-side /diff
 
-- **A** — los user commands con `model:` en el frontmatter corren SU turno en
-  ese modelo: `model: account:plan/GLM-5.3-Flash$low` (o modelId pelado).
-  Parseado por `commandFileParser`, aplicado por turno en SessionPane vía
-  `forkCommandModel.ts` (validado contra la vista viva — nunca se envía un
-  modelo/nivel desconocido). /diff y cualquier comando futuro: segundos
-  en vez de 25-30s.
-- **C** — `/diff` es ahora un app-command 100% client-side: abre el panel de
-  Diff Ask al instante, SIN turno del modelo (0 tokens). Los app-commands
-  ganan a los homónimos del catálogo CLI (precedencia invertida en
-  SlashCommandPlugin). Requiere sesión viva.
-- **B** (lado bot, commit `5e7545f` del repo bot — el runtime `zcode.cjs` no
-  se buildea desde este repo): cada runtime del protocolo sostiene la Mac
-  despierta con `caffeinate -i -w <pid>` mientras vive (también en batería).
-  Complementa el `caffeinate -s` del LaunchAgent del poller (AC-only).
+- **A** — user commands with `model:` in the frontmatter run THEIR turn on
+  that model: `model: account:plan/GLM-5.3-Flash$low` (or a bare modelId).
+  Parsed by `commandFileParser`, applied per turn in SessionPane via
+  `forkCommandModel.ts` (validated against the live view — an unknown
+  model/level is never sent). /diff and any future command: seconds
+  instead of 25-30s.
+- **C** — `/diff` is now a 100% client-side app-command: it opens the
+  Diff Ask panel instantly, WITHOUT a model turn (0 tokens). App-commands
+  beat the CLI catalog homonyms (precedence inverted in
+  SlashCommandPlugin). Requires a live session.
+- **B** (bot side, commit `5e7545f` in the bot repo — the `zcode.cjs` runtime
+  is not built from this repo): every protocol runtime keeps the Mac
+  awake with `caffeinate -i -w <pid>` while it lives (on battery too).
+  It complements the `caffeinate -s` of the poller's LaunchAgent (AC-only).
 
-## Ola 3 (25/10): resiliencia highspeed ante 502 de zcode.z.ai
+## Wave 3 (2026-10-25): highspeed resilience against zcode.z.ai 502s
 
-El gateway auxiliar `zcode.z.ai` (donde vive `/api/v1/highspeed/`) sufre
-micro-cortes 502 de segundos (medido 24-25/10: 4-6 warn/día, ~5-10s cada uno,
-mientras `api.z.ai` responde 1s). Dos fixes client-side (spec
-`docs/highspeed/highspeed-card-spec.md` §3 reglas 6+16, marcados FORK):
+The auxiliary gateway `zcode.z.ai` (where `/api/v1/highspeed/` lives)
+suffers 502 micro-outages of a few seconds (measured 2026-10-24/25: 4-6
+warns/day, ~5-10s each, while `api.z.ai` answers in 1s). Two client-side fixes
+(spec `docs/highspeed/highspeed-card-spec.md` §3 rules 6+16, marked FORK):
 
-- **Retry de tabla fija** — `highspeedHttpTransport` reintenta SOLO fallos
-  transitorios (502/503/504, error de red, timeout): exactamente 2 extras a
-  1s y 3s (compilado, NO "n/10" abierto). Business codes y 4xx no se
-  reintentan. La tabla es inyectable (`transientRetryDelaysMs`) para tests.
-- **El envío nunca se rompe por la carta** — si el draw rechaza DENTRO del
-  presupuesto de 1s, `prepareTurn` degrada a envío normal (`draw-miss`) en
-  vez de lanzar la excepción por el RPC y abortar el prompt (bug de
-  superficie: un 502 rápido mataba el turno completo). Post-presupuesto ya
-  estaba cubierto (race libera in-flight).
+- **Fixed retry table** — `highspeedHttpTransport` retries ONLY transient
+  failures (502/503/504, network error, timeout): exactly 2 extras at 1s and
+  3s (compiled, NOT an open "n/10"). Business codes and 4xx are not
+  retried. The table is injectable (`transientRetryDelaysMs`) for tests.
+- **The send never breaks because of the card** — if the draw rejects INSIDE the
+  1s budget, `prepareTurn` degrades to a normal send (`draw-miss`) instead of
+  throwing the exception through the RPC and aborting the prompt (surface
+  bug: a fast 502 killed the whole turn). Post-budget was already
+  covered (the race frees the in-flight).
 
-## Ola 4 (25/10 tarde): "Reconnecting n/10" de raíz — backoff hasta 15min
+## Wave 4 (afternoon of 2026-10-25): "Reconnecting n/10" from the root — backoff up to 15min
 
-Diagnóstico (log del CLI `~/.zcode/cli/log/zcode-2026-10-25.jsonl`): 567
-`model.request.failed` en el día, TODOS `statusCode: 502` de
-`api.z.ai/api/anthropic` (0 cuatro-veintinueve: no es rate limit ni el uso
-de Damian — es el gateway de z.ai). El "Reconnecting n/10" del UI es el
-retry del adapter (`maxAttempts: 11`, backoff 2s→60s): una falla de ~30s ×
-11 intentos se agota en ~5 min y **mata turnos largos enteros**.
+Diagnosis (CLI log `~/.zcode/cli/log/zcode-2026-10-25.jsonl`): 567
+`model.request.failed` in the day, ALL `statusCode: 502` from
+`api.z.ai/api/anthropic` (0 429s: it is neither rate limiting nor Damian's
+usage — it is z.ai's gateway). The UI's "Reconnecting n/10" is the
+adapter retry (`maxAttempts: 11`, backoff 2s→60s): a ~30s failure ×
+11 attempts is exhausted in ~5 min and **kills long turns whole**.
 
-Fix: `forkModelRetrySpawnEnv.ts` inyecta al spawn del agent
-`ZCODE_MODEL_RETRY_MAX_DELAY_MS=900000` (15min) SOLO si el usuario no lo
-seteó. Curva resultante 2s→4s→…→512s→900s ≈ 32min de ventana de
-recuperación con los mismos 10 reintentos (curva exponencial fija de
-upstream, solo se levanta el tope). Elegido por Damian: esperar a que z.ai
-se recupere (10-15min por espera está bien) antes que perder la tarea.
+Fix: `forkModelRetrySpawnEnv.ts` injects into the agent spawn
+`ZCODE_MODEL_RETRY_MAX_DELAY_MS=900000` (15min) ONLY if the user did not
+set it. Resulting curve 2s→4s→…→512s→900s ≈ 32min recovery
+window with the same 10 retries (upstream's fixed exponential curve,
+only the cap is raised). Chosen by Damian: wait for z.ai to recover
+(10-15min per wait is fine) rather than lose the task.
 
-## Ola 4b (25/10 noche): budget por fallas consecutivas + countdown mm:ss
+## Wave 4b (night of 2026-10-25): budget per consecutive failures + mm:ss countdown
 
-Con la ventana de 15min los dos defectos de UX que quedaban del "n/10":
+With the 15min window, two UX defects remained from "n/10":
 
-1. **El contador nunca reseteaba.** `streamRecoveryRetryCount` solo se
-   inicializaba al crear el turno, así que en tareas largas (decenas de
-   iteraciones) fallas discretas acumulaban hasta agotar las 10 recuperaciones
-   del core aunque entre cada una hubiera requests exitosos. Fix en
-   `turn-model-step.ts`: un modelo-request que completa devuelve el budget
-   completo (las fallas cuentan como *consecutivas*, no acumuladas por turno).
-   Test red-green en `runtime-stream-recovery.test.ts`: 2 recuperaciones
-   separadas por un éxito ambas muestran `retryNumber: 1`.
+1. **The counter never reset.** `streamRecoveryRetryCount` was only
+   initialized when the turn was created, so in long tasks (dozens of
+   iterations) discrete failures accumulated until the core's 10 recoveries
+   were exhausted even if successful requests sat between them. Fix in
+   `turn-model-step.ts`: a model-request that completes returns the full
+   budget (failures count as *consecutive*, not accumulated per turn).
+   Red-green test in `runtime-stream-recovery.test.ts`: 2 recoveries
+   separated by a success both show `retryNumber: 1`.
 
-2. **No se sabía cuánto faltaba para el próximo intento.** El adapter ahora
-   publica `nextAttemptAtMs` (epoch absoluto) en `model_retry_scheduled`
-   (runner-generate/runner-stream/empty-completion-retry, los 3 sitios);
-   shared lo normaliza a `ZCodeApiRetryStatus.nextRetryAtMs` (schema legacy
-   incluido; core stream recovery manda `null` porque reabre sin espera
-   local) y el UI (`ChatApiRetryStatus`) renderiza al lado del contador un
-   countdown `mm:ss` (`h:mm:ss` ≥1h) que se auto-calibra con el reloj —
-   re-render o replay de snapshot no lo resetea. Sin el campo (runtime
-   viejo) la UI queda igual que antes: solo el contador.
+2. **There was no way to know how long until the next attempt.** The adapter
+   now publishes `nextAttemptAtMs` (absolute epoch) in `model_retry_scheduled`
+   (runner-generate/runner-stream/empty-completion-retry, all 3 sites);
+   shared normalizes it to `ZCodeApiRetryStatus.nextRetryAtMs` (legacy schema
+   included; core stream recovery sends `null` because it reopens with no
+   local wait) and the UI (`ChatApiRetryStatus`) renders an `mm:ss`
+   countdown (`h:mm:ss` ≥1h) next to the counter that self-calibrates
+   against the clock — a re-render or a snapshot replay does not reset it.
+   Without the field (old runtime) the UI stays as before: the counter only.
 
-## Ola 5 (25/10 noche): límites de uso z.ai — esperar al reset en vez de morir
+## Wave 5 (night of 2026-10-25): z.ai usage limits — wait for the reset instead of dying
 
-La doc oficial (docs.z.ai/api-reference/api-code) dice que 1308/1310/1316-1321
-(límites de ventana de uso) llevan `next_flush_time` — el momento en que el
-límite se resetea. Upstream los trata como terminales (mata el turno) y además
-descarta el campo en `summarizeProviderBusinessBody` (whitelist que no lo
-copiaba).
+The official doc (docs.z.ai/api-reference/api-code) says that 1308/1310/1316-1321
+(usage-window limits) carry `next_flush_time` — the moment the
+limit resets. Upstream treats them as terminal (kills the turn) and also
+drops the field in `summarizeProviderBusinessBody` (a whitelist that did not
+copy it).
 
-Fix (FORK): si el error trae un reset **parseable**, la familia pasa de
-terminal a "reintentar a esa hora":
+Fix (FORK): if the error carries a **parseable** reset, the family moves from
+terminal to "retry at that time":
 
-- `failure-usage-limit-reset.ts` (nuevo): parsea `next_flush_time` del body
-  (campo JSON, unix s/ms o ISO) o del mensaje interpolado ("Your limit will
-  reset at …"); sin zona horaria se asume UTC. Wait con clamps: tope 24h
-  (ventana máxima documentada), piso 120s si el reset ya pasó (evita hot-loop;
-  cada reintento consume un attempt del presupuesto).
-- `classifyProviderBusinessFailure`: con código de la familia Y reset
-  parseable → `retryable: true` + `retryAfterMs`/`usageLimitResetWaitMs` =
-  wait. **Sin** reset parseable mantiene el fail-fast de upstream (no se
-  espera a ciegas). 1113/1309/1313 (saldo/plan/fair-use) quedan terminales.
-- `calculateRetryDelay`: el wait del reset bypasea el gate de 5min de
-  Retry-After (es determinista, no un header "parece razonable").
-- Bonus gratis: los stops de workflow por quota computan `resetAt` desde
-  `context.retryAfterMs` — ahora la notificación lleva la hora real de reset.
-- UI: el countdown de Ola 4b ya lo muestra ("Reconnecting 2/11 · 1:59:32").
+- `failure-usage-limit-reset.ts` (new): parses `next_flush_time` from the body
+  (JSON field, unix s/ms or ISO) or from the interpolated message ("Your limit will
+  reset at …"); without a time zone it assumes UTC. The wait has clamps: 24h cap
+  (the maximum documented window), 120s floor if the reset has already passed
+  (avoids a hot loop; each retry consumes an attempt from the budget).
+- `classifyProviderBusinessFailure`: with a family code AND a parseable reset
+  → `retryable: true` + `retryAfterMs`/`usageLimitResetWaitMs` =
+  wait. **Without** a parseable reset it keeps upstream's fail-fast (it does not
+  wait blindly). 1113/1309/1313 (balance/plan/fair-use) stay terminal.
+- `calculateRetryDelay`: the reset wait bypasses the 5min Retry-After
+  gate (it is deterministic, not a "looks reasonable" header).
+- Free bonus: workflow stops by quota compute `resetAt` from
+  `context.retryAfterMs` — now the notification carries the real reset time.
+- UI: Wave 4b's countdown already shows it ("Reconnecting 2/11 · 1:59:32").
 
-Tests: 11 del parser + 4 del clasificador (incluye 1113 intocado y 1308 sin
-flush sigue terminal) + 3 del bypass del gate. (Corrección 28/10: la "falla
-de baseline" de `runner.test.ts` citada acá era el env del fork filtrándose
-a vitest — ver Ola 9 / docs/fork/TESTING.md §3.3; ya fixeada.)
+Tests: 11 for the parser + 4 for the classifier (includes untouched 1113 and 1308
+without flush staying terminal) + 3 for the gate bypass. (Correction 2026-10-28: the "baseline
+failure" of `runner.test.ts` cited here was the fork env leaking
+into vitest — see Wave 9 / docs/fork/TESTING.md §3.3; already fixed.)
 
 
 
-## Ola 6 (25/10 tarde): labels honestos (B2) + proceso de deploy a prueba de balas
+## Wave 6 (afternoon of 2026-10-25): honest labels (B2) + a bulletproof deploy process
 
-Lo que faltaba del cartel "Reconnecting n/10": decir QUÉ está pasando. El
-adapter ya publica `reason` en `model_retry_scheduled`; ahora viaja hasta el
-UI (`ZCodeApiRetryStatus.reason`, schema legacy incluido) y el texto cambia
-según la causa (i18n en/zh, fallback al texto genérico en reason desconocido):
+What was missing from the "Reconnecting n/10" banner: saying WHAT is happening. The
+adapter already publishes `reason` in `model_retry_scheduled`; now it travels to the
+UI (`ZCodeApiRetryStatus.reason`, legacy schema included) and the text changes
+with the cause (i18n en/zh, fallback to the generic text on an unknown reason):
 
 - `server_error` → "z.ai server error — retrying n/10" (+ countdown)
 - `provider_overloaded` → "z.ai overloaded — retrying n/10"
-- `rate_limited` → "Rate limited — retrying n/10" (las 429/1302 reales)
+- `rate_limited` → "Rate limited — retrying n/10" (the real 429/1302)
 - `timeout`/`stream_idle_timeout` → "Stream stalled — retrying n/10"
 - `network_error`/`stale_connection` → "Connection lost — retrying n/10"
-- stream recovery del core (marca `stream_recovery` en el normalizer) →
-  "Recovering stream n/10" sin countdown (reabre al instante — así se
-  distingue del retry con espera del adapter)
+- core stream recovery (marks `stream_recovery` in the normalizer) →
+  "Recovering stream n/10" with no countdown (it reopens instantly — that is how it
+  differs from the adapter retry with a wait)
 
-Diagnóstico del "no impactó" del 25/10: sí había impactado (agente dist +
-bundle + renderer verificados frescos); lo que se vio fue un stream recovery
-(sin countdown por diseño, antes indistinguible) y/o apps viejas en
-/Applications confundiendo al Dock. Acciones: borradas `ZCode.prev.app` y
-`ZCode-3.16.2-patched.bak`; nuevo `scripts/verify-deploy.nu` (sección "Deploy
-de features"); documentada la mina de resolución del agent (monorepo dist
-antes que el bundle). Tests: 5 shared (reason passthrough ×3, stream recovery,
-fallback) + 5 UI (mapping puro ×2, render server_error/stream_recovery/fallback).
+Diagnosis of the 2026-10-25 "did not take": it HAD taken (agent dist +
+bundle + renderer verified fresh); what was seen was a stream recovery
+(no countdown by design, previously indistinguishable) and/or old apps in
+/Applications confusing the Dock. Actions: deleted `ZCode.prev.app` and
+`ZCode-3.16.2-patched.bak`; new `scripts/verify-deploy.nu` ("Feature deploy"
+section); the agent resolution mine documented (monorepo dist
+before the bundle). Tests: 5 shared (reason passthrough ×3, stream recovery,
+fallback) + 5 UI (pure mapping ×2, render server_error/stream_recovery/fallback).
 
-### Ola 6b (25/10 noche): el pill del chat área — la última milla que faltaba
+### Wave 6b (night of 2026-10-25): the chat-area pill — the last mile that was missing
 
-El "Reconnecting 3/10" centrado sobre el input NO venía por el pipeline de
-`ZCodeApiRetryStatus` sino por la proyección **v4** (`sessionControl.apiRetry`,
-`ApiRetryState`): el producer del CLI (`product-projection.ts`) SÍ armaba
-`nextRetryAt` (evento + delayMs) y `reasonCode`, pero `toRetryStatus`
-(`ConversationTurnGroup.tsx`) los descartaba al construir el estado del UI —
-por eso ese pill nunca mostró countdown ni label honesto.
+The "Reconnecting 3/10" centered over the input did NOT come from the
+`ZCodeApiRetryStatus` pipeline but from the **v4** projection (`sessionControl.apiRetry`,
+`ApiRetryState`): the CLI producer (`product-projection.ts`) DID build
+`nextRetryAt` (event + delayMs) and `reasonCode`, but `toRetryStatus`
+(`ConversationTurnGroup.tsx`) discarded them when building the UI state —
+that is why that pill never showed a countdown or an honest label.
 
-Fix: `ApiRetryState` gana `reason` opcional (ModelRetryReason crudo — el
-reasonCode fault.* colapsa overloaded con server_error); el producer lo setea
-(stream recovery marca `stream_recovery`); `toRetryStatus` pasa `nextRetryAt`
-y `reason` (fallback a reasonCode para producers viejos, con los fault.*
-agregados al mapa de文案). Stream recovery: sin countdown (reabre al instante).
-Schema zod no-strict: campo opcional tolera producers/consumers viejos.
+Fix: `ApiRetryState` gains an optional `reason` (raw ModelRetryReason —
+the fault.* reasonCode collapses overloaded with server_error); the producer sets it
+(stream recovery marks `stream_recovery`); `toRetryStatus` passes `nextRetryAt`
+and `reason` (fallback to reasonCode for old producers, with the fault.*
+entries added to the copy map). Stream recovery: no countdown (it reopens instantly).
+zod schema non-strict: the optional field tolerates old producers/consumers.
 
-## Ola 7 (25/10 noche): curva determinista — 2s→4s→…→1024s, sin jitter, visible desde 1/10
+## Wave 7 (night of 2026-10-25): deterministic curve — 2s→4s→…→1024s, no jitter, visible from 1/10
 
-Damian reportó (con captura): el pill arrancaba en 3/10 y los segundos no
-seguían la secuencia esperada. Diagnóstico con el log del día: (a) el jitter
-de upstream (`espera × [0.5,1)`) hace que las lecturas sean 1.9s/2.5s/7.0s en
-vez de 2/4/8 limpios (verificado: attempt 1 → 1934/1509/1625 ms); (b)
-upstream oculta los intentos 1-2 a propósito ("equivalentes a carga normal").
+Damian reported (with a screenshot): the pill started at 3/10 and the seconds did
+not follow the expected sequence. Diagnosis with the day's log: (a) upstream's
+jitter (`wait × [0.5,1)`) makes the readings 1.9s/2.5s/7.0s instead
+of a clean 2/4/8 (verified: attempt 1 → 1934/1509/1625 ms); (b)
+upstream hides attempts 1-2 on purpose ("equivalent to normal load").
 
-Decisión de Damian (preguntado): **puro 2^n hasta 17:04** (cap 1024000ms =
-exactamente el intento 10), ventana total **34:06**, countdown **por intento**.
+Damian's decision (asked): **pure 2^n up to 17:04** (cap 1024000ms =
+exactly attempt 10), total window **34:06**, countdown **per attempt**.
 
-- `retry-policy.ts`: env `ZCODE_MODEL_RETRY_JITTER` ("0"/"false" apaga;
-  inválido se ignora; options explícitas siguen mandando sobre env).
-- `forkModelRetrySpawnEnv.ts`: cap 900000→**1024000** + `JITTER=0` (solo si
-  el usuario no los definió).
-- `ConversationTurnGroup.tsx`: `MIN_VISIBLE_API_RETRY_ATTEMPT` 3→1 — la
-  secuencia completa 1/10…10/10 es visible.
-- Nota: el "~16 min" reportado nunca ocurrió (máximo del día: 4:23 en el
-  intento 9) — era la curva jitterada leída con expectativa de 2^n puros.
+- `retry-policy.ts`: env `ZCODE_MODEL_RETRY_JITTER` ("0"/"false" turns it off;
+  invalid is ignored; explicit options still win over env).
+- `forkModelRetrySpawnEnv.ts`: cap 900000→**1024000** + `JITTER=0` (only if
+  the user did not define them).
+- `ConversationTurnGroup.tsx`: `MIN_VISIBLE_API_RETRY_ATTEMPT` 3→1 — the
+  full 1/10…10/10 sequence is visible.
+- Note: the reported "~16 min" never happened (day maximum: 4:23 on
+  attempt 9) — it was the jittered curve read with an expectation of pure 2^n.
 
-## Ola 8 (27/10): los planes no encuentran sus herramientas — fail-closed del gateway
+## Wave 8 (2026-10-27): the plans cannot find their tools — gateway fail-closed
 
-Reporte: "ZCode no encuentra las herramientas para ejecutar los planes". El
-skill pack `dynamic-workflows` está sano (bundle + repo dist, 0 warns de
-carga). La cadena real de falla:
+Report: "ZCode cannot find the tools to run the plans". The
+`dynamic-workflows` skill pack is healthy (bundle + repo dist, 0 load warns).
+The real failure chain:
 
-1. La «oferta» del dynamic workflow sale de `configs.dynamicWorkflow.mode`
-   de zcode.z.ai (`client/configs`), **fail-closed a disabled** si el fetch
-   falla — y ese gateway es el de los 502 (Ola 3).
-2. En builds de producción, desktop main **borra** el env override local
-   `ZCODE_DYNAMIC_WORKFLOW_MODE` → la única fuente es la red.
-3. Sin elección del usuario en settings → efectivo = oferta = **disabled**
-   → CreateWorkflow + 9 herramientas + skill NO se registran.
-4. Síntoma adicional: el modelo invocó `Skill("dynamic-workflows:
-   dynamic-workflows")` (hábito plugin:skill) → `Skill not found`.
+1. The dynamic workflow "offer" comes from `configs.dynamicWorkflow.mode`
+   on zcode.z.ai (`client/configs`), **fail-closed to disabled** if the fetch
+   fails — and that gateway is the 502 one (Wave 3).
+2. In production builds, desktop main **wipes** the local env override
+   `ZCODE_DYNAMIC_WORKFLOW_MODE` → the only source is the network.
+3. With no user choice in settings → effective = offer = **disabled**
+   → CreateWorkflow + 9 tools + skill are NOT registered.
+4. Extra symptom: the model invoked `Skill("dynamic-workflows:
+   dynamic-workflows")` (plugin:skill habit) → `Skill not found`.
 
-Fix (de raíz + inmediato):
+Fix (at the root + immediate):
 
-- **Inmediato**: `~/.zcode/v2/setting.json` → `dynamicWorkflowMode:
-  "onDemand"` — la elección del usuario SIEMPRE le gana a la oferta fallida
-  (`applyDynamicWorkflowUserMode`); lecturas del archivo son por uso.
-- **Raíz**: `desktopRuntimeEnv.ts` — producción ahora fija
-  `ZCODE_DYNAMIC_WORKFLOW_MODE=alwaysOn` (igual que preview). El env override
-  se resuelve **antes de cualquier acción de red** → el gateway ya no gatea
-  la función. La elección del usuario sigue mandando encima.
-- **Tolerancia**: `matchesSkillRequest` (adapters/skills) — requests
-  «prefijo:nombre» prueban también el segmento desnudo; solo amplía el match,
-  no relaja nombres desnudos.
-- Tests: skills 19/19 (nuevo caso de fallback calificado), desktopRuntimeEnv
-  36/36 (producción ahora espera alwaysOn en dos tests actualizados).
+- **Immediate**: `~/.zcode/v2/setting.json` → `dynamicWorkflowMode:
+  "onDemand"` — the user's choice ALWAYS beats the failed offer
+  (`applyDynamicWorkflowUserMode`); reads of the file are per use.
+- **Root**: `desktopRuntimeEnv.ts` — production now sets
+  `ZCODE_DYNAMIC_WORKFLOW_MODE=alwaysOn` (same as preview). The env override
+  resolves **before any network action** → the gateway no longer gates
+  the feature. The user's choice still wins on top.
+- **Tolerance**: `matchesSkillRequest` (adapters/skills) — `prefix:name`
+  requests also try the bare segment; it only widens the match,
+  it does not relax bare names.
+- Tests: skills 19/19 (new qualified fallback case), desktopRuntimeEnv
+  36/36 (production now expects alwaysOn in two updated tests).

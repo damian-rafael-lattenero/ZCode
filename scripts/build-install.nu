@@ -87,34 +87,20 @@ def build-bundle [repo: string]: nothing -> string {
     (($zips | first).name)
 }
 
-# THE AUTOMATIC CLOSE (4/11, the owner: "run from a separate Ghostty, it should
-# be able to close zcode without ⌘Q"): exact — ⌘Q was a choice, not a limit.
-# Honest ladder: osascript quit → ≤15 s → re-quit ×2 (anti-resurrection, the
-# old cutover law). Returns false when the app survives: its quit handler
-# cancels with -128 while a turn runs, and that cancel is CORRECT — the caller
-# decides (main arms the waiter instead of dying).
+# THE FORCE CLOSE (27/11, the owner's order after the 12:12 modal blocked a
+# bot-launched deploy for ~40 minutes: "force quit always ZCode, even if it
+# is running, from the Mac or from the bot"): the deploy never negotiates
+# with the quit-confirmation dialog. The graceful osascript quit rode
+# exactly the quit-event path where that dialog lives — measured today: it
+# canceled with -128, the script armed the waiter, and the phone saw no
+# notice for 40 minutes. Now: SIGTERM → ≤6 s → SIGKILL → ≤6 s. The sessions
+# store persists continuously, so nothing durable is lost; returns false
+# only for an unkillable process, which hands the decision to the armed
+# waiter as before.
 def quit-zcode []: nothing -> bool {
     if not (zcode-running) { return true }
-    announce "🔒 closing ZCode for the swap (~15 s)…"
-    for attempt in 1..3 {
-        let r: record = (^osascript -e "quit app \"ZCode\"" | complete)
-        # -128 = the quit handler CANCELED (a turn is running): that is an
-        # answer, not a miss. Retrying only re-raises the same dialog — hand
-        # the decision to the caller at once (measured 24/11: the modal kept
-        # the script blocked and burned the whole ladder).
-        if $r.exit_code != 0 { return false }
-        mut dead: bool = false
-        for _ in 1..15 {
-            sleep 1sec
-            if not (zcode-running) {
-                $dead = true
-                break
-            }
-        }
-        if $dead { return true }
-        print $"[fork] quit attempt ($attempt): ZCode still alive — retrying…"
-    }
-    false
+    announce "🔒 force-closing ZCode for the swap — no dialogs, ≤12 s…"
+    force-kill-pids (zcode-pids)
 }
 
 def install-zip [repo: string, zip: string, keep_prev: bool]: nothing -> nothing {
@@ -246,14 +232,15 @@ def main [
 
     if $quit {
         # THE AUTOMATIC ARC (4/11): the build ran with the app ALIVE (the
-        # owner's session kept working the ~15 min); only now does it close —
-        # the swap is seconds and install-zip reopens and announces. A refused
-        # quit means a turn is in flight: forcing would destroy it, so the
-        # waiter (the --when-quit door) takes over — same result, owner-paced.
+        # owner's session kept working the whole build); only now does it
+        # close — the swap is seconds and install-zip reopens and announces.
+        # Since 27/11 the close is FORCE (quit-zcode): no quit dialog can
+        # block the arc, from the Mac or from the bot. The waiter is now the
+        # near-unreachable fallback for an unkillable process only.
         if not (quit-zcode) {
             arm-waiter $repo $built $keep_prev
-            announce-loud "⏳ <b>FORK BUILD READY</b> — ZCode refused to quit (a task is running); the swap is ARMED — ⌘Q when free and it installs + reopens automatically"
-            print "[fork] quit refused (a task was running) — swap armed; ⌘Q when free and it installs + reopens"
+            announce-loud "⏳ <b>FORK BUILD READY</b> — ZCode could not be killed; the swap is ARMED — quit the app once and it installs + reopens automatically"
+            print "[fork] force close failed (unkillable process) — swap armed; quit the app once and it installs + reopens"
             return
         }
         install-zip $repo $built $keep_prev

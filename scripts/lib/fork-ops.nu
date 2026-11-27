@@ -39,6 +39,38 @@ export def zcode-pids []: nothing -> list<int> {
     (^ps -axo pid=,comm= | lines | parse "{pid} {comm}" | where comm == ZCode | get pid)
 }
 
+# THE FORCE-QUIT LAW (27/11, the owner's order after the 12:12 modal — a
+# quit-confirmation popup blocked a bot-launched deploy for 40 minutes:
+# "I want to force quit always ZCode, even if it is running, from the Mac
+# or from the bot"): a confirm dialog is a refusal, and a deploy never
+# negotiates with a modal. The ladder never touches the quit-event path the
+# dialog lives on: SIGTERM (the clean flush chance; sessions persist
+# continuously so nothing durable is lost) → ≤6 s → SIGKILL (the kernel
+# ends it; no dialog survives it) → ≤6 s. Generic by design — pids in,
+# dead-or-false out — so a dummy process can prove it live. False only for
+# an unkillable process, which hands the decision to the armed waiter.
+export def force-kill-pids [pids: list<int>]: nothing -> bool {
+    if ($pids | is-empty) { return true }
+    mut alive: list<int> = $pids
+    for p in $pids {
+        do -i { ^kill -TERM $p }
+    }
+    for _ in 1..6 {
+        sleep 1sec
+        $alive = ($pids | where {|p| (do { ^kill -0 $p } | complete).exit_code == 0 })
+        if ($alive | is-empty) { return true }
+    }
+    for p in $pids {
+        do -i { ^kill -9 $p }
+    }
+    for _ in 1..6 {
+        sleep 1sec
+        $alive = ($pids | where {|p| (do { ^kill -0 $p } | complete).exit_code == 0 })
+        if ($alive | is-empty) { return true }
+    }
+    false
+}
+
 export def app-version []: nothing -> string {
     (^defaults read /Applications/ZCode.app/Contents/Info.plist CFBundleShortVersionString | str trim)
 }

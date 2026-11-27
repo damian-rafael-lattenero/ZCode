@@ -341,6 +341,10 @@ export function createDefaultSubagentPort(
             midConversationSystem: this.config.midConversationSystem,
             toolSearch: this.config.toolSearch,
             totalTokensReminder: this.config.totalTokensReminder,
+            // [fork] U4 — hooks are a layer of laws: the child carries the same
+            // hook config and builds its own runner (its events land on the
+            // child session), so a subagent is gated and guided like the main one.
+            hooks: this.config.hooks,
             bashShellSelection,
             // child 只复用父 runtime 已解析的 instructions snapshot；Project Context 仍不继承。
             currentDate: this.contextSourceSnapshot?.currentDate ?? this.config.currentDate,
@@ -421,6 +425,11 @@ export function createDefaultSubagentPort(
             permissionService: this.permissionService,
             toolScheduler: deps.toolScheduler ?? defaultScheduler,
             executionPort: deps.executionPort,
+            // [fork] U4 — the parent's workspace hook wiring reaches the child:
+            // the snapshot and the admission port are what createRuntimeHookRunner
+            // needs to build a runner for THIS child runtime.
+            workspaceHookSnapshot: deps.workspaceHookSnapshot,
+            workspaceHookAdmission: deps.workspaceHookAdmission,
             fileSystemPort: deps.fileSystemPort,
             // Explore 子运行时会暴露 WebFetch，但之前没有继承主 runtime 的
             // HTTP client port，导致工具在真正发请求前抛出配置错误，而不是网络请求失败。

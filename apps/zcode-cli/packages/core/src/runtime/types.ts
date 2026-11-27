@@ -271,6 +271,13 @@ export interface AgentRuntimeConfig {
   // Context Builder config
   systemPrompt?: string;
   /**
+   * [fork] U4 — a file whose text is appended to the system prompt as its own
+   * stable section, in main sessions AND subagents. It never replaces the base
+   * prompt (`systemPrompt` does that). A missing or unreadable file appends
+   * nothing and logs; the owner's use is `~/.zcode/denotational-law.md`.
+   */
+  systemPromptAppendFile?: string;
+  /**
    * 动态工作流子代理的身份输入：在场即让
    * context builder 走「基座 + 工作流子代理契约 + persona 叠加」路径，而不是把 persona 当
    * `systemPrompt` 整段替换。与 `systemPrompt` 互斥（builder 抛错）。

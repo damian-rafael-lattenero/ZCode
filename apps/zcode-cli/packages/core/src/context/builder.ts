@@ -122,6 +122,22 @@ export class ContextBuilder {
       sections.push(buildIdentitySection(activeOutputStyle, midConversationSystem));
     }
 
+    // [fork] U4 — the law the owner wants in every session: the runtime reads
+    // it from `systemPromptAppendFile` and it rides as its own stable section,
+    // on top of the base prompt or of a custom one. It never replaces anything.
+    const systemPromptAppend = this.config.systemPromptAppend?.trim();
+    if (systemPromptAppend) {
+      sections.push(
+        createSection({
+          name: "System Prompt Append",
+          source: "system_prompt_append",
+          injectionTarget: "system",
+          cacheHint: "stable",
+          content: `\n\n${systemPromptAppend}`,
+        }),
+      );
+    }
+
     // 环境与模型是运行时公告（meta_user），不进 system；使用自定义 prompt 时也照常发送。
     const environmentSections = buildEnvironmentSections(
       this.config.envInfo,

@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import { join } from "node:path";
 
 import { CONTEXT_SOURCE_INSTRUCTIONS_READ_FAILED } from "@zcode/contracts";
@@ -152,6 +153,10 @@ export function createContextBuilderFromSnapshot(
     this.config.envInfo = envInfo;
   }
   const totalTokensReminder = this.config.totalTokensReminder?.enabled === true;
+  // [fork] U4 — the law rides every system prompt, main and subagent. The file
+  // is read here (one small local read per build); an unreadable file appends
+  // nothing and says so, never failing the session.
+  const systemPromptAppend = readSystemPromptAppend(this);
   if (this.config.subagentContext) {
     return createSubagentContextBuilder({
       agentPrompt: this.config.subagentContext.agentPrompt,
@@ -160,6 +165,7 @@ export function createContextBuilderFromSnapshot(
       model: options.model,
       userInstructions: this.config.subagentContext.userInstructions,
       totalTokensReminder,
+      systemPromptAppend,
     });
   }
 
@@ -187,9 +193,31 @@ export function createContextBuilderFromSnapshot(
     compact: this.config.compact,
     guidanceToolNames: this.getTools(options.model).map((tool) => tool.name),
     totalTokensReminder,
+    systemPromptAppend,
   };
 
   return createContextBuilder(contextConfig).setToolRegistry(this.registry);
+}
+
+/**
+ * [fork] U4 — the law file's text, trimmed, or undefined when the key is unset,
+ * the file cannot be read, or it is blank. A read failure is logged as a warn:
+ * the session keeps working with the base prompt.
+ */
+function readSystemPromptAppend(runtime: AgentRuntimeInternal): string | undefined {
+  const file = runtime.config.systemPromptAppendFile?.trim();
+  if (!file) return undefined;
+  try {
+    const text = readFileSync(file, "utf8").trim();
+    return text.length > 0 ? text : undefined;
+  } catch (error) {
+    runtime.logger?.warn("System prompt append file unreadable", {
+      event: "context.system_prompt_append.unreadable",
+      path: file,
+      error: error instanceof Error ? error.message : String(error),
+    });
+    return undefined;
+  }
 }
 
 export async function loadProjectMemoryRoot(

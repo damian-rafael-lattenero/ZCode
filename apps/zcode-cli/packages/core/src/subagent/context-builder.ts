@@ -21,6 +21,8 @@ export interface SubagentContextBuilderConfig {
   model?: Model;
   userInstructions?: ContextBuilderConfig["userInstructions"];
   totalTokensReminder?: boolean;
+  /** [fork] U4 — the law file's text, read by the runtime; carried by every child session. */
+  systemPromptAppend?: string;
 }
 
 const EPHEMERAL_CACHE_CONTROL = { type: "ephemeral" as const };
@@ -96,6 +98,20 @@ function buildSubagentContextSections(config: SubagentContextBuilderConfig): Con
     );
   }
 
+  // [fork] U4 — the law reaches child sessions too: the same text the main
+  // builder appends, carried as a stable section right after the agent prompt.
+  const systemPromptAppend = config.systemPromptAppend?.trim();
+  if (systemPromptAppend) {
+    sections.push(
+      createSubagentSection({
+        name: "System Prompt Append",
+        source: "system_prompt_append",
+        cacheHint: "stable",
+        content: `\n\n${systemPromptAppend}`,
+      }),
+    );
+  }
+
   sections.push(
     createSubagentSection({
       name: "Subagent Notes",
@@ -162,5 +178,6 @@ function toBaseContextBuilderConfig(config: SubagentContextBuilderConfig): Conte
     envInfo: config.envInfo,
     model: config.model,
     currentDate: config.currentDate,
+    ...(config.systemPromptAppend ? { systemPromptAppend: config.systemPromptAppend } : {}),
   };
 }

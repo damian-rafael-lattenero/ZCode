@@ -1,4 +1,5 @@
 import { readFileSync } from "node:fs";
+import { homedir } from "node:os";
 import { join } from "node:path";
 
 import { CONTEXT_SOURCE_INSTRUCTIONS_READ_FAILED } from "@zcode/contracts";
@@ -200,17 +201,19 @@ export function createContextBuilderFromSnapshot(
 }
 
 /**
- * [fork] U4 — the law file's text, trimmed, or undefined when the key is unset,
- * the file cannot be read, or it is blank. A read failure is logged as a warn:
- * the session keeps working with the base prompt.
+ * [fork] U4 — the law file's text, trimmed. The config key wins; without it the
+ * fork reads `~/.zcode/denotational-law.md` when that file exists (the owner's
+ * law lands there by a symlink to agent-brain's source). A configured file that
+ * cannot be read is logged as a warn; the default path simply appends nothing.
  */
 function readSystemPromptAppend(runtime: AgentRuntimeInternal): string | undefined {
-  const file = runtime.config.systemPromptAppendFile?.trim();
-  if (!file) return undefined;
+  const configured = runtime.config.systemPromptAppendFile?.trim();
+  const file = configured && configured.length > 0 ? configured : join(homedir(), ".zcode", "denotational-law.md");
   try {
     const text = readFileSync(file, "utf8").trim();
     return text.length > 0 ? text : undefined;
   } catch (error) {
+    if (!configured) return undefined;
     runtime.logger?.warn("System prompt append file unreadable", {
       event: "context.system_prompt_append.unreadable",
       path: file,

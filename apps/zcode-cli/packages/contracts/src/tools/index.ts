@@ -21,6 +21,8 @@ export * from "./automation.js";
 export * from "./off-peak.js";
 export * from "./plugin-discovery.js";
 export * from "./target.js";
+// [fork] U5 — the Brief: the typed witness of the owner's request.
+export * from "./brief.js";
 export * from "./plan-mode.js";
 export * from "./ask-user-question.js";
 export * from "./send-message.js";

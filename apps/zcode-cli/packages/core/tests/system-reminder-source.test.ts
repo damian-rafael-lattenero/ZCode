@@ -43,6 +43,7 @@ const EXPECTED_SOURCES = [
   "conversation_fork",
   "selection_side_chat",
   "queued_system_notification",
+  "brief",
   "incoming_message",
   "memory_update",
   "relevant_memory",
@@ -99,6 +100,7 @@ describe("system reminder source descriptors", () => {
       "conversation_fork",
       "selection_side_chat",
       "queued_system_notification",
+      "brief",
     ]);
     expect(SYSTEM_REMINDER_PER_REQUEST_SOURCES).toEqual([
       "incoming_message",

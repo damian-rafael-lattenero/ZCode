@@ -278,6 +278,13 @@ export interface AgentRuntimeConfig {
    */
   systemPromptAppendFile?: string;
   /**
+   * [fork] U5 — the Brief gate: before a regular turn's first model step the
+   * runtime drafts the Brief of the request and asks the owner to confirm or
+   * correct it. Enabled by default; `enabled: false` turns the card off for a
+   * session, `timeoutMs` overrides the two-minute expiry.
+   */
+  briefGate?: { enabled?: boolean; timeoutMs?: number };
+  /**
    * 动态工作流子代理的身份输入：在场即让
    * context builder 走「基座 + 工作流子代理契约 + persona 叠加」路径，而不是把 persona 当
    * `systemPrompt` 整段替换。与 `systemPrompt` 互斥（builder 抛错）。

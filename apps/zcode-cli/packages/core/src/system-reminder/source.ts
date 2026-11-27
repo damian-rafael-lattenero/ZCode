@@ -48,6 +48,7 @@ export const SYSTEM_REMINDER_PERSISTED_SOURCES = [
   "conversation_fork",
   "selection_side_chat",
   "queued_system_notification",
+  "brief",
 ] as const;
 
 export const SYSTEM_REMINDER_PER_REQUEST_SOURCES = [
@@ -225,6 +226,8 @@ const SYSTEM_REMINDER_DESCRIPTORS: Record<SystemReminderSource, DescriptorShape>
     true,
     "sr.queued_system_notification",
   ),
+  // [fork] U5 — the owner-confirmed Brief rides the turn it was confirmed for.
+  brief: descriptor("current_turn", "per_current_turn", true, "sr.brief"),
   diagnostics: descriptor("mid_turn_event", "mid_turn_event", true, "sr.diagnostics"),
   // 第四批 4a-0（2026-09-12）：原 plugin_ui_state 源已删除，插件给模型的信息改走 ui/update-model-context。
 };

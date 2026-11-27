@@ -64,6 +64,7 @@ import {
 } from "./turn-output-token-continuation.js";
 import { recordSessionFeatureFromToolSearchExposure } from "../session-features/contract.js";
 import { recordPromptSnapshot } from "../helpers/prompt-snapshot.js";
+import { ensureBriefForTurn } from "./brief-gate.js";
 
 export async function runRegularTurnLoop(
   this: AgentRuntimeInternal,
@@ -72,6 +73,19 @@ export async function runRegularTurnLoop(
   while (true) {
     throwIfTurnAborted(state.turnAbortSignal);
     refreshOffPeakTurnAfterTakeover(this, state);
+    // [fork] U5 — the Brief gate: once per turn, before the first model step.
+    // It drafts, asks the owner on the question card (two-minute expiry) and
+    // persists the confirmed Brief as this turn's system-reminder entry. Every
+    // failure path lives inside the gate and fails open.
+    if (state.modelStepCount === 0 && state.normalInputPreparationPending) {
+      await ensureBriefForTurn.call(
+        this,
+        state.input,
+        state.turnRequestState,
+        state.turnTraceContext,
+        state.turnAbortSignal,
+      );
+    }
     const outputTokenRecoveryActive = state.turnRequestState.outputTokenContinuationCount > 0;
     // guide 只允许由完整 tool result batch 设置这个一次性诊断；普通 queue 不在
     // model roundtrip 起点消费，避免把未来 turn 错并入当前 product turn。

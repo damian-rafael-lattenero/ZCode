@@ -332,7 +332,9 @@ export function failOpenGoalCompletionVerification(
   };
 }
 
-function parseJsonObject(text: string): Record<string, unknown> | undefined {
+// The first JSON object a model text contains: plain, fenced or wrapped in a
+// JSON string. Shared with the Brief draft parser (U5), same tolerance rules.
+export function parseJsonObject(text: string): Record<string, unknown> | undefined {
   const candidates = collectJsonObjectCandidates(text);
 
   for (const candidate of candidates) {

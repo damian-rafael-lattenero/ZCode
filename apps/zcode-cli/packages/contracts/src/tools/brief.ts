@@ -177,3 +177,63 @@ export function formatBriefForPrompt(brief: Brief): string {
     "</brief>",
   ].join("\n");
 }
+
+// The confirmation card as the question surface receives it (AskUserQuestion's
+// shape): one question carrying the four blocks, two options, no multi-select.
+export interface BriefQuestion {
+  question: string;
+  header: string;
+  options: { label: string; description?: string }[];
+  multiSelect: boolean;
+}
+
+export const BRIEF_ANSWER_CONFIRM = "Confirm";
+export const BRIEF_ANSWER_CORRECT = "Correct";
+
+export function formatBriefQuestion(brief: Brief): BriefQuestion {
+  const card = formatBriefCard(brief);
+  return {
+    question: card.body,
+    header: card.title,
+    options: [
+      { label: BRIEF_ANSWER_CONFIRM, description: "Work this turn with this Brief" },
+      { label: BRIEF_ANSWER_CORRECT, description: "Type the correction in Other" },
+    ],
+    multiSelect: false,
+  };
+}
+
+// What the owner did with the card: confirmed it, typed a correction, or the
+// card was declined or timed out — the turn then proceeds without a Brief.
+export type BriefAnswer =
+  | { kind: "confirm" }
+  | { kind: "correction"; text: string }
+  | { kind: "dismissed" };
+
+export function readBriefAnswer(modifiedInput: unknown, question: string): BriefAnswer {
+  const record =
+    modifiedInput && typeof modifiedInput === "object" && !Array.isArray(modifiedInput)
+      ? (modifiedInput as Record<string, unknown>)
+      : {};
+  const answers =
+    record.answers && typeof record.answers === "object" && !Array.isArray(record.answers)
+      ? (record.answers as Record<string, unknown>)
+      : {};
+  const raw = answers[question];
+  const text = typeof raw === "string" ? raw.trim() : "";
+  if (text.length === 0) return { kind: "dismissed" };
+  if (text === BRIEF_ANSWER_CONFIRM) return { kind: "confirm" };
+  if (text === BRIEF_ANSWER_CORRECT) return { kind: "dismissed" };
+  return { kind: "correction", text };
+}
+
+// The one re-draft the runtime allows after a correction: the same rules, plus
+// the owner's words as escaped data.
+export function formatBriefCorrectionPrompt(request: string, correction: string): string {
+  return [
+    formatBriefDraftPrompt(request),
+    "",
+    "The owner corrected the draft. Apply this correction and return the JSON object again:",
+    escapeGoalPromptText(correction),
+  ].join("\n");
+}

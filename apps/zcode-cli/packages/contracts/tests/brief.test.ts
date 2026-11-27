@@ -1,11 +1,16 @@
 import { describe, expect, it } from "vitest";
 import {
+  BRIEF_ANSWER_CONFIRM,
+  BRIEF_ANSWER_CORRECT,
   MAX_BRIEF_GOAL_CHARS,
   MAX_BRIEF_ITEMS,
   formatBriefCard,
+  formatBriefCorrectionPrompt,
   formatBriefDraftPrompt,
   formatBriefForPrompt,
+  formatBriefQuestion,
   parseBriefDraftText,
+  readBriefAnswer,
 } from "../src/tools/brief.js";
 
 // U5 — the Brief draft is pure: a model text in, a typed record out. The tests
@@ -115,5 +120,48 @@ describe("the two renderings", () => {
     expect(block).toContain("- &lt;b&gt;not&lt;/b&gt; this");
     expect(block).toContain("Non-goals:");
     expect(formatBriefForPrompt(brief)).toContain("(none stated)");
+  });
+});
+
+describe("the confirmation card and its answer", () => {
+  const brief = {
+    goal: "Ship the gate",
+    constraints: ["no new dependency"],
+    nonGoals: [],
+    acceptance: ["the gate fails on a planted note"],
+  };
+
+  it("builds the one question the surface shows, with the two options", () => {
+    const question = formatBriefQuestion(brief);
+    expect(question.header).toContain("Brief");
+    expect(question.question).toContain("Goal: Ship the gate");
+    expect(question.options.map((option) => option.label)).toEqual([
+      BRIEF_ANSWER_CONFIRM,
+      BRIEF_ANSWER_CORRECT,
+    ]);
+    expect(question.multiSelect).toBe(false);
+  });
+
+  it("reads the three answers the runtime must handle", () => {
+    const question = formatBriefQuestion(brief).question;
+    expect(
+      readBriefAnswer({ answers: { [question]: "Confirm" } }, question),
+    ).toEqual({ kind: "confirm" });
+    expect(
+      readBriefAnswer({ answers: { [question]: " keep the CLI unchanged " } }, question),
+    ).toEqual({ kind: "correction", text: "keep the CLI unchanged" });
+    expect(readBriefAnswer({ answers: {} }, question)).toEqual({ kind: "dismissed" });
+    expect(readBriefAnswer({}, question)).toEqual({ kind: "dismissed" });
+    expect(readBriefAnswer(undefined, question)).toEqual({ kind: "dismissed" });
+    expect(readBriefAnswer({ answers: { [question]: "Correct" } }, question)).toEqual({
+      kind: "dismissed",
+    });
+  });
+
+  it("the correction prompt carries the owner's words escaped", () => {
+    const prompt = formatBriefCorrectionPrompt("rename <x>", "keep <b>this</b>");
+    expect(prompt).toContain("The owner corrected the draft");
+    expect(prompt).toContain("&lt;b&gt;this&lt;/b&gt;");
+    expect(prompt).not.toContain("<b>this</b>");
   });
 });

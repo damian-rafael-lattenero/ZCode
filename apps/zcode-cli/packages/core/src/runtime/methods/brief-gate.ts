@@ -40,6 +40,15 @@ const DEFAULT_BRIEF_TIMEOUT_MS = 120_000;
 // card must never be asked twice for the same turn.
 const briefAskedTurns = new WeakMap<object, string>();
 
+// The last confirmed Brief of this runtime: the judge (U6) reads it as the
+// turn's goal when it wakes. Absent means the judge falls back to the raw
+// request text.
+const latestConfirmedBrief = new WeakMap<object, Brief>();
+
+export function readConfirmedBriefForJudge(runtime: AgentRuntimeInternal): Brief | null {
+  return latestConfirmedBrief.get(runtime) ?? null;
+}
+
 type BriefDraftRequest = { brief: Brief | null; reason: string };
 
 // The two model calls the gate makes: the draft and, at most once, the re-draft
@@ -244,6 +253,8 @@ export async function ensureBriefForTurn(
     brief = redraft?.brief ?? null;
   }
   if (!brief) return;
+
+  latestConfirmedBrief.set(this, brief);
 
   await persistAnnouncements(this, requestState, [
     systemReminderAttachmentEntry("brief", formatBriefForPrompt(brief)),

@@ -6,6 +6,7 @@ import type { RegularTurnLoopState } from "./turn-loop-state.js";
 import { buildProjectionAnchor } from "./projection-anchor.js";
 import { persistRuntimeReminderMessage } from "./runtime-reminder-persistence.js";
 import { commitTurnRequestEntries } from "./turn-output-token-continuation.js";
+import { recordInterruptForVerdict } from "./verdict-gate.js";
 
 /** 用户停止本轮后，下一次请求里模型看到的标记：模型请求阶段与工具执行阶段文字不同。 */
 const INTERRUPT_MARKER = "[Request interrupted by user]";
@@ -45,6 +46,9 @@ export async function appendInterruptMarker(
   state: RegularTurnLoopState,
   traceContext: TraceContext,
 ): Promise<void> {
+  // [fork] U6 — park the stop's measured facts here; the judge reads them once
+  // at the start of the next turn, so this teardown path spawns no model call.
+  recordInterruptForVerdict(runtime, state);
   const text = state.interruptedDuringToolBatch ? TOOL_USE_INTERRUPT_MARKER : INTERRUPT_MARKER;
   let entry: RuntimeMessageEntry = {
     message: { role: "user", content: text },

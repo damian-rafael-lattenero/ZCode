@@ -49,6 +49,7 @@ export const SYSTEM_REMINDER_PERSISTED_SOURCES = [
   "selection_side_chat",
   "queued_system_notification",
   "brief",
+  "verdict",
 ] as const;
 
 export const SYSTEM_REMINDER_PER_REQUEST_SOURCES = [
@@ -228,6 +229,9 @@ const SYSTEM_REMINDER_DESCRIPTORS: Record<SystemReminderSource, DescriptorShape>
   ),
   // [fork] U5 — the owner-confirmed Brief rides the turn it was confirmed for.
   brief: descriptor("current_turn", "per_current_turn", true, "sr.brief"),
+  // [fork] U6 — the judge's note rides the current request and replays on
+  // resume: an interrupt-time note speaks for the next attempt.
+  verdict: descriptor("mid_turn_event", "resume_history", true, "sr.verdict"),
   diagnostics: descriptor("mid_turn_event", "mid_turn_event", true, "sr.diagnostics"),
   // 第四批 4a-0（2026-09-12）：原 plugin_ui_state 源已删除，插件给模型的信息改走 ui/update-model-context。
 };

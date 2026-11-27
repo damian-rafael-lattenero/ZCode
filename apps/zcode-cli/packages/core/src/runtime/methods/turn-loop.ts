@@ -65,6 +65,7 @@ import {
 import { recordSessionFeatureFromToolSearchExposure } from "../session-features/contract.js";
 import { recordPromptSnapshot } from "../helpers/prompt-snapshot.js";
 import { ensureBriefForTurn } from "./brief-gate.js";
+import { consumeInterruptVerdictForTurn } from "./verdict-gate.js";
 
 export async function runRegularTurnLoop(
   this: AgentRuntimeInternal,
@@ -85,6 +86,10 @@ export async function runRegularTurnLoop(
         state.turnTraceContext,
         state.turnAbortSignal,
       );
+      // [fork] U6 — if the previous attempt was stopped mid-flight, the judge
+      // reads it once now, before this turn's first model step, and its note
+      // rides the fresh turn.
+      await consumeInterruptVerdictForTurn.call(this, state);
     }
     const outputTokenRecoveryActive = state.turnRequestState.outputTokenContinuationCount > 0;
     // guide 只允许由完整 tool result batch 设置这个一次性诊断；普通 queue 不在

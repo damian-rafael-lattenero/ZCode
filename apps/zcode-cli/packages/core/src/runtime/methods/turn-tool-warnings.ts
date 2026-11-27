@@ -10,6 +10,7 @@ import type { AgentRuntimeInternal } from "../internal.js";
 import type { RegularTurnLoopState } from "./turn-loop-state.js";
 import { systemReminderAttachmentEntry, toModelToolCall } from "../../agent/message-history.js";
 import { commitTurnRequestEntries } from "./turn-output-token-continuation.js";
+import { maybeJudgeRepeatedToolCalls } from "./verdict-gate.js";
 
 export async function handleToolCallAnomalyWarnings(
   runtime: AgentRuntimeInternal,
@@ -79,4 +80,11 @@ export async function handleToolCallAnomalyWarnings(
     await runtime.appendEvent(warningEvent, options.modelTraceContext);
     state.events.push(warningEvent);
   }
+
+  // [fork] U6 — the measured escalation: when the same call has now run twice
+  // past the guard that just spoke, the judge wakes once for this turn.
+  await maybeJudgeRepeatedToolCalls(runtime, state, {
+    modelTraceContext: options.modelTraceContext,
+    toolName: options.toolCalls.at(-1)?.name ?? "tool",
+  });
 }

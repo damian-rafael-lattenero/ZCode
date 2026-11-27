@@ -285,6 +285,13 @@ export interface AgentRuntimeConfig {
    */
   briefGate?: { enabled?: boolean; timeoutMs?: number };
   /**
+   * [fork] U6 — the judge: one measured look at a turn's direction (repeated
+   * calls twice past the anomaly guard, or a stopped attempt judged at the
+   * next turn's start). Enabled by default; `enabled: false` silences the
+   * judge for a session, `timeoutMs` overrides the card's two-minute expiry.
+   */
+  verdictGate?: { enabled?: boolean; timeoutMs?: number };
+  /**
    * 动态工作流子代理的身份输入：在场即让
    * context builder 走「基座 + 工作流子代理契约 + persona 叠加」路径，而不是把 persona 当
    * `systemPrompt` 整段替换。与 `systemPrompt` 互斥（builder 抛错）。

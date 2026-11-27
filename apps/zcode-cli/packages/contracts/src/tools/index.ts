@@ -25,6 +25,8 @@ export * from "./target.js";
 export * from "./brief.js";
 // [fork] U6 — the Verdict: the judge's typed answer about a turn's direction.
 export * from "./verdict.js";
+// [fork] U7 — the Seal: the delivered work measured against the Brief.
+export * from "./seal.js";
 export * from "./plan-mode.js";
 export * from "./ask-user-question.js";
 export * from "./send-message.js";

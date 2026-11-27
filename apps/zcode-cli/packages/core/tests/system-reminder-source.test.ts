@@ -45,6 +45,7 @@ const EXPECTED_SOURCES = [
   "queued_system_notification",
   "brief",
   "verdict",
+  "seal",
   "incoming_message",
   "memory_update",
   "relevant_memory",
@@ -103,6 +104,7 @@ describe("system reminder source descriptors", () => {
       "queued_system_notification",
       "brief",
       "verdict",
+      "seal",
     ]);
     expect(SYSTEM_REMINDER_PER_REQUEST_SOURCES).toEqual([
       "incoming_message",

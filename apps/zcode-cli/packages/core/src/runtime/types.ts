@@ -292,6 +292,13 @@ export interface AgentRuntimeConfig {
    */
   verdictGate?: { enabled?: boolean; timeoutMs?: number };
   /**
+   * [fork] U7 — the seal: the finished reply measured against the confirmed
+   * Brief and the result · evidence · next shape. One bounce, then the
+   * owner's notice. Enabled by default; `enabled: false` silences the seal
+   * for a session, `timeoutMs` overrides the card's two-minute expiry.
+   */
+  sealGate?: { enabled?: boolean; timeoutMs?: number };
+  /**
    * 动态工作流子代理的身份输入：在场即让
    * context builder 走「基座 + 工作流子代理契约 + persona 叠加」路径，而不是把 persona 当
    * `systemPrompt` 整段替换。与 `systemPrompt` 互斥（builder 抛错）。

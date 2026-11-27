@@ -7,6 +7,7 @@ import type { AgentRuntimeInternal } from "../internal.js";
 import { drainInlineGuideForNextRequest } from "./turn-guide-drain.js";
 import { persistAnnouncements } from "./context-refresh.js";
 import { buildLifecycleHookContextEntry } from "./hooks.js";
+import { runSealForTurn } from "./seal-gate.js";
 import { recordModelHistoryRound, type RegularTurnLoopState } from "./turn-loop-state.js";
 import {
   commitAssistantToTurnRequest,
@@ -231,6 +232,16 @@ export async function finishModelStepWithoutToolCalls(
       hookEntry ? [hookEntry] : [],
       state.turnTraceContext,
     );
+    state.turnMachine = new TurnMachineImpl(state.turnMachine.aggregateResults());
+    return "continue";
+  }
+  // [fork] U7 — the seal: the delivered work against the confirmed Brief and
+  // the reply shape. One bounce of its own when the turn was not already
+  // continued by a stop hook; the second miss is the owner's notice card.
+  // Fail-open: a broken seal ends the turn, logged.
+  if (
+    await runSealForTurn.call(this, state, state.turnTraceContext)
+  ) {
     state.turnMachine = new TurnMachineImpl(state.turnMachine.aggregateResults());
     return "continue";
   }
